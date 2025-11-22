@@ -1,5 +1,5 @@
 [versions]
-agp = "8.13.0"
+agp = "8.13.1"
 kotlin = "2.0.21"
 coreKtx = "1.17.0"
 junit = "4.13.2"
@@ -21,6 +21,7 @@ mlkitBarcodeScanning = "17.3.0"
 cameraX = "1.4.0"
 accompanistPermissions = "0.36.0"
 ksp = "2.0.21-1.0.28"
+roomKtx = "2.8.4"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -37,6 +38,7 @@ androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "u
 androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+androidx-compose-material = { group = "androidx.compose.material", name = "material" }
 
 # CrowdLink Dependencies
 androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
@@ -70,6 +72,7 @@ androidx-camera-view = { group = "androidx.camera", name = "camera-view", versio
 
 # Permissions
 accompanist-permissions = { group = "com.google.accompanist", name = "accompanist-permissions", version.ref = "accompanistPermissions" }
+room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "roomKtx" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
