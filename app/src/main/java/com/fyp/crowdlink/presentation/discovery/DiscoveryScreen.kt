@@ -95,14 +95,14 @@ fun DiscoveryScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
-                    onClick = { viewModel.startDiscovery() },
+                    onClick = @androidx.annotation.RequiresPermission(android.Manifest.permission.BLUETOOTH_SCAN) { viewModel.startDiscovery() },
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Start Scan")
                 }
 
                 Button(
-                    onClick = { viewModel.stopDiscovery() },
+                    onClick = @androidx.annotation.RequiresPermission(android.Manifest.permission.BLUETOOTH_SCAN) { viewModel.stopDiscovery() },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error  // ← Material3 uses colorScheme.error
@@ -120,7 +120,7 @@ fun DeviceCard(device: DiscoveredDevice) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFE3F2FD)  // ← Material3: containerColor instead of backgroundColor
+            containerColor = Color(0xFFE3F2FD)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {

@@ -47,7 +47,7 @@ class DiscoveryViewModel @Inject constructor(
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
-    override fun onCleared() {
+    public override fun onCleared() {
         super.onCleared()
         stopDiscovery()
         stopAdvertising()

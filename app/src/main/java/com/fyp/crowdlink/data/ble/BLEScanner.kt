@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.ParcelUuid
 import android.util.Log
 import androidx.annotation.RequiresPermission
+import androidx.annotation.VisibleForTesting
 import com.fyp.crowdlink.domain.model.DiscoveredDevice
 import com.fyp.crowdlink.domain.usecase.EstimateDistanceUseCase
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -40,6 +41,19 @@ class BleScanner @Inject constructor(
             UUID.fromString("0000fff0-0000-1000-8000-00805f9b34fb")
 
         private const val TAG = "BleScanner"
+
+        /**
+         * Calculates smoothed RSSI using moving average.
+         * Exposed for unit testing.
+         */
+        @VisibleForTesting
+        fun calculateSmoothedRssi(rssiHistory: List<Int>): Int {
+            return if (rssiHistory.isEmpty()) {
+                0
+            } else {
+                rssiHistory.average().toInt()
+            }
+        }
     }
 
     private val _discoveredDevices = MutableStateFlow<List<DiscoveredDevice>>(emptyList())

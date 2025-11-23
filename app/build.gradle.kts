@@ -55,7 +55,13 @@ dependencies {
     // Room Dependencies
     implementation(libs.androidx.room.runtime) // Added runtime
     implementation(libs.androidx.room.ktx)
-    ksp(libs.androidx.room.compiler) // Added annotation processor (Critical Fix)
+    ksp(libs.androidx.room.compiler) // Added annotation processor
+
+    // Unit Testing
+    testImplementation(libs.junit)
+    testImplementation(libs.mockk)
+    testImplementation(libs.turbine)
+    testImplementation(libs.kotlinx.coroutines.test)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
