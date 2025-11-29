@@ -3,9 +3,11 @@ package com.fyp.crowdlink.di
 import android.content.Context
 import androidx.room.Room
 import com.fyp.crowdlink.data.ble.DeviceRepositoryImpl
+import com.fyp.crowdlink.data.repository.FriendRepositoryImpl
 import com.fyp.crowdlink.data.local.FriendDatabase
 import com.fyp.crowdlink.data.local.dao.FriendDao
 import com.fyp.crowdlink.domain.repository.DeviceRepository
+import com.fyp.crowdlink.domain.repository.FriendRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -45,4 +47,10 @@ abstract class RepositoryModule {
     abstract fun bindDeviceRepository(
         impl: DeviceRepositoryImpl
     ): DeviceRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindFriendRepository(
+        impl: FriendRepositoryImpl
+    ): FriendRepository
 }

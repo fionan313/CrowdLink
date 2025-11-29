@@ -57,6 +57,13 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler) // Added annotation processor
 
+    // QR Code generation
+    implementation(libs.core)
+    implementation(libs.zxing.android.embedded)
+
+    // Camera permission (already in manifest?)
+    implementation(libs.androidx.camera.camera2.v130)
+
     // Unit Testing
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
