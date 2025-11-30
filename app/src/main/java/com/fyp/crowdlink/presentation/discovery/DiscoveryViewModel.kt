@@ -1,20 +1,16 @@
-
 package com.fyp.crowdlink.presentation.discovery
 
 import android.Manifest
+import android.content.SharedPreferences
 import androidx.annotation.RequiresPermission
+import androidx.core.content.edit
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import com.fyp.crowdlink.data.ble.DeviceRepositoryImpl
 import com.fyp.crowdlink.domain.model.DiscoveredDevice
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.stateIn
-import javax.inject.Inject
-import android.content.SharedPreferences
 import java.util.UUID
-import androidx.core.content.edit
+import javax.inject.Inject
 
 @HiltViewModel
 class DiscoveryViewModel @Inject constructor(
@@ -26,6 +22,7 @@ class DiscoveryViewModel @Inject constructor(
         deviceRepository.discoveredDevices
 
     // Generate or retrieve persistent device ID
+    // MUST match the key used in PairingViewModel ("device_id")
     private val myDeviceId: String by lazy {
         sharedPreferences.getString(KEY_DEVICE_ID, null)
             ?: UUID.randomUUID().toString().also { newId ->
@@ -58,11 +55,19 @@ class DiscoveryViewModel @Inject constructor(
     @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
     public override fun onCleared() {
         super.onCleared()
-        stopDiscovery()
-        stopAdvertising()
+        // It's safer to wrap these in try-catch or check permissions if possible, 
+        // but standard ViewModel cleanup usually assumes permissions were granted if usage occurred.
+        // However, stopDiscovery/Advertising might throw SecurityException if permission revoked.
+        try {
+            stopDiscovery()
+            stopAdvertising()
+        } catch (e: SecurityException) {
+            // Permission revoked or not granted, just ignore
+        }
     }
 
     companion object {
-        private const val KEY_DEVICE_ID = "my_device_id"
+        // This key must match the one in PairingViewModel
+        private const val KEY_DEVICE_ID = "device_id"
     }
 }
