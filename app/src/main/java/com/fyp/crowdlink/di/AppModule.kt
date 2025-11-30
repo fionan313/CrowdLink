@@ -1,6 +1,7 @@
 package com.fyp.crowdlink.di
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.room.Room
 import com.fyp.crowdlink.data.ble.DeviceRepositoryImpl
 import com.fyp.crowdlink.data.repository.FriendRepositoryImpl
@@ -35,6 +36,17 @@ object AppModule {
     @Provides
     fun provideFriendDao(database: FriendDatabase): FriendDao {
         return database.friendDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideSharedPreferences(
+        @ApplicationContext context: Context
+    ): SharedPreferences {
+        return context.getSharedPreferences(
+            "crowdlink_prefs",
+            Context.MODE_PRIVATE
+        )
     }
 }
 

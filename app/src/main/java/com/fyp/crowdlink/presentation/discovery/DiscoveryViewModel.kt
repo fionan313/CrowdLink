@@ -12,19 +12,28 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
+import android.content.SharedPreferences
+import java.util.UUID
+import androidx.core.content.edit
 
 @HiltViewModel
 class DiscoveryViewModel @Inject constructor(
-    private val deviceRepository: DeviceRepositoryImpl
+    private val deviceRepository: DeviceRepositoryImpl,
+    private val sharedPreferences: SharedPreferences
 ) : ViewModel() {
 
     val discoveredDevices: StateFlow<List<DiscoveredDevice>> =
         deviceRepository.discoveredDevices
-            .stateIn(
-                scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(5000),
-                initialValue = emptyList()
-            )
+
+    // Generate or retrieve persistent device ID
+    private val myDeviceId: String by lazy {
+        sharedPreferences.getString(KEY_DEVICE_ID, null)
+            ?: UUID.randomUUID().toString().also { newId ->
+                sharedPreferences.edit {
+                    putString(KEY_DEVICE_ID, newId)
+                }
+            }
+    }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
     fun startDiscovery() {
@@ -38,7 +47,7 @@ class DiscoveryViewModel @Inject constructor(
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_ADVERTISE)
     fun startAdvertising() {
-        deviceRepository.startAdvertising()
+        deviceRepository.startAdvertising(myDeviceId)
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_ADVERTISE)
@@ -51,5 +60,9 @@ class DiscoveryViewModel @Inject constructor(
         super.onCleared()
         stopDiscovery()
         stopAdvertising()
+    }
+
+    companion object {
+        private const val KEY_DEVICE_ID = "my_device_id"
     }
 }

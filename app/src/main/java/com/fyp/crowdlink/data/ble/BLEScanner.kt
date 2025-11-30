@@ -37,8 +37,7 @@ class BleScanner @Inject constructor(
 
     companion object {
         // Custom UUID for CrowdLink service
-        val CROWDLINK_SERVICE_UUID: UUID =
-            UUID.fromString("0000fff0-0000-1000-8000-00805f9b34fb")
+        val CROWDLINK_SERVICE_UUID: UUID = BleAdvertiser.SERVICE_UUID
 
         private const val TAG = "BleScanner"
 
@@ -91,9 +90,17 @@ class BleScanner @Inject constructor(
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val device = result.device
             val rssi = result.rssi
+            
+            // Extract device ID from manufacturer data
+            val manufacturerData = result.scanRecord?.getManufacturerSpecificData(BleAdvertiser.MANUFACTURER_ID)
+            
+            // Use the advertised ID if available, otherwise fallback to MAC address
+            val deviceId = manufacturerData?.let { bytes ->
+                String(bytes, Charsets.UTF_8)
+            } ?: device.address
 
             // Update RSSI history for smoothing
-            val deviceId = device.address
+            // We use the stable deviceId (our custom one) for the map key now
             val history = rssiHistory.getOrPut(deviceId) { ArrayDeque(10) }
 
             if (history.size >= 10) history.removeFirst()

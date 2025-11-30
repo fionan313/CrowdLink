@@ -17,6 +17,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -31,13 +32,15 @@ class BleAdvertiser @Inject constructor(
 
     companion object {
         private const val TAG = "BleAdvertiser"
+        val SERVICE_UUID: UUID = UUID.fromString("0000fff0-0000-1000-8000-00805f9b34fb")
+        const val MANUFACTURER_ID = 0xFFFF  // Using a testing ID. In production, you need a registered ID.
     }
 
     private val _isAdvertising = MutableStateFlow(false)
     val isAdvertising: StateFlow<Boolean> = _isAdvertising.asStateFlow()
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_ADVERTISE)
-    fun startAdvertising() {
+    fun startAdvertising(myDeviceId: String) {
         if (!hasPermissions()) {
             Log.e(TAG, "Missing Bluetooth permissions")
             return
@@ -45,19 +48,23 @@ class BleAdvertiser @Inject constructor(
 
         val settings = AdvertiseSettings.Builder()
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
-            .setConnectable(false)  // We don't need GATT connections
+            .setConnectable(false)  // We don't need GATT connections for this basic detection
             .setTimeout(0)  // Advertise indefinitely
             .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
             .build()
 
+        // Encode device ID in manufacturer data
+        val deviceIdBytes = myDeviceId.toByteArray(Charsets.UTF_8)
+
         val data = AdvertiseData.Builder()
-            .setIncludeDeviceName(false)  // Privacy - don't broadcast device name
-            .addServiceUuid(ParcelUuid(BleScanner.CROWDLINK_SERVICE_UUID))
+            .setIncludeDeviceName(false)  // Privacy
+            .addServiceUuid(ParcelUuid(SERVICE_UUID))
+            .addManufacturerData(MANUFACTURER_ID, deviceIdBytes)
             .build()
 
         try {
             bleAdvertiser?.startAdvertising(settings, data, advertiseCallback)
-            Log.d(TAG, "BLE advertising started")
+            Log.d(TAG, "BLE advertising started with ID: $myDeviceId")
         } catch (e: SecurityException) {
             Log.e(TAG, "Security exception starting advertising: ${e.message}")
         }
