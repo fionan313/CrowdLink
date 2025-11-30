@@ -1,5 +1,6 @@
 package com.fyp.crowdlink.presentation.discovery
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,6 +17,7 @@ import com.fyp.crowdlink.domain.model.DiscoveredDevice
 import com.fyp.crowdlink.domain.model.NearbyFriend
 import kotlin.math.roundToInt
 
+@SuppressLint("MissingPermission")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DiscoveryScreen(
