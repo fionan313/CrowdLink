@@ -1,6 +1,7 @@
 package com.fyp.crowdlink.di
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.room.Room
 import com.fyp.crowdlink.data.ble.DeviceRepositoryImpl
 import com.fyp.crowdlink.data.repository.FriendRepositoryImpl
@@ -18,7 +19,6 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
-import android.content.SharedPreferences
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -48,7 +48,6 @@ object AppModule {
         return database.userProfileDao()
     }
 
-    // ← ADD THIS FUNCTION
     @Provides
     @Singleton
     fun provideSharedPreferences(

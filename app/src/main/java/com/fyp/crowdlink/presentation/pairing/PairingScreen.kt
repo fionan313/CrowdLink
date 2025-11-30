@@ -18,9 +18,9 @@ import com.google.zxing.qrcode.QRCodeWriter
 fun PairingScreen(
     viewModel: PairingViewModel = hiltViewModel(),
     onPairingSuccess: () -> Unit,
-    onScanClick: () -> Unit // Added callback for scanner navigation
+    onScanClick: () -> Unit
 ) {
-    val deviceId by viewModel.myDeviceId.collectAsState()
+    val qrContent by viewModel.qrContent.collectAsState()
     val pairingState by viewModel.pairingState.collectAsState()
     
     Column(
@@ -32,11 +32,16 @@ fun PairingScreen(
         Spacer(modifier = Modifier.height(32.dp))
         
         // Show QR Code
-        QRCodeImage(data = deviceId)
+        // Only generate when qrContent is ready
+        if (qrContent.isNotEmpty()) {
+            QRCodeImage(data = qrContent)
+        } else {
+            CircularProgressIndicator()
+        }
         
         Spacer(modifier = Modifier.height(32.dp))
         
-        Button(onClick = onScanClick) { // Wired up navigation
+        Button(onClick = onScanClick) {
             Text("Scan Friend's QR Code")
         }
         
@@ -48,7 +53,10 @@ fun PairingScreen(
                 }
             }
             is PairingState.Error -> {
-                Text("Error: ${(pairingState as PairingState.Error).message}")
+                Text(
+                    text = "Error: ${(pairingState as PairingState.Error).message}",
+                    color = MaterialTheme.colorScheme.error
+                )
             }
             else -> {}
         }
