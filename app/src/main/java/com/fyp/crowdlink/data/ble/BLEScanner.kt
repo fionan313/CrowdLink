@@ -14,6 +14,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.nio.ByteBuffer
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -21,8 +23,15 @@ import javax.inject.Singleton
 class BleScanner @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    init {
+        android.util.Log.wtf("BLE_SCANNER", "BleScanner CREATED!")
+    }
+    
     private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
-    private val bluetoothLeScanner: BluetoothLeScanner? = bluetoothAdapter?.bluetoothLeScanner
+    // NOTE: bluetoothLeScanner can be null if Bluetooth is off when the app starts. 
+    // We should fetch it dynamically or check it before scanning.
+    private val bluetoothLeScanner: BluetoothLeScanner? 
+        get() = bluetoothAdapter?.bluetoothLeScanner
     
     private val _discoveredDevices = MutableStateFlow<List<DiscoveredDevice>>(emptyList())
     val discoveredDevices: StateFlow<List<DiscoveredDevice>> = _discoveredDevices.asStateFlow()
@@ -33,6 +42,21 @@ class BleScanner @Inject constructor(
     fun startDiscovery() {
         if (isScanning) {
             Log.d("BLE_SCANNER", "Already scanning")
+            return
+        }
+        
+        if (bluetoothAdapter == null) {
+            Log.e("BLE_SCANNER", "Bluetooth Adapter is NULL (Device does not support Bluetooth?)")
+            return
+        }
+        
+        if (!bluetoothAdapter.isEnabled) {
+            Log.e("BLE_SCANNER", "Bluetooth is DISABLED. Cannot start scan.")
+            return
+        }
+        
+        if (bluetoothLeScanner == null) {
+            Log.e("BLE_SCANNER", "Bluetooth LE Scanner is NULL (Bluetooth might be off or unavailable)")
             return
         }
         
@@ -74,21 +98,34 @@ class BleScanner @Inject constructor(
             result?.let {
                 val rssi = it.rssi
                 
-                // Extract device ID from SERVICE DATA (not manufacturer data)
+                // Extract device ID from SERVICE DATA as UUID bytes
                 val serviceData = it.scanRecord?.getServiceData(ParcelUuid(BleAdvertiser.SERVICE_UUID))
                 val deviceId = serviceData?.let { bytes ->
-                    val id = String(bytes, Charsets.UTF_8)
-                    Log.d("BLE_SCANNER", "✓ Extracted device ID from service data: $id")
-                    id
-                } ?: run {
-                    Log.w("BLE_SCANNER", "✗ No service data, using MAC address: ${it.device.address}")
-                    it.device.address
+                    if (bytes.size == 16) {
+                        // Convert 16 bytes back to UUID string
+                        try {
+                            val buffer = ByteBuffer.wrap(bytes)
+                            val mostSigBits = buffer.long
+                            val leastSigBits = buffer.long
+                            val uuid = UUID(mostSigBits, leastSigBits)
+                            val uuidString = uuid.toString()
+                            Log.d("BLE_SCANNER", "✓ Extracted device ID from bytes: $uuidString")
+                            uuidString
+                        } catch (e: Exception) {
+                            Log.e("BLE_SCANNER", "Failed to parse UUID bytes", e)
+                            null
+                        }
+                    } else {
+                        Log.w("BLE_SCANNER", "Invalid service data size: ${bytes.size}, expected 16")
+                        null
+                    }
                 }
                 
-                Log.d("BLE_SCANNER", "Discovered: $deviceId, RSSI: $rssi")
-                
-                // Update RSSI history
-                updateDeviceRssi(deviceId, rssi)
+                if (deviceId != null) {
+                    Log.d("BLE_SCANNER", "Discovered: $deviceId, RSSI: $rssi")
+                    // It's one of ours!
+                    updateDeviceRssi(deviceId, rssi)
+                }
             }
         }
         
@@ -106,26 +143,18 @@ class BleScanner @Inject constructor(
     }
     
     private fun updateDeviceRssi(deviceId: String, rssi: Int) {
-        // Get or create RSSI history
         val rssiHistory = deviceCache.getOrPut(deviceId) { mutableListOf() }
-        
-        // Add new RSSI
         rssiHistory.add(rssi)
         
-        // Keep only last 10 values
         if (rssiHistory.size > 10) {
             rssiHistory.removeAt(0)
         }
         
-        // Calculate smoothed RSSI
         val smoothedRssi = rssiHistory.average().toInt()
-        
-        // Calculate distance
         val distance = calculateDistance(smoothedRssi)
         
         Log.d("BLE_SCANNER", "Device: $deviceId, Smoothed RSSI: $smoothedRssi, Distance: ${String.format("%.1f", distance)}m")
         
-        // Update discovered devices list
         val currentDevices = _discoveredDevices.value.toMutableList()
         val existingIndex = currentDevices.indexOfFirst { it.deviceId == deviceId }
         

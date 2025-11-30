@@ -3,16 +3,13 @@ package com.fyp.crowdlink.di
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.room.Room
-import com.fyp.crowdlink.data.ble.DeviceRepositoryImpl
-import com.fyp.crowdlink.data.repository.FriendRepositoryImpl
-import com.fyp.crowdlink.data.repository.UserProfileRepositoryImpl
 import com.fyp.crowdlink.data.local.FriendDatabase
 import com.fyp.crowdlink.data.local.dao.FriendDao
 import com.fyp.crowdlink.data.local.dao.UserProfileDao
-import com.fyp.crowdlink.domain.repository.DeviceRepository
+import com.fyp.crowdlink.data.repository.FriendRepositoryImpl
+import com.fyp.crowdlink.data.repository.UserProfileRepositoryImpl
 import com.fyp.crowdlink.domain.repository.FriendRepository
 import com.fyp.crowdlink.domain.repository.UserProfileRepository
-import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -26,59 +23,43 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideFriendDatabase(
-        @ApplicationContext context: Context
-    ): FriendDatabase {
+    fun provideFriendDatabase(@ApplicationContext context: Context): FriendDatabase {
         return Room.databaseBuilder(
             context,
             FriendDatabase::class.java,
-            "crowdlink_database"
+            "friend_db"
         )
-            .fallbackToDestructiveMigration() // ← For development only!
-            .build()
-    }
-
-    @Provides
-    fun provideFriendDao(database: FriendDatabase): FriendDao {
-        return database.friendDao()
-    }
-
-    @Provides
-    fun provideUserProfileDao(database: FriendDatabase): UserProfileDao {
-        return database.userProfileDao()
+        .fallbackToDestructiveMigration() // Wipes database on version change to prevent crashes during development
+        .build()
     }
 
     @Provides
     @Singleton
-    fun provideSharedPreferences(
-        @ApplicationContext context: Context
-    ): SharedPreferences {
-        return context.getSharedPreferences(
-            "crowdlink_prefs",
-            Context.MODE_PRIVATE
-        )
+    fun provideFriendDao(db: FriendDatabase): FriendDao {
+        return db.friendDao()
     }
-}
 
-@Module
-@InstallIn(SingletonComponent::class)
-abstract class RepositoryModule {
-
-    @Binds
+    @Provides
     @Singleton
-    abstract fun bindDeviceRepository(
-        impl: DeviceRepositoryImpl
-    ): DeviceRepository
+    fun provideUserProfileDao(db: FriendDatabase): UserProfileDao {
+        return db.userProfileDao()
+    }
 
-    @Binds
+    @Provides
     @Singleton
-    abstract fun bindFriendRepository(
-        impl: FriendRepositoryImpl
-    ): FriendRepository
+    fun provideFriendRepository(friendDao: FriendDao): FriendRepository {
+        return FriendRepositoryImpl(friendDao)
+    }
 
-    @Binds
+    @Provides
     @Singleton
-    abstract fun bindUserProfileRepository(
-        impl: UserProfileRepositoryImpl
-    ): UserProfileRepository
+    fun provideUserProfileRepository(userProfileDao: UserProfileDao): UserProfileRepository {
+        return UserProfileRepositoryImpl(userProfileDao)
+    }
+    
+    @Provides
+    @Singleton
+    fun provideSharedPreferences(@ApplicationContext context: Context): SharedPreferences {
+        return context.getSharedPreferences("crowdlink_prefs", Context.MODE_PRIVATE)
+    }
 }

@@ -1,6 +1,7 @@
 package com.fyp.crowdlink.presentation.discovery
 
 import android.Manifest
+import android.R.attr.id
 import android.content.SharedPreferences
 import androidx.annotation.RequiresPermission
 import androidx.core.content.edit
@@ -19,21 +20,30 @@ class DiscoveryViewModel @Inject constructor(
     private val sharedPreferences: SharedPreferences
 ) : ViewModel() {
 
+    // Generate or retrieve persistent device ID
+    private val myDeviceId: String by lazy {
+        val id = sharedPreferences.getString(KEY_DEVICE_ID, null)
+            ?: UUID.randomUUID().toString().also { newId ->
+                sharedPreferences.edit { putString(KEY_DEVICE_ID, newId) }
+            }
+        android.util.Log.wtf("DISCOVERY_VM", "Device ID loaded: $id")
+        id
+    }
+
+    init {
+        android.util.Log.wtf("DISCOVERY_VM", "DiscoveryViewModel CREATED!")
+        android.util.Log.wtf("DISCOVERY_VM", "My Device ID: $myDeviceId")
+    }
+
     // NEW: Expose nearby friends with distance
     val nearbyFriends: StateFlow<List<NearbyFriend>> =
         deviceRepository.nearbyFriends
 
-    // Generate or retrieve persistent device ID
-    private val myDeviceId: String by lazy {
-        sharedPreferences.getString(KEY_DEVICE_ID, null)
-            ?: UUID.randomUUID().toString().also { newId ->
-                sharedPreferences.edit { putString(KEY_DEVICE_ID, newId) }
-                newId
-            }
-    }
+
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
     fun startDiscovery() {
+        android.util.Log.wtf("DISCOVERY_VM", "!!! START DISCOVERY CALLED !!!")
         deviceRepository.startDiscovery()
     }
 
@@ -44,6 +54,8 @@ class DiscoveryViewModel @Inject constructor(
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_ADVERTISE)
     fun startAdvertising() {
+        android.util.Log.wtf("DISCOVERY_VM", "!!! START ADVERTISING CALLED !!!")
+        android.util.Log.wtf("DISCOVERY_VM", "Advertising with device ID: $myDeviceId")
         deviceRepository.startAdvertising(myDeviceId)
     }
 

@@ -6,6 +6,7 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "friends")
 data class Friend(
     @PrimaryKey val deviceId: String,
+    val shortId: String? = null, // Nullable for migration if needed, or default to take(16)
     val displayName: String,
     val nickname: String? = null,  // Optional nickname user gives them
     val phoneNumber: String? = null,  // Optional for emergencies

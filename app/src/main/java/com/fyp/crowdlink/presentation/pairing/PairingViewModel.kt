@@ -5,6 +5,8 @@ import android.graphics.Bitmap
 import androidx.core.content.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.fyp.crowdlink.domain.model.Friend
+import com.fyp.crowdlink.domain.repository.FriendRepository
 import com.fyp.crowdlink.domain.repository.UserProfileRepository
 import com.fyp.crowdlink.domain.usecase.PairFriendUseCase
 import com.google.zxing.BarcodeFormat
@@ -23,7 +25,8 @@ import javax.inject.Inject
 class PairingViewModel @Inject constructor(
     private val sharedPreferences: SharedPreferences,
     private val userProfileRepository: UserProfileRepository,
-    private val pairFriendUseCase: PairFriendUseCase
+    private val pairFriendUseCase: PairFriendUseCase,
+    private val friendRepository: FriendRepository
 ) : ViewModel() {
     
     private val _qrCodeBitmap = MutableStateFlow<Bitmap?>(null)
@@ -114,7 +117,12 @@ class PairingViewModel @Inject constructor(
                 }
 
                 if (friendDeviceId.isNotBlank()) {
-                    pairFriendUseCase(friendDeviceId, friendName)
+                    val friend = Friend(
+                        deviceId = friendDeviceId,
+                        shortId = friendDeviceId.take(16),
+                        displayName = friendName
+                    )
+                    friendRepository.addFriend(friend)
                     _pairingState.value = PairingState.Success
                 } else {
                      _pairingState.value = PairingState.Error("Invalid QR Code")

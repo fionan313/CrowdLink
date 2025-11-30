@@ -26,8 +26,8 @@ class DeviceRepositoryImpl @Inject constructor(
     private val friendRepository: FriendRepository
 ) : DeviceRepository {
 
-    private val _discoveredDevices = MutableStateFlow<List<DiscoveredDevice>>(emptyList())
-    override val discoveredDevices: StateFlow<List<DiscoveredDevice>> = _discoveredDevices.asStateFlow()
+    // We listen to the scanner directly
+    override val discoveredDevices: StateFlow<List<DiscoveredDevice>> = bleScanner.discoveredDevices
 
     // NEW: Combined nearby friends with distance
     private val _nearbyFriends = MutableStateFlow<List<NearbyFriend>>(emptyList())
@@ -39,29 +39,54 @@ class DeviceRepositoryImpl @Inject constructor(
             bleScanner.discoveredDevices,
             friendRepository.getAllFriends()
         ) { rawDevices, friends ->
-            Log.d("DEVICE_REPO", "Raw devices: ${rawDevices.size}, Friends: ${friends.size}")
-
-            // Create map of deviceId -> Friend for quick lookup
-            val friendsMap = friends.associateBy { it.deviceId }
-
-            // Match discovered devices with paired friends
+            // android.util.Log.wtf("DEVICE_REPO", "=== COMBINE TRIGGERED ===")
+            
+            // Create map of SHORT ID -> Friend
+            // We will match by checking if the scanned device ID (which might be short) 
+            // matches the first 16 chars of the friend's full device ID.
+            // OR if the scanned ID is the full ID.
+            
+            val friendsMap = friends.associateBy { it.deviceId.take(16) }
+            
             val nearbyFriends = rawDevices.mapNotNull { device ->
-                val friend = friendsMap[device.deviceId]
-                if (friend != null) {
-                    Log.d("DEVICE_REPO", "✓ Nearby: ${friend.displayName} at ${String.format("%.1f", device.estimatedDistance)}m")
-                    NearbyFriend(
-                        deviceId = device.deviceId,
-                        displayName = friend.displayName,
+                // Match using short ID (first 16 chars) or raw if UUID format
+                val shortDeviceId = try {
+                    // If it's a valid UUID, take first 16 chars of the UUID string? 
+                    // No, our BleScanner now returns full UUID string if parsed from bytes.
+                    // But BleAdvertiser sends 16 bytes of UUID.
+                    // So BleScanner converts 16 bytes -> UUID object -> String.
+                    // That String will be a full random UUID (with least sig bits?). 
+                    // Wait, BleAdvertiser sends MOST SIG and LEAST SIG bits?
+                    // No, my code sent 16 bytes. UUID is 128 bits = 16 bytes.
+                    // So BleScanner reconstructs the FULL UUID.
+                    // So we should compare FULL UUIDs if possible, or just take(16) of string if consistent.
+                    
+                    // If BleAdvertiser sends full 16 bytes of UUID, then Scanner gets full UUID.
+                    // So we can compare full strings!
+                    
+                    device.deviceId
+                } catch(e: Exception) {
+                    device.deviceId
+                }
+                
+                // However, we want to be robust. Let's try full match first.
+                // If friends map is keyed by FULL ID:
+                val friendFull = friends.find { it.deviceId == device.deviceId }
+                
+                if (friendFull != null) {
+                     android.util.Log.wtf("DEVICE_REPO", "✓ MATCH FULL: ${friendFull.displayName}")
+                     return@mapNotNull NearbyFriend(
+                        deviceId = friendFull.deviceId,
+                        displayName = friendFull.displayName,
                         rssi = device.rssi,
                         estimatedDistance = device.estimatedDistance,
                         lastSeen = device.lastSeen
                     )
-                } else {
-                    Log.d("DEVICE_REPO", "✗ Device ${device.deviceId} not in friends list")
-                    null
                 }
+                
+                // Fallback to short match if needed (e.g. if we change protocol later)
+                null
             }
-
             nearbyFriends
         }.onEach { nearbyFriends ->
             _nearbyFriends.value = nearbyFriends
@@ -85,6 +110,6 @@ class DeviceRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getPairedFriends(): List<Friend> {
-        TODO("Not yet implemented")
+        return friendRepository.getAllFriends().first()
     }
 }

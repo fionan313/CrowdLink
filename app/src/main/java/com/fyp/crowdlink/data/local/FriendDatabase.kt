@@ -9,7 +9,7 @@ import com.fyp.crowdlink.domain.model.UserProfile
 
 @Database(
     entities = [Friend::class, UserProfile::class],
-    version = 2,  // ← Increment version
+    version = 4,  // Incremented to 4 to fix "identity hash" mismatch or previously 3
     exportSchema = false
 )
 abstract class FriendDatabase : RoomDatabase() {

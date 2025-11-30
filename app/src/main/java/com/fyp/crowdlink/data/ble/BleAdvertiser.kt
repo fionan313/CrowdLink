@@ -8,6 +8,7 @@ import android.content.Context
 import android.os.ParcelUuid
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.nio.ByteBuffer
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -16,6 +17,9 @@ import javax.inject.Singleton
 class BleAdvertiser @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    init {
+        android.util.Log.wtf("BLE_ADVERTISER", "BleAdvertiser CREATED!")
+    }
     private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
     private var isAdvertising = false
     
@@ -37,19 +41,29 @@ class BleAdvertiser @Inject constructor(
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
             .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
             .setConnectable(false)
-            .setTimeout(0)  // Advertise indefinitely
+            .setTimeout(0)
             .build()
         
-        // Encode device ID as service data (supports longer strings)
-        val deviceIdBytes = myDeviceId.toByteArray(Charsets.UTF_8)
+        // Convert UUID string to bytes (16 bytes instead of 36)
+        val deviceIdBytes = try {
+            val uuid = UUID.fromString(myDeviceId)
+            val buffer = ByteBuffer.allocate(16)
+            buffer.putLong(uuid.mostSignificantBits)
+            buffer.putLong(uuid.leastSignificantBits)
+            buffer.array()
+        } catch (e: Exception) {
+            Log.e("BLE_ADVERTISER", "Invalid UUID format: $myDeviceId", e)
+            // Fallback to UTF-8 bytes of truncated string if UUID parse fails
+            myDeviceId.take(16).toByteArray(Charsets.UTF_8)
+        }
         
-        Log.d("BLE_ADVERTISER", "Device ID bytes length: ${deviceIdBytes.size}")
+        Log.d("BLE_ADVERTISER", "Device ID bytes length: ${deviceIdBytes.size} (UUID as bytes)")
         
         val data = AdvertiseData.Builder()
             .setIncludeDeviceName(false)
             .setIncludeTxPowerLevel(false)
             .addServiceUuid(ParcelUuid(SERVICE_UUID))
-            .addServiceData(ParcelUuid(SERVICE_UUID), deviceIdBytes)  // ← Use SERVICE DATA!
+            .addServiceData(ParcelUuid(SERVICE_UUID), deviceIdBytes)
             .build()
         
         try {
