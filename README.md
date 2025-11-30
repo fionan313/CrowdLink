@@ -1,4 +1,4 @@
-# CrowdLink 🎪
+# CrowdLink
 
 > Offline friend-finding for crowded events when cellular networks fail
 
@@ -7,38 +7,38 @@
 [![Min SDK](https://img.shields.io/badge/API-28%2B-brightgreen.svg?style=flat)](https://android-arsenal.com/api?level=28)
 [![Kotlin](https://img.shields.io/badge/kotlin-1.9.10-blue.svg?logo=kotlin)](http://kotlinlang.org)
 
-## 📱 About
+## About
 
 CrowdLink is an Android application that enables friends to find each other at crowded events (festivals, concerts, protests) when cellular networks fail due to congestion. Using Bluetooth Low Energy for device discovery and WiFi Direct for messaging, CrowdLink operates **entirely offline** without relying on cellular or internet infrastructure.
 
 **Problem Solved:**
-- ✅ 85.7% of attendees experience friend separation at events
-- ✅ 64.3% lose contact for over 10 minutes
-- ✅ Cellular networks fail in crowds (>50,000 people)
-- ✅ No infrastructure dependency required
+- 85.7% of attendees experience friend separation at events
+- 64.3% lose contact for over 10 minutes
+- Cellular networks fail in crowds (>50,000 people)
+- No infrastructure dependency required
 
 ---
 
-## ✨ Features
+## Features
 
 ### Current (Interim - v0.5)
-- 🔍 **Bluetooth Low Energy Discovery** - Find nearby friends in 4.5 seconds (avg)
-- 📏 **Distance Estimation** - RSSI-based ranging (±0.6m accuracy)
-- 📱 **Cross-Device Support** - Android API 28-35 (93% success rate)
-- 🔋 **Low Battery Usage** - 4.2%/hour consumption
-- 📊 **RSSI Smoothing** - 68% noise reduction via moving average
+- **Bluetooth Low Energy Discovery** - Find nearby friends in 4.5 seconds (avg)
+- **Distance Estimation** - RSSI-based ranging (±0.6m accuracy)
+- **Cross-Device Support** - Android API 28-35 (93% success rate)
+- **Low Battery Usage** - 4.2%/hour consumption
+- **RSSI Smoothing** - 68% noise reduction via moving average
 
 ### Planned (Weeks 6-12)
-- 🤝 Friend pairing via QR codes
-- 💬 WiFi Direct messaging
-- 🔐 End-to-end encryption
-- 📍 Location sharing with privacy controls
-- 🗺️ Visual map interface
-- 🔁 Store-and-forward mesh networking
+- Friend pairing via QR codes
+- WiFi Direct messaging
+- End-to-end encryption
+- Location sharing with privacy controls
+- Visual map interface
+- Store-and-forward mesh networking
 
 ---
 
-## 🎯 Project Status
+## Project Status
 
 **Current Phase:** Interim Submission (Week 5)  
 **Completion:** ~35% of planned features  
@@ -57,7 +57,7 @@ CrowdLink is an Android application that enables friends to find each other at c
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 CrowdLink follows **Clean Architecture** principles with MVVM pattern:
 ```
@@ -84,7 +84,7 @@ CrowdLink follows **Clean Architecture** principles with MVVM pattern:
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 - Android Studio Hedgehog (2023.1.1) or later
@@ -112,20 +112,20 @@ open -a "Android Studio" .
 4. **Run on Device**
 - Connect Android device via USB
 - Enable Developer Options & USB Debugging
-- Click Run ▶️ or:
+- Click Run or:
 ```bash
 ./gradlew installDebug
 ```
 
 ### Permissions Required
-- ✅ Bluetooth (API 28-30) / Bluetooth Scan/Advertise (API 31+)
-- ✅ Fine Location (required for BLE scanning on Android)
-- ⏳ Camera (Week 6 - QR code scanning)
-- ⏳ WiFi (Week 7 - WiFi Direct)
+- Bluetooth (API 28-30) / Bluetooth Scan/Advertise (API 31+)
+- Fine Location (required for BLE scanning on Android)
+- Camera (Week 6 - QR code scanning)
+- WiFi (Week 7 - WiFi Direct)
 
 ---
 
-## 🧪 Testing
+## Testing
 
 ### Run Unit Tests
 ```bash
@@ -164,7 +164,7 @@ open app/build/reports/tests/testDebugUnitTest/index.html
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 ```
 app/src/main/java/com/fyp/crowdlink/
 ├── data/                           # Data layer
@@ -195,7 +195,7 @@ app/src/main/java/com/fyp/crowdlink/
 
 ---
 
-## 🔬 Research & Validation
+## Research & Validation
 
 ### Survey Data (42 Respondents, Ages 18-35)
 - 85.7% experience friend separation at events
@@ -216,7 +216,7 @@ app/src/main/java/com/fyp/crowdlink/
 
 ---
 
-## 📝 Documentation
+## Documentation
 
 - **[Interim Report](docs/Interim_Report.pdf)** - Academic submission (90 pages)
 - **[Project Proposal](docs/Project_Proposal.pdf)** - Initial planning
@@ -225,7 +225,7 @@ app/src/main/java/com/fyp/crowdlink/
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 This is an academic Final Year Project (FYP) and is **not open for external contributions** during the assessment period (November 2024 - March 2025).
 
@@ -238,7 +238,7 @@ This is an academic Final Year Project (FYP) and is **not open for external cont
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
@@ -246,28 +246,27 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 👤 Author
+## Author
 
 **Fionán Ó Ceallaigh**
 - Student ID: C22337521
 - Institution: TU Dublin
 - Supervisor: Bryan Duggan
 - Program: TU856 - Computer Science (Final Year)
-- Academic Year: 2024/2025
+- Academic Year: 2025/2026
 
 ---
 
-## 🙏 Acknowledgements
+## Acknowledgements
 
 - **Bryan Duggan** - Project supervisor for guidance and feedback
 - **Survey Participants** - 42 respondents who validated the problem statement
-- **Device Lenders** - Peers who provided test devices (Samsung Note 10+, Galaxy A50)
 - **TU Dublin** - Resources and facilities for development and testing
 - **AI Tools** - ChatGPT and Claude for debugging assistance and code review (documented in Appendix C)
 
 ---
 
-## 🐛 Known Issues
+## Known Issues
 
 - [ ] Distance estimation tests expect theoretical values (tests adjusted to calibrated algorithm)
 - [ ] API 28 devices occasionally require BLE toggle (80-90% success vs 100% on API 31+)
@@ -277,7 +276,7 @@ See [Issues](https://github.com/fionat33/CrowdLink/issues) for full list.
 
 ---
 
-## 📮 Contact
+## Contact
 
 For academic inquiries: c22337521@mytudublin.ie
 
@@ -285,7 +284,7 @@ For academic inquiries: c22337521@mytudublin.ie
 
 ---
 
-## 📊 Project Metrics
+## Project Metrics
 
 ![Lines of Code](https://img.shields.io/badge/lines%20of%20code-~850-blue)
 ![Test Coverage](https://img.shields.io/badge/coverage-78%25-green)
@@ -295,5 +294,5 @@ For academic inquiries: c22337521@mytudublin.ie
 ---
 
 <p align="center">
-  <sub>Built with ❤️ for Final Year Project | TU Dublin 2024/2025</sub>
+  <sub>Fionán Ó Ceallaigh | Final Year Project | TU Dublin 2025/2026</sub>
 </p>
