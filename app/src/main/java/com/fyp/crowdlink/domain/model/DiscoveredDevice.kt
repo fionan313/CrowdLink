@@ -4,5 +4,6 @@ data class DiscoveredDevice(
     val deviceId: String,
     val rssi: Int,
     val timestamp: Long = System.currentTimeMillis(),
-    val estimatedDistance: Double = -1.0
+    val estimatedDistance: Double = -1.0,
+    val lastSeen: Long
 )

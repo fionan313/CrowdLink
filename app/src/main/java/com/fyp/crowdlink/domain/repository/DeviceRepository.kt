@@ -8,5 +8,7 @@ interface DeviceRepository {
     val discoveredDevices: StateFlow<List<DiscoveredDevice>>
     fun startDiscovery()
     fun stopDiscovery()
+    fun startAdvertising(myDeviceId: String)
+    fun stopAdvertising()
     suspend fun getPairedFriends(): List<Friend>
 }

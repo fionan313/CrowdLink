@@ -1,18 +1,18 @@
 package com.fyp.crowdlink.presentation.pairing
 
 import android.graphics.Bitmap
-import android.graphics.Color
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.google.zxing.BarcodeFormat
-import com.google.zxing.qrcode.QRCodeWriter
 
 @Composable
 fun PairingScreen(
@@ -20,8 +20,14 @@ fun PairingScreen(
     onPairingSuccess: () -> Unit,
     onScanClick: () -> Unit
 ) {
-    val qrContent by viewModel.qrContent.collectAsState()
+    // Explicitly observing StateFlows
+    val qrCodeBitmap by viewModel.qrCodeBitmap.collectAsState()
     val pairingState by viewModel.pairingState.collectAsState()
+    
+    // Trigger QR generation when screen opens
+    LaunchedEffect(Unit) {
+        viewModel.generateQRCode()
+    }
     
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -32,9 +38,12 @@ fun PairingScreen(
         Spacer(modifier = Modifier.height(32.dp))
         
         // Show QR Code
-        // Only generate when qrContent is ready
-        if (qrContent.isNotEmpty()) {
-            QRCodeImage(data = qrContent)
+        if (qrCodeBitmap != null) {
+            Image(
+                bitmap = qrCodeBitmap!!.asImageBitmap(),
+                contentDescription = "QR Code",
+                modifier = Modifier.size(256.dp)
+            )
         } else {
             CircularProgressIndicator()
         }
@@ -61,31 +70,4 @@ fun PairingScreen(
             else -> {}
         }
     }
-}
-
-@Composable
-fun QRCodeImage(data: String) {
-    // Use ZXing to generate QR bitmap
-    val qrBitmap = remember(data) {
-        generateQRBitmap(data, 512, 512)
-    }
-    
-    Image(
-        bitmap = qrBitmap.asImageBitmap(),
-        contentDescription = "QR Code",
-        modifier = Modifier.size(256.dp)
-    )
-}
-
-fun generateQRBitmap(data: String, width: Int, height: Int): Bitmap {
-    val writer = QRCodeWriter()
-    val bitMatrix = writer.encode(data, BarcodeFormat.QR_CODE, width, height)
-    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
-    
-    for (x in 0 until width) {
-        for (y in 0 until height) {
-            bitmap.setPixel(x, y, if (bitMatrix[x, y]) Color.BLACK else Color.WHITE)
-        }
-    }
-    return bitmap
 }
