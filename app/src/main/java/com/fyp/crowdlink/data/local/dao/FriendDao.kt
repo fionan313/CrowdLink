@@ -1,19 +1,15 @@
 package com.fyp.crowdlink.data.local.dao
 
-import androidx.room.Dao
-import androidx.room.Delete
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
-import androidx.room.Query
+import androidx.room.*
 import com.fyp.crowdlink.domain.model.Friend
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface FriendDao {
+    
     @Query("SELECT * FROM friends ORDER BY pairedAt DESC")
     fun getAllFriends(): Flow<List<Friend>>
 
-    // Added this method to fix the build error
     @Query("SELECT * FROM friends ORDER BY pairedAt DESC")
     suspend fun getPairedFriends(): List<Friend>
     
@@ -24,8 +20,14 @@ interface FriendDao {
     suspend fun insertFriend(friend: Friend)
     
     @Delete
-    suspend fun deleteFriend(friend: Friend)
+    suspend fun deleteFriend(friend: Friend)  // ← For unpair
+    
+    @Query("DELETE FROM friends WHERE deviceId = :deviceId")
+    suspend fun deleteFriendById(deviceId: String)  // ← Alternative unpair
     
     @Query("SELECT COUNT(*) FROM friends WHERE deviceId = :deviceId")
     suspend fun isFriendPaired(deviceId: String): Int
+    
+    @Query("UPDATE friends SET lastSeen = :timestamp WHERE deviceId = :deviceId")
+    suspend fun updateLastSeen(deviceId: String, timestamp: Long)
 }

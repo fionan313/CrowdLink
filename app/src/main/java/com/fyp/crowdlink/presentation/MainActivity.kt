@@ -21,6 +21,7 @@ import com.fyp.crowdlink.presentation.friends.FriendsScreen
 import com.fyp.crowdlink.presentation.pairing.PairingScreen
 import com.fyp.crowdlink.presentation.pairing.PairingViewModel
 import com.fyp.crowdlink.presentation.pairing.QRScannerScreen
+import com.fyp.crowdlink.presentation.settings.SettingsScreen
 import com.fyp.crowdlink.ui.theme.CrowdLinkTheme
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -63,8 +64,19 @@ class MainActivity : ComponentActivity() {
                         
                         composable("friends") {
                             FriendsScreen(
-                                onAddFriend = {
+                                onNavigateToPairing = {
                                     navController.navigate("pairing")
+                                },
+                                onNavigateToSettings = {
+                                    navController.navigate("settings")
+                                }
+                            )
+                        }
+                        
+                        composable("settings") {
+                            SettingsScreen(
+                                onNavigateBack = {
+                                    navController.popBackStack()
                                 }
                             )
                         }

@@ -12,15 +12,31 @@ class FriendRepositoryImpl @Inject constructor(
     private val friendDao: FriendDao
 ) : FriendRepository {
     
-    override fun getAllFriends(): Flow<List<Friend>> = 
-        friendDao.getAllFriends()
+    override fun getAllFriends(): Flow<List<Friend>> {
+        return friendDao.getAllFriends()
+    }
     
-    override suspend fun addFriend(friend: Friend) = 
+    override suspend fun getFriendById(deviceId: String): Friend? {
+        return friendDao.getFriendById(deviceId)
+    }
+    
+    override suspend fun addFriend(friend: Friend) {
         friendDao.insertFriend(friend)
+    }
     
-    override suspend fun removeFriend(friend: Friend) = 
+    override suspend fun removeFriend(friend: Friend) {
         friendDao.deleteFriend(friend)
+    }
     
-    override suspend fun isFriendPaired(deviceId: String): Boolean =
-        friendDao.isFriendPaired(deviceId) > 0
+    override suspend fun removeFriendById(deviceId: String) {
+        friendDao.deleteFriendById(deviceId)
+    }
+    
+    override suspend fun isFriendPaired(deviceId: String): Boolean {
+        return friendDao.isFriendPaired(deviceId) > 0
+    }
+    
+    override suspend fun updateLastSeen(deviceId: String, timestamp: Long) {
+        friendDao.updateLastSeen(deviceId, timestamp)
+    }
 }

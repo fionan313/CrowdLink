@@ -5,9 +5,11 @@ import androidx.room.PrimaryKey
 
 @Entity(tableName = "friends")
 data class Friend(
-    @PrimaryKey val deviceId: String,  // Unique identifier
-    val displayName: String,            // User-entered name
-    val publicKey: String?,             // For future encryption (Week 8)
+    @PrimaryKey val deviceId: String,
+    val displayName: String,
+    val nickname: String? = null,  // Optional nickname user gives them
+    val phoneNumber: String? = null,  // Optional for emergencies
+    val publicKey: String? = null,  // For Week 8 encryption
     val pairedAt: Long = System.currentTimeMillis(),
     val lastSeen: Long = 0L
 )
