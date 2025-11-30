@@ -2,7 +2,7 @@
 
 > Offline friend-finding for crowded events when cellular networks fail
 
-[![Android CI](https://github.com/fionat33/CrowdLink/actions/workflows/android-ci.yml/badge.svg)](https://github.com/fionat33/CrowdLink/actions/workflows/android-ci.yml)
+[![Android CI](https://github.com/fionan313/CrowdLink/actions/workflows/android-ci.yml/badge.svg)](https://github.com/fionan313/CrowdLink/actions/workflows/android-ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Min SDK](https://img.shields.io/badge/API-28%2B-brightgreen.svg?style=flat)](https://android-arsenal.com/api?level=28)
 [![Kotlin](https://img.shields.io/badge/kotlin-1.9.10-blue.svg?logo=kotlin)](http://kotlinlang.org)
