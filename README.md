@@ -46,14 +46,14 @@ CrowdLink is an Android application that enables friends to find each other at c
 
 | Phase | Status | Features |
 |-------|--------|----------|
-| Week 3-5: BLE Discovery | ✅ Complete | Device discovery, distance estimation |
-| Week 6: Friend Pairing | 🚧 In Progress | QR code pairing |
-| Week 7-8: Messaging | ⏳ Planned | WiFi Direct communication |
-| Week 8: Encryption | ⏳ Planned | End-to-end encryption |
-| Week 9: Location Sharing | ⏳ Planned | GPS + privacy controls |
-| Week 10: Polish & Testing | ⏳ Planned | Bug fixes, optimization |
-| Week 11: User Evaluation | ⏳ Planned | 10+ participant study |
-| Week 12: Final Submission | ⏳ Planned | Documentation complete |
+| Week 3-5: BLE Discovery | Complete | Device discovery, distance estimation |
+| Week 6: Friend Pairing | Complete | QR code pairing |
+| Week 7-8: Messaging | In Progress | WiFi Direct communication |
+| Week 8: Encryption | Planned | End-to-end encryption |
+| Week 9: Location Sharing | Planned | GPS + privacy controls |
+| Week 10: Polish & Testing | Planned | Bug fixes, optimization |
+| Week 11: User Evaluation | Planned | 10+ participant study |
+| Week 12: Final Submission | Planned | Documentation complete |
 
 ---
 
