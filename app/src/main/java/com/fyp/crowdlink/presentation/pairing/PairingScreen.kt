@@ -14,17 +14,23 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 
+/**
+ * PairingScreen
+ *
+ * This composable screen allows users to pair with friends by either displaying a QR code
+ * or scanning a friend's QR code. It interacts with the [PairingViewModel] to manage state.
+ */
 @Composable
 fun PairingScreen(
     viewModel: PairingViewModel = hiltViewModel(),
     onPairingSuccess: () -> Unit,
     onScanClick: () -> Unit
 ) {
-    // Explicitly observing StateFlows
+    // Explicitly observing StateFlows from the ViewModel
     val qrCodeBitmap by viewModel.qrCodeBitmap.collectAsState()
     val pairingState by viewModel.pairingState.collectAsState()
     
-    // Trigger QR generation when screen opens
+    // Trigger QR generation when the screen is first launched
     LaunchedEffect(Unit) {
         viewModel.generateQRCode()
     }
@@ -37,7 +43,7 @@ fun PairingScreen(
         
         Spacer(modifier = Modifier.height(32.dp))
         
-        // Show QR Code
+        // Show QR Code if generated, otherwise show a loading indicator
         if (qrCodeBitmap != null) {
             Image(
                 bitmap = qrCodeBitmap!!.asImageBitmap(),
@@ -50,18 +56,21 @@ fun PairingScreen(
         
         Spacer(modifier = Modifier.height(32.dp))
         
+        // Button to initiate QR scanning flow
         Button(onClick = onScanClick) {
             Text("Scan Friend's QR Code")
         }
         
-        // Handle pairing state
+        // Handle pairing state changes (Success, Error, etc.)
         when (pairingState) {
             is PairingState.Success -> {
+                // Navigate away or show success message when pairing is successful
                 LaunchedEffect(Unit) {
                     onPairingSuccess()
                 }
             }
             is PairingState.Error -> {
+                // Display error message if pairing fails
                 Text(
                     text = "Error: ${(pairingState as PairingState.Error).message}",
                     color = MaterialTheme.colorScheme.error

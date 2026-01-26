@@ -7,27 +7,50 @@ import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * UserProfileRepositoryImpl
+ *
+ * This class implements the [UserProfileRepository] interface.
+ * It serves as the data layer implementation for managing the local user's profile,
+ * delegating database operations to the [UserProfileDao].
+ */
 @Singleton
 class UserProfileRepositoryImpl @Inject constructor(
     private val userProfileDao: UserProfileDao
 ) : UserProfileRepository {
     
+    /**
+     * Retrieves the user profile as a Flow, allowing the UI to react to changes in real-time.
+     */
     override fun getUserProfile(): Flow<UserProfile?> {
         return userProfileDao.getUserProfile()
     }
     
+    /**
+     * Retrieves the current user profile immediately (one-shot).
+     * Useful for logic that needs the current state without observing future updates.
+     */
     override suspend fun getUserProfileOnce(): UserProfile? {
         return userProfileDao.getUserProfileOnce()
     }
     
+    /**
+     * Persists a new user profile to the database.
+     */
     override suspend fun saveUserProfile(profile: UserProfile) {
         userProfileDao.insertUserProfile(profile)
     }
     
+    /**
+     * Updates the existing user profile in the database.
+     */
     override suspend fun updateUserProfile(profile: UserProfile) {
         userProfileDao.updateUserProfile(profile)
     }
     
+    /**
+     * Removes the user profile from the database.
+     */
     override suspend fun deleteUserProfile() {
         userProfileDao.deleteUserProfile()
     }

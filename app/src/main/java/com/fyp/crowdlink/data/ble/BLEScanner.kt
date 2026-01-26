@@ -19,6 +19,18 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * BleScanner
+ *
+ * This class is responsible for scanning for nearby devices using Bluetooth Low Energy (BLE).
+ * It filters scan results to find only devices advertising the CrowdLink service UUID.
+ *
+ * Key features:
+ * - Scans for specific Service UUID to avoid picking up unrelated BLE devices.
+ * - Extracts the custom device ID embedded in the advertisement service data.
+ * - Calculates estimated distance based on RSSI (Received Signal Strength Indicator).
+ * - Implements RSSI smoothing (moving average) to reduce signal noise.
+ */
 @Singleton
 class BleScanner @Inject constructor(
     @ApplicationContext private val context: Context
@@ -28,17 +40,24 @@ class BleScanner @Inject constructor(
     }
     
     private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
+    
     // NOTE: bluetoothLeScanner can be null if Bluetooth is off when the app starts. 
-    // We should fetch it dynamically or check it before scanning.
+    // We should fetch it dynamically via the getter.
     private val bluetoothLeScanner: BluetoothLeScanner? 
         get() = bluetoothAdapter?.bluetoothLeScanner
     
+    // StateFlow to emit the list of currently discovered devices to the UI
     private val _discoveredDevices = MutableStateFlow<List<DiscoveredDevice>>(emptyList())
     val discoveredDevices: StateFlow<List<DiscoveredDevice>> = _discoveredDevices.asStateFlow()
     
+    // Cache for RSSI smoothing: stores the last few RSSI values for each device ID
     private val deviceCache = mutableMapOf<String, MutableList<Int>>()
     private var isScanning = false
     
+    /**
+     * Starts the BLE scanning process.
+     * Configures filters to look for the specific app service UUID and sets scan mode to low latency.
+     */
     fun startDiscovery() {
         if (isScanning) {
             Log.d("BLE_SCANNER", "Already scanning")
@@ -62,10 +81,12 @@ class BleScanner @Inject constructor(
         
         Log.d("BLE_SCANNER", "Starting BLE scan")
         
+        // Filter specifically for our app's Service UUID
         val scanFilter = ScanFilter.Builder()
             .setServiceUuid(ParcelUuid(BleAdvertiser.SERVICE_UUID))
             .build()
         
+        // Low Latency mode is battery intensive but provides faster results
         val scanSettings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
@@ -79,6 +100,9 @@ class BleScanner @Inject constructor(
         }
     }
     
+    /**
+     * Stops the BLE scanning process and clears the current results.
+     */
     fun stopDiscovery() {
         if (!isScanning) return
         
@@ -86,19 +110,23 @@ class BleScanner @Inject constructor(
             bluetoothLeScanner?.stopScan(scanCallback)
             isScanning = false
             deviceCache.clear()
-            _discoveredDevices.value = emptyList()
+            _discoveredDevices.value = emptyList() // Clear UI list
             Log.d("BLE_SCANNER", "Scan stopped")
         } catch (e: SecurityException) {
             Log.e("BLE_SCANNER", "Permission denied when stopping", e)
         }
     }
     
+    /**
+     * Callback for handling BLE scan results.
+     */
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
             result?.let {
                 val rssi = it.rssi
                 
                 // Extract device ID from SERVICE DATA as UUID bytes
+                // The device ID was compressed into 16 bytes in BleAdvertiser
                 val serviceData = it.scanRecord?.getServiceData(ParcelUuid(BleAdvertiser.SERVICE_UUID))
                 val deviceId = serviceData?.let { bytes ->
                     if (bytes.size == 16) {
@@ -123,7 +151,7 @@ class BleScanner @Inject constructor(
                 
                 if (deviceId != null) {
                     Log.d("BLE_SCANNER", "Discovered: $deviceId, RSSI: $rssi")
-                    // It's one of ours!
+                    // It's one of ours! Update the device list with new signal info
                     updateDeviceRssi(deviceId, rssi)
                 }
             }
@@ -142,19 +170,29 @@ class BleScanner @Inject constructor(
         }
     }
     
+    /**
+     * Updates the RSSI for a discovered device and recalculates distance using a moving average.
+     *
+     * @param deviceId The unique identifier of the device.
+     * @param rssi The raw RSSI value from the latest scan result.
+     */
     private fun updateDeviceRssi(deviceId: String, rssi: Int) {
+        // Add new RSSI to history for smoothing
         val rssiHistory = deviceCache.getOrPut(deviceId) { mutableListOf() }
         rssiHistory.add(rssi)
         
+        // Keep only the last 10 readings
         if (rssiHistory.size > 10) {
             rssiHistory.removeAt(0)
         }
         
+        // Calculate average RSSI to reduce noise
         val smoothedRssi = rssiHistory.average().toInt()
         val distance = calculateDistance(smoothedRssi)
         
         Log.d("BLE_SCANNER", "Device: $deviceId, Smoothed RSSI: $smoothedRssi, Distance: ${String.format("%.1f", distance)}m")
         
+        // Update the list of discovered devices
         val currentDevices = _discoveredDevices.value.toMutableList()
         val existingIndex = currentDevices.indexOfFirst { it.deviceId == deviceId }
         
@@ -174,11 +212,18 @@ class BleScanner @Inject constructor(
         _discoveredDevices.value = currentDevices
     }
     
+    /**
+     * Calculates the estimated distance to the device based on RSSI.
+     * Uses the Log-Distance Path Loss Model.
+     *
+     * @param rssi The smoothed RSSI value.
+     * @return Estimated distance in meters.
+     */
     private fun calculateDistance(rssi: Int): Double {
         if (rssi == 0) return -1.0
         
-        val txPower = -59
-        val pathLossExponent = 2.5
+        val txPower = -59 // Measured RSSI at 1 meter (calibrated constant)
+        val pathLossExponent = 2.5 // Environmental factor (2.0-4.0 for outdoors/crowds)
         
         return Math.pow(10.0, (txPower - rssi) / (10.0 * pathLossExponent))
     }

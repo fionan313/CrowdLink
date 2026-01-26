@@ -1,3 +1,4 @@
+// Module-level build file
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -43,26 +44,34 @@ android {
 
 dependencies {
 
+    // Core Android Dependencies
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
+    
+    // Jetpack Compose (UI)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
 
-    // Room Dependencies
-    implementation(libs.androidx.room.runtime) // Added runtime
+    // Room Database (Persistence)
+    implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
-    ksp(libs.androidx.room.compiler) // Added annotation processor
+    ksp(libs.androidx.room.compiler) // Annotation processor for Room
 
-    // QR Code generation
+    // QR Code generation & scanning (ZXing)
     implementation(libs.core)
     implementation(libs.zxing.android.embedded)
 
-    // Camera permission (already in manifest?)
+    // Camera Support
     implementation(libs.androidx.camera.camera2.v130)
+
+    // Dependency Injection (Hilt)
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
+    implementation(libs.androidx.hilt.navigation.compose)
 
     // Unit Testing
     testImplementation(libs.junit)
@@ -70,15 +79,14 @@ dependencies {
     testImplementation(libs.turbine)
     testImplementation(libs.kotlinx.coroutines.test)
 
+    // Android Instrumentation Tests
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    
+    // Debugging Tools
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
-
-    implementation(libs.hilt.android)
-    ksp(libs.hilt.compiler)
-    implementation(libs.androidx.hilt.navigation.compose)
 }

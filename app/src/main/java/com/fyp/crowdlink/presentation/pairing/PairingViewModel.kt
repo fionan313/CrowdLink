@@ -21,6 +21,15 @@ import org.json.JSONObject
 import java.util.UUID
 import javax.inject.Inject
 
+/**
+ * PairingViewModel
+ *
+ * This ViewModel manages the logic for the device pairing process.
+ * It handles:
+ * 1. Generating a QR code containing this device's ID and user profile.
+ * 2. Processing scanned QR code data from other devices.
+ * 3. Managing the state of the pairing process (Idle, Pairing, Success, Error).
+ */
 @HiltViewModel
 class PairingViewModel @Inject constructor(
     private val sharedPreferences: SharedPreferences,
@@ -29,12 +38,15 @@ class PairingViewModel @Inject constructor(
     private val friendRepository: FriendRepository
 ) : ViewModel() {
     
+    // StateFlow for the generated QR code image
     private val _qrCodeBitmap = MutableStateFlow<Bitmap?>(null)
     val qrCodeBitmap: StateFlow<Bitmap?> = _qrCodeBitmap.asStateFlow()
     
+    // StateFlow for the current device's ID
     private val _myDeviceId = MutableStateFlow<String>("")
     val myDeviceId: StateFlow<String> = _myDeviceId.asStateFlow()
     
+    // StateFlow for tracking the pairing status
     private val _pairingState = MutableStateFlow<PairingState>(PairingState.Idle)
     val pairingState: StateFlow<PairingState> = _pairingState.asStateFlow()
     
@@ -42,11 +54,18 @@ class PairingViewModel @Inject constructor(
         loadDeviceId()
     }
     
+    /**
+     * Loads the unique device ID from persistent storage.
+     */
     private fun loadDeviceId() {
         val deviceId = getPersistentDeviceId()
         _myDeviceId.value = deviceId
     }
     
+    /**
+     * Retrieves the device ID from SharedPreferences. 
+     * If not found, generates a new UUID, saves it, and returns it.
+     */
     private fun getPersistentDeviceId(): String {
         val key = "device_id"
         return sharedPreferences.getString(key, null) ?: run {
@@ -56,27 +75,32 @@ class PairingViewModel @Inject constructor(
         }
     }
     
+    /**
+     * Generates a QR code representing the user's identity.
+     * The QR code payload contains a JSON string with the device ID and display name.
+     */
     fun generateQRCode() {
         viewModelScope.launch {
             try {
-                // Get user profile for display name
+                // Get user profile for display name, defaulting to "Anonymous" if not set
                 val userProfile = userProfileRepository.getUserProfile().first()
                 val displayName = userProfile?.displayName ?: "Anonymous"
                 
-                // Create JSON with device ID and display name
+                // Create JSON payload
                 val qrData = JSONObject().apply {
                     put("deviceId", _myDeviceId.value)
                     put("displayName", displayName)
                     put("timestamp", System.currentTimeMillis())
                 }.toString()
                 
-                // Generate QR code bitmap
+                // Encode the JSON string into a QR code using ZXing
                 val writer = QRCodeWriter()
                 val bitMatrix = writer.encode(qrData, BarcodeFormat.QR_CODE, 512, 512)
                 val width = bitMatrix.width
                 val height = bitMatrix.height
                 val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
                 
+                // Convert the BitMatrix to a Bitmap
                 for (x in 0 until width) {
                     for (y in 0 until height) {
                         bitmap.setPixel(
@@ -95,6 +119,13 @@ class PairingViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Processes the scanned data from a QR code.
+     * Parses the JSON to extract the friend's device ID and name, then adds them as a friend.
+     *
+     * @param scannedData The raw string data scanned from the QR code.
+     * @param defaultName A fallback name to use if parsing fails (optional usage).
+     */
     fun onQRScanned(scannedData: String, defaultName: String) {
         viewModelScope.launch {
             _pairingState.value = PairingState.Pairing
@@ -102,7 +133,7 @@ class PairingViewModel @Inject constructor(
                 var friendDeviceId = scannedData
                 var friendName = defaultName
 
-                // Try to parse as JSON
+                // Attempt to parse the scanned data as JSON
                 try {
                     val json = JSONObject(scannedData)
                     if (json.has("deviceId")) {
@@ -112,14 +143,15 @@ class PairingViewModel @Inject constructor(
                         friendName = json.getString("displayName")
                     }
                 } catch (e: Exception) {
-                    // Not JSON or invalid format, assume raw ID if not empty
-                    // Keep default values
+                    // Parsing failed, assume the data is just the device ID directly
+                    // Use default name provided
                 }
 
                 if (friendDeviceId.isNotBlank()) {
+                    // Create and save the new Friend entity
                     val friend = Friend(
                         deviceId = friendDeviceId,
-                        shortId = friendDeviceId.take(16),
+                        shortId = friendDeviceId.take(16), // Use first 16 chars as short ID
                         displayName = friendName
                     )
                     friendRepository.addFriend(friend)
@@ -134,6 +166,9 @@ class PairingViewModel @Inject constructor(
     }
 }
 
+/**
+ * Represents the various states of the pairing process.
+ */
 sealed class PairingState {
     object Idle : PairingState()
     object Pairing : PairingState()

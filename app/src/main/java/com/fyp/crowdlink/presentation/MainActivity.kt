@@ -13,9 +13,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.fyp.crowdlink.presentation.chat.ChatScreen
 import com.fyp.crowdlink.presentation.discovery.DiscoveryScreen
 import com.fyp.crowdlink.presentation.friends.FriendsScreen
 import com.fyp.crowdlink.presentation.pairing.PairingScreen
@@ -69,6 +72,27 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onNavigateToSettings = {
                                     navController.navigate("settings")
+                                },
+                                onNavigateToChat = { friendId, friendName ->
+                                    navController.navigate("chat/$friendId/$friendName")
+                                }
+                            )
+                        }
+                        
+                        composable(
+                            route = "chat/{friendId}/{friendName}",
+                            arguments = listOf(
+                                navArgument("friendId") { type = NavType.StringType },
+                                navArgument("friendName") { type = NavType.StringType }
+                            )
+                        ) { backStackEntry ->
+                            val friendId = backStackEntry.arguments?.getString("friendId") ?: ""
+                            val friendName = backStackEntry.arguments?.getString("friendName") ?: ""
+                            ChatScreen(
+                                friendId = friendId,
+                                friendName = friendName,
+                                onNavigateBack = {
+                                    navController.popBackStack()
                                 }
                             )
                         }
@@ -82,24 +106,19 @@ class MainActivity : ComponentActivity() {
                         }
                         
                         composable("pairing") { backStackEntry ->
-                            // Get the ViewModel scoped to this navigation graph entry
                             val viewModel: PairingViewModel = hiltViewModel()
-                            
-                            // Check for a scan result from the QRScannerScreen
                             val savedStateHandle = backStackEntry.savedStateHandle
                             val scannedQr = savedStateHandle.get<String>("scanned_qr")
                             
                             if (scannedQr != null) {
-                                // Consume the result so we don't process it again
                                 savedStateHandle.remove<String>("scanned_qr")
-                                // Trigger the pairing logic in the ViewModel
-                                viewModel.onQRScanned(scannedQr, "Friend") // You might want to ask for a name here
+                                viewModel.onQRScanned(scannedQr, "Friend")
                             }
 
                             PairingScreen(
                                 viewModel = viewModel,
                                 onPairingSuccess = {
-                                    navController.popBackStack() // Return to friends list
+                                    navController.popBackStack()
                                 },
                                 onScanClick = {
                                     navController.navigate("scanner")
@@ -110,7 +129,6 @@ class MainActivity : ComponentActivity() {
                         composable("scanner") {
                             QRScannerScreen(
                                 onScanned = { scannedData ->
-                                    // Pass the result back to the previous screen (PairingScreen)
                                     navController.previousBackStackEntry
                                         ?.savedStateHandle
                                         ?.set("scanned_qr", scannedData)
@@ -125,7 +143,15 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestPermissions() {
-        val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            arrayOf(
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.BLUETOOTH_ADVERTISE,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.NEARBY_WIFI_DEVICES
+            )
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             arrayOf(
                 Manifest.permission.BLUETOOTH_SCAN,
                 Manifest.permission.BLUETOOTH_CONNECT,

@@ -3,14 +3,21 @@ package com.fyp.crowdlink.domain.model
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
+/**
+ * Friend
+ *
+ * This Entity class represents a friend in the local Room database.
+ * It stores persistent information about paired contacts, including their
+ * unique device ID, display name, and pairing metadata.
+ */
 @Entity(tableName = "friends")
 data class Friend(
-    @PrimaryKey val deviceId: String,
-    val shortId: String? = null, // Nullable for migration if needed, or default to take(16)
-    val displayName: String,
-    val nickname: String? = null,  // Optional nickname user gives them
-    val phoneNumber: String? = null,  // Optional for emergencies
-    val publicKey: String? = null,  // For Week 8 encryption
-    val pairedAt: Long = System.currentTimeMillis(),
-    val lastSeen: Long = 0L
+    @PrimaryKey val deviceId: String,   // Unique identifier for the friend's device (BLE Address/UUID)
+    val shortId: String? = null,        // Shortened ID for display/verification (e.g. first 16 chars)
+    val displayName: String,            // The public name shared by the friend during pairing
+    val nickname: String? = null,       // An optional private nickname assigned by the user
+    val phoneNumber: String? = null,    // Optional phone number for emergency contact
+    val publicKey: String? = null,      // Public key for end-to-end encryption (planned for Week 8)
+    val pairedAt: Long = System.currentTimeMillis(), // Timestamp of when the pairing occurred
+    val lastSeen: Long = 0L             // Timestamp of when this friend was last detected nearby
 )

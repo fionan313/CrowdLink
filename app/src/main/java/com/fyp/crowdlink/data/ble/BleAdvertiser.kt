@@ -13,6 +13,16 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * BleAdvertiser
+ *
+ * This class is responsible for broadcasting the local device's presence using Bluetooth Low Energy (BLE) Advertising.
+ * It broadcasts the device's unique ID so that other nearby devices running the app can discover it.
+ *
+ * The advertising packet includes:
+ * - Service UUID: Identifies the app to filtering scanners.
+ * - Service Data: Contains the device's UUID (compressed to 16 bytes).
+ */
 @Singleton
 class BleAdvertiser @Inject constructor(
     @ApplicationContext private val context: Context
@@ -23,6 +33,11 @@ class BleAdvertiser @Inject constructor(
     private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
     private var isAdvertising = false
     
+    /**
+     * Starts advertising the local device's presence.
+     *
+     * @param myDeviceId The unique UUID string of the local device.
+     */
     fun startAdvertising(myDeviceId: String) {
         Log.d("BLE_ADVERTISER", "Starting advertising with device ID: $myDeviceId")
         
@@ -32,19 +47,21 @@ class BleAdvertiser @Inject constructor(
             return
         }
         
+        // Ensure we don't start multiple overlapping advertisements
         if (isAdvertising) {
             Log.d("BLE_ADVERTISER", "Already advertising, stopping first")
             stopAdvertising()
         }
         
+        // Configure advertising settings for low latency (faster discovery) and high power (better range)
         val settings = AdvertiseSettings.Builder()
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
             .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
-            .setConnectable(false)
-            .setTimeout(0)
+            .setConnectable(false) // Broadcast only, no connections allowed
+            .setTimeout(0) // No time limit
             .build()
         
-        // Convert UUID string to bytes (16 bytes instead of 36)
+        // Convert UUID string to 16-byte array to fit in the limited BLE advertisement packet size
         val deviceIdBytes = try {
             val uuid = UUID.fromString(myDeviceId)
             val buffer = ByteBuffer.allocate(16)
@@ -59,11 +76,12 @@ class BleAdvertiser @Inject constructor(
         
         Log.d("BLE_ADVERTISER", "Device ID bytes length: ${deviceIdBytes.size} (UUID as bytes)")
         
+        // Construct the advertisement data packet
         val data = AdvertiseData.Builder()
-            .setIncludeDeviceName(false)
+            .setIncludeDeviceName(false) // Exclude name to save space
             .setIncludeTxPowerLevel(false)
-            .addServiceUuid(ParcelUuid(SERVICE_UUID))
-            .addServiceData(ParcelUuid(SERVICE_UUID), deviceIdBytes)
+            .addServiceUuid(ParcelUuid(SERVICE_UUID)) // Standard service UUID for filtering
+            .addServiceData(ParcelUuid(SERVICE_UUID), deviceIdBytes) // Embed device ID in service data
             .build()
         
         try {
@@ -73,6 +91,9 @@ class BleAdvertiser @Inject constructor(
         }
     }
     
+    /**
+     * Stops the BLE advertising.
+     */
     fun stopAdvertising() {
         try {
             bluetoothAdapter?.bluetoothLeAdvertiser?.stopAdvertising(advertiseCallback)
@@ -83,6 +104,9 @@ class BleAdvertiser @Inject constructor(
         }
     }
     
+    /**
+     * Callback handling advertising success or failure events.
+     */
     private val advertiseCallback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
             isAdvertising = true
@@ -104,6 +128,7 @@ class BleAdvertiser @Inject constructor(
     }
     
     companion object {
+        // A dedicated UUID for the CrowdLink service
         val SERVICE_UUID: UUID = UUID.fromString("0000FE9F-0000-1000-8000-00805f9b34fb")
     }
 }

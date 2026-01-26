@@ -1,5 +1,6 @@
 package com.fyp.crowdlink.presentation.friends
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -20,6 +21,7 @@ import java.util.*
 fun FriendsScreen(
     onNavigateToPairing: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToChat: (String, String) -> Unit,
     viewModel: FriendsViewModel = hiltViewModel()
 ) {
     val friends by viewModel.friends.collectAsState()
@@ -43,7 +45,6 @@ fun FriendsScreen(
         }
     ) { paddingValues ->
         if (friends.isEmpty()) {
-            // Empty state
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -82,13 +83,13 @@ fun FriendsScreen(
                 items(friends, key = { it.deviceId }) { friend ->
                     FriendListItem(
                         friend = friend,
-                        onDelete = { friendToDelete = friend }
+                        onDelete = { friendToDelete = friend },
+                        onClick = { onNavigateToChat(friend.deviceId, friend.displayName) }
                     )
                 }
             }
         }
         
-        // Delete confirmation dialog
         friendToDelete?.let { friend ->
             AlertDialog(
                 onDismissRequest = { friendToDelete = null },
@@ -120,12 +121,15 @@ fun FriendsScreen(
 @Composable
 fun FriendListItem(
     friend: Friend,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onClick: () -> Unit
 ) {
     val dateFormat = remember { SimpleDateFormat("MMM d, yyyy 'at' h:mm a", Locale.getDefault()) }
     
     Card(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
     ) {
         Row(
             modifier = Modifier
