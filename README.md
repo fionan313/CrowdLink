@@ -21,16 +21,16 @@ CrowdLink is an Android application that enables friends to find each other at c
 
 ## Features
 
-### Current (Interim - v0.5)
+### Current (v0.6.0-alpha)
 - **Bluetooth Low Energy Discovery** - Find nearby friends in 4.5 seconds (avg)
 - **Distance Estimation** - RSSI-based ranging (±0.6m accuracy)
+- **Friend Pairing** - Secure out-of-band pairing via QR codes
+- **WiFi Direct Messaging** - Peer-to-peer text communication (Beta)
 - **Cross-Device Support** - Android API 28-35 (93% success rate)
 - **Low Battery Usage** - 4.2%/hour consumption
 - **RSSI Smoothing** - 68% noise reduction via moving average
 
-### Planned (Weeks 6-12)
-- Friend pairing via QR codes
-- WiFi Direct messaging
+### Planned (Weeks 8-12)
 - End-to-end encryption
 - Location sharing with privacy controls
 - Visual map interface
@@ -40,8 +40,8 @@ CrowdLink is an Android application that enables friends to find each other at c
 
 ## Project Status
 
-**Current Phase:** Interim Submission (Week 5)  
-**Completion:** ~35% of planned features  
+**Current Phase:** Implementation Phase (Week 7)  
+**Completion:** ~55% of planned features  
 **Timeline:** 12-week Final Year Project (TU Dublin)
 
 | Phase | Status | Features |
@@ -69,7 +69,7 @@ CrowdLink follows **Clean Architecture** principles with MVVM pattern:
 │   (Use Cases + Repository Interfaces)   │
 ├─────────────────────────────────────────┤
 │            Data Layer                   │
-│  (BLE Scanner, Room DB, Repositories)   │
+│  (BLE, WiFi Direct, Room DB, Repos)     │
 └─────────────────────────────────────────┘
 ```
 
@@ -90,7 +90,7 @@ CrowdLink follows **Clean Architecture** principles with MVVM pattern:
 - Android Studio Hedgehog (2023.1.1) or later
 - JDK 17
 - Android SDK (API 28+)
-- **2 Physical Android Devices** (BLE requires real hardware)
+- **2 Physical Android Devices** (BLE and WiFi Direct require real hardware)
 
 ### Installation
 
@@ -120,8 +120,8 @@ open -a "Android Studio" .
 ### Permissions Required
 - Bluetooth (API 28-30) / Bluetooth Scan/Advertise (API 31+)
 - Fine Location (required for BLE scanning on Android)
-- Camera (Week 6 - QR code scanning)
-- WiFi (Week 7 - WiFi Direct)
+- Camera (QR code scanning)
+- WiFi (WiFi Direct messaging)
 
 ---
 
@@ -143,9 +143,9 @@ open app/build/reports/tests/testDebugUnitTest/index.html
 ```
 
 **Current Test Status:**
-- **Unit Tests:** 21/26 passing (81%)
-- **Coverage:** 78% (business logic)
-- **Integration Tests:** Field validated on 2 devices
+- **Unit Tests:** 20/21 passing (95%)
+- **Integration Tests:** 100% passing (Moved to `androidTest` for Room/Context support)
+- **Coverage:** 82% (core domain logic)
 
 ---
 
@@ -169,27 +169,19 @@ open app/build/reports/tests/testDebugUnitTest/index.html
 app/src/main/java/com/fyp/crowdlink/
 ├── data/                           # Data layer
 │   ├── ble/                        # Bluetooth implementation
-│   │   ├── BleAdvertiser.kt
-│   │   ├── BleScanner.kt
-│   │   └── DeviceRepositoryImpl.kt
-│   └── local/                      # Room database
-│       └── dao/
+│   ├── local/                      # Room database (Friends/Messages)
+│   └── p2p/                        # WiFi Direct implementation
 ├── domain/                         # Business logic
-│   ├── model/                      # Domain models
-│   │   ├── DiscoveredDevice.kt
-│   │   └── Friend.kt
+│   ├── model/                      # Domain models (Friend, Message, etc.)
 │   ├── repository/                 # Repository interfaces
-│   │   ├── DeviceRepository.kt
-│   │   └── FriendRepository.kt
-│   └── usecase/                    # Use cases
-│       └── EstimateDistanceUseCase.kt
+│   └── usecase/                    # Use cases (EstimateDistance, SendMessage)
 ├── presentation/                   # UI layer
-│   ├── discovery/                  # Discovery screen
-│   │   ├── DiscoveryScreen.kt
-│   │   └── DiscoveryViewModel.kt
+│   ├── discovery/                  # Nearby device list
+│   ├── friends/                    # Paired friends list
+│   ├── pairing/                    # QR Scan & Generate
+│   ├── chat/                       # Messaging UI
 │   └── MainActivity.kt
 ├── di/                             # Dependency injection
-│   └── AppModule.kt
 └── CrowdLinkApplication.kt         # Application class
 ```
 
@@ -268,9 +260,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Known Issues
 
-- [ ] Distance estimation tests expect theoretical values (tests adjusted to calibrated algorithm)
-- [ ] API 28 devices occasionally require BLE toggle (80-90% success vs 100% on API 31+)
 - [ ] 16KB page size warning for Android 15+ (does not affect functionality)
+- [ ] API 28 devices occasionally require BLE toggle (80-90% success vs 100% on API 31+)
 
 See [Issues](https://github.com/fionat33/CrowdLink/issues) for full list.
 
@@ -286,10 +277,10 @@ For academic inquiries: c22337521@mytudublin.ie
 
 ## Project Metrics
 
-![Lines of Code](https://img.shields.io/badge/lines%20of%20code-~850-blue)
-![Test Coverage](https://img.shields.io/badge/coverage-78%25-green)
+![Lines of Code](https://img.shields.io/badge/lines%20of%20code-~1200-blue)
+![Test Coverage](https://img.shields.io/badge/coverage-82%25-green)
 ![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
-![Version](https://img.shields.io/badge/version-0.5.0--interim-orange)
+![Version](https://img.shields.io/badge/version-0.6.0--alpha-blue)
 
 ---
 
