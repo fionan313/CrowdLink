@@ -24,6 +24,7 @@ import com.fyp.crowdlink.presentation.friends.FriendsScreen
 import com.fyp.crowdlink.presentation.pairing.PairingScreen
 import com.fyp.crowdlink.presentation.pairing.PairingViewModel
 import com.fyp.crowdlink.presentation.pairing.QRScannerScreen
+import com.fyp.crowdlink.presentation.relay.RelayDiscoveryScreen
 import com.fyp.crowdlink.presentation.settings.SettingsScreen
 import com.fyp.crowdlink.ui.theme.CrowdLinkTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -61,6 +62,17 @@ class MainActivity : ComponentActivity() {
                             DiscoveryScreen(
                                 onNavigateToFriends = {
                                     navController.navigate("friends")
+                                },
+                                onNavigateToRelay = {
+                                    navController.navigate("relay_discovery")
+                                }
+                            )
+                        }
+                        
+                        composable("relay_discovery") {
+                            RelayDiscoveryScreen(
+                                onNavigateBack = {
+                                    navController.popBackStack()
                                 }
                             )
                         }

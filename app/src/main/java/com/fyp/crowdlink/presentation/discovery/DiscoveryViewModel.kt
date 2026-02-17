@@ -1,22 +1,28 @@
 package com.fyp.crowdlink.presentation.discovery
 
 import android.Manifest
-import android.R.attr.id
+import android.annotation.SuppressLint
 import android.content.SharedPreferences
 import androidx.annotation.RequiresPermission
 import androidx.core.content.edit
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.fyp.crowdlink.data.ble.DeviceRepositoryImpl
-import com.fyp.crowdlink.domain.model.DiscoveredDevice
+import com.fyp.crowdlink.data.ble.RelayNodeConnection
+import com.fyp.crowdlink.data.ble.RelayNodeScanner
 import com.fyp.crowdlink.domain.model.NearbyFriend
+import com.fyp.crowdlink.domain.model.RelayNode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
 
 @HiltViewModel
 class DiscoveryViewModel @Inject constructor(
     private val deviceRepository: DeviceRepositoryImpl,
+    private val relayNodeScanner: RelayNodeScanner,
+    private val relayNodeConnection: RelayNodeConnection,
     private val sharedPreferences: SharedPreferences
 ) : ViewModel() {
 
@@ -26,40 +32,47 @@ class DiscoveryViewModel @Inject constructor(
             ?: UUID.randomUUID().toString().also { newId ->
                 sharedPreferences.edit { putString(KEY_DEVICE_ID, newId) }
             }
-        android.util.Log.wtf("DISCOVERY_VM", "Device ID loaded: $id")
         id
     }
 
-    init {
-        android.util.Log.wtf("DISCOVERY_VM", "DiscoveryViewModel CREATED!")
-        android.util.Log.wtf("DISCOVERY_VM", "My Device ID: $myDeviceId")
-    }
-
-    // NEW: Expose nearby friends with distance
+    // Expose nearby friends with distance
     val nearbyFriends: StateFlow<List<NearbyFriend>> =
         deviceRepository.nearbyFriends
 
+    // Relay node flows
+    val discoveredRelays: StateFlow<List<RelayNode>> = relayNodeScanner.discoveredRelays
+    val isRelayConnected: StateFlow<Boolean> = relayNodeConnection.isConnected
 
-
-    @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
-    fun startDiscovery() {
-        android.util.Log.wtf("DISCOVERY_VM", "!!! START DISCOVERY CALLED !!!")
-        deviceRepository.startDiscovery()
+    init {
+        // Auto-connect to relay logic
+        viewModelScope.launch {
+            discoveredRelays.collect { relays ->
+                val autoConnect = sharedPreferences.getBoolean("auto_connect_relay", true)
+                if (autoConnect && !isRelayConnected.value && relays.isNotEmpty()) {
+                    relayNodeConnection.connect(relays.first().deviceId)
+                }
+            }
+        }
     }
 
-    @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
+    @SuppressLint("MissingPermission")
+    fun startDiscovery() {
+        deviceRepository.startDiscovery()
+        relayNodeScanner.startScanning()
+    }
+
+    @SuppressLint("MissingPermission")
     fun stopDiscovery() {
         deviceRepository.stopDiscovery()
+        relayNodeScanner.stopScanning()
     }
 
-    @RequiresPermission(Manifest.permission.BLUETOOTH_ADVERTISE)
+    @SuppressLint("MissingPermission")
     fun startAdvertising() {
-        android.util.Log.wtf("DISCOVERY_VM", "!!! START ADVERTISING CALLED !!!")
-        android.util.Log.wtf("DISCOVERY_VM", "Advertising with device ID: $myDeviceId")
         deviceRepository.startAdvertising(myDeviceId)
     }
 
-    @RequiresPermission(Manifest.permission.BLUETOOTH_ADVERTISE)
+    @SuppressLint("MissingPermission")
     fun stopAdvertising() {
         deviceRepository.stopAdvertising()
     }
