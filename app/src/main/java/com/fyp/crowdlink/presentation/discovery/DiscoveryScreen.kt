@@ -161,7 +161,7 @@ fun NearbyFriendCard(friend: NearbyFriend) {
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "${String.format("%.1f", friend.estimatedDistance)}m away",
+                    text = "%.1fm away".format(friend.estimatedDistance),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.primary
                 )

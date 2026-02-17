@@ -28,6 +28,7 @@ ksp = "2.0.21-1.0.28"
 roomKtx = "2.8.4"
 turbine = "1.2.1"
 zxingAndroidEmbedded = "4.3.0"
+identityJvm = "202411.1"
 
 
 [libraries]
@@ -87,6 +88,7 @@ androidx-camera-view = { group = "androidx.camera", name = "camera-view", versio
 accompanist-permissions = { group = "com.google.accompanist", name = "accompanist-permissions", version.ref = "accompanistPermissions" }
 room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "roomKtx" }
 zxing-android-embedded = { module = "com.journeyapps:zxing-android-embedded", version.ref = "zxingAndroidEmbedded" }
+identity-jvm = { group = "com.android.identity", name = "identity-jvm", version.ref = "identityJvm" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

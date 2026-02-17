@@ -40,8 +40,9 @@ class QRScannerViewModel @Inject constructor(
                 // Save friend with their display name
                 val friend = Friend(
                     deviceId = deviceId,
-                    displayName = displayName,  // ← Use their name from QR!
-                    pairedAt = System.currentTimeMillis()
+                    displayName = displayName,
+                    pairedAt = System.currentTimeMillis(),
+                    lastSeen = System.currentTimeMillis()
                 )
                 
                 friendRepository.addFriend(friend)

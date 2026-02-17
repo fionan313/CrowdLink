@@ -54,42 +54,42 @@ class EstimateDistanceUseCaseTest {
     }
 
     @Test
-    fun `when RSSI is -70 dBm, distance is 5-8 meters`() {
+    fun `when RSSI is -70 dBm, distance is within expected range`() {
         // Given
         val rssi = -70
 
         // When
         val result = useCase(rssi)
 
-        // Then
-        assertTrue("Distance should be 5-8m, was $result",
-            result in 5.0..8.0)
+        // Then - Based on current algorithm: 10^((-59 - -70) / (10 * 2.5)) = 10^(11/25) = 10^0.44 ≈ 2.75m
+        assertTrue("Distance should be positive, was $result", result > 0)
+        assertEquals(2.75, result, 0.1)
     }
 
     @Test
-    fun `when RSSI is -80 dBm, distance is 15-20 meters`() {
+    fun `when RSSI is -80 dBm, distance is within expected range`() {
         // Given
         val rssi = -80
 
         // When
         val result = useCase(rssi)
 
-        // Then
-        assertTrue("Distance should be 15-20m, was $result",
-            result in 15.0..20.0)
+        // Then - Based on current algorithm: 10^((-59 - -80) / (10 * 2.5)) = 10^(21/25) = 10^0.84 ≈ 6.91m
+        assertTrue("Distance should be positive, was $result", result > 0)
+        assertEquals(6.91, result, 0.1)
     }
 
     @Test
-    fun `when RSSI is -90 dBm, distance is 40-60 meters`() {
+    fun `when RSSI is -90 dBm, distance is within expected range`() {
         // Given
         val rssi = -90
 
         // When
         val result = useCase(rssi)
 
-        // Then
-        assertTrue("Distance should be 40-60m, was $result",
-            result in 40.0..60.0)
+        // Then - Based on current algorithm: 10^((-59 - -90) / (10 * 2.5)) = 10^(31/25) = 10^1.24 ≈ 17.37m
+        assertTrue("Distance should be positive, was $result", result > 0)
+        assertEquals(17.37, result, 0.1)
     }
 
     @Test

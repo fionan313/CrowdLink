@@ -36,7 +36,7 @@ class BleScanner @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     init {
-        android.util.Log.wtf("BLE_SCANNER", "BleScanner CREATED!")
+        Log.wtf("BLE_SCANNER", "BleScanner CREATED!")
     }
     
     private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()

@@ -1,11 +1,15 @@
 package com.fyp.crowdlink.presentation.chat
 
+import android.net.wifi.p2p.WifiP2pDevice
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,6 +34,7 @@ fun ChatScreen(
 ) {
     val messages by viewModel.getMessages(friendId).collectAsState()
     val connectionInfo by viewModel.connectionInfo.collectAsState()
+    val peers by viewModel.peers.collectAsState()
     var textState by remember { mutableStateOf("") }
 
     // Register WiFi Direct receivers when the screen is visible
@@ -48,14 +53,27 @@ fun ChatScreen(
                     Column {
                         Text(friendName)
                         Text(
-                            text = if (connectionInfo?.groupFormed == true) "Connected" else "Connecting...",
-                            style = MaterialTheme.typography.bodySmall
+                            text = if (connectionInfo?.groupFormed == true) "Connected" else "Not Connected",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (connectionInfo?.groupFormed == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                         )
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    // DEBUG: Button to kill all connections
+                    IconButton(
+                        onClick = { viewModel.disconnect() },
+                        colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Icon(Icons.Default.Warning, contentDescription = "Kill Connections")
+                    }
+                    IconButton(onClick = { viewModel.discover() }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                     }
                 }
             )
@@ -66,56 +84,140 @@ fun ChatScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Message List
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                reverseLayout = true, // Show newest messages at the bottom
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(messages.reversed()) { message ->
-                    MessageBubble(message)
-                }
-            }
-
-            // Connection Logic: If not connected, show a button to find/connect
-            if (connectionInfo?.groupFormed != true) {
-                Button(
-                    onClick = { viewModel.discover() },
-                    modifier = Modifier.fillMaxWidth().padding(8.dp)
+            if (connectionInfo?.groupFormed == true) {
+                // Message List - Only show when connected
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    reverseLayout = true,
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Search for $friendName")
+                    items(messages.reversed()) { message ->
+                        MessageBubble(message)
+                    }
                 }
-            }
 
-            // Input Area
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TextField(
-                    value = textState,
-                    onValueChange = { textState = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("Type a message...") }
-                )
-                IconButton(
-                    onClick = {
-                        if (textState.isNotBlank()) {
-                            viewModel.sendText(textState, friendId, "me") // Replace "me" with actual ID
-                            textState = ""
+                // Input Area
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextField(
+                        value = textState,
+                        onValueChange = { textState = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("Type a message...") }
+                    )
+                    IconButton(
+                        onClick = {
+                            if (textState.isNotBlank()) {
+                                viewModel.sendText(textState, friendId)
+                                textState = ""
+                            }
                         }
-                    },
-                    enabled = connectionInfo?.groupFormed == true
+                    ) {
+                        Icon(Icons.Default.Send, contentDescription = "Send")
+                    }
+                }
+            } else {
+                // Connection Setup UI
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
-                    Icon(Icons.Default.Send, contentDescription = "Send")
+                    Text(
+                        "WiFi Direct Connection Required",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "To chat offline, you must connect to your friend's device.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    Button(onClick = { viewModel.discover() }) {
+                        Text("Refresh Peer List")
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Text("Nearby Devices:", style = MaterialTheme.typography.labelLarge)
+                    
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                    ) {
+                        if (peers.isEmpty()) {
+                            item {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().padding(32.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("No devices found yet. Searching...")
+                                }
+                            }
+                        } else {
+                            items(peers) { device ->
+                                PeerItem(device = device) {
+                                    viewModel.connect(device.deviceAddress)
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+fun PeerItem(device: WifiP2pDevice, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(text = device.deviceName, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    text = device.deviceAddress,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = getDeviceStatus(device.status),
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+    }
+}
+
+fun getDeviceStatus(status: Int): String {
+    return when (status) {
+        WifiP2pDevice.AVAILABLE -> "Available"
+        WifiP2pDevice.INVITED -> "Invited"
+        WifiP2pDevice.CONNECTED -> "Connected"
+        WifiP2pDevice.FAILED -> "Failed"
+        WifiP2pDevice.UNAVAILABLE -> "Unavailable"
+        else -> "Unknown"
     }
 }
 

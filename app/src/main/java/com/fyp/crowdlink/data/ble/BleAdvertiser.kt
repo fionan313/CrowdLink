@@ -28,7 +28,7 @@ class BleAdvertiser @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     init {
-        android.util.Log.wtf("BLE_ADVERTISER", "BleAdvertiser CREATED!")
+        Log.wtf("BLE_ADVERTISER", "BleAdvertiser CREATED!")
     }
     private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
     private var isAdvertising = false
@@ -90,10 +90,7 @@ class BleAdvertiser @Inject constructor(
             Log.e("BLE_ADVERTISER", "Permission denied", e)
         }
     }
-    
-    /**
-     * Stops the BLE advertising.
-     */
+
     fun stopAdvertising() {
         try {
             bluetoothAdapter?.bluetoothLeAdvertiser?.stopAdvertising(advertiseCallback)

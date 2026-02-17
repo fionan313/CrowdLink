@@ -40,6 +40,16 @@ android {
     buildFeatures {
         compose = true
     }
+
+    // Ensure 16 KB page size compatibility for Android 15+
+    packaging {
+        jniLibs {
+            // Setting useLegacyPackaging to false ensures that native libraries 
+            // are page-aligned and uncompressed in the APK, which is required 
+            // for 16 KB page size support.
+            useLegacyPackaging = false
+        }
+    }
 }
 
 dependencies {
@@ -59,6 +69,7 @@ dependencies {
     // Room Database (Persistence)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
+    implementation(libs.identity.jvm)
     ksp(libs.androidx.room.compiler) // Annotation processor for Room
 
     // QR Code generation & scanning (ZXing)

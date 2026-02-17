@@ -1,15 +1,19 @@
 package com.fyp.crowdlink.presentation.chat
 
+import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.fyp.crowdlink.data.ble.RelayNodeConnection
 import com.fyp.crowdlink.data.p2p.WifiDirectManager
 import com.fyp.crowdlink.domain.model.Message
 import com.fyp.crowdlink.domain.model.MessageStatus
 import com.fyp.crowdlink.domain.usecase.GetMessagesUseCase
 import com.fyp.crowdlink.domain.usecase.SendMessageUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -18,48 +22,48 @@ import javax.inject.Inject
  * MessageViewModel
  *
  * This ViewModel manages the UI state for the peer-to-peer messaging feature.
- * It coordinates with the [WifiDirectManager] for network connectivity and uses
- * Clean Architecture Use Cases to interact with the message database.
+ * Now includes relay node support for extended range via ESP32 devices.
  */
 @HiltViewModel
 class MessageViewModel @Inject constructor(
     private val wifiDirectManager: WifiDirectManager,
     private val sendMessageUseCase: SendMessageUseCase,
-    private val getMessagesUseCase: GetMessagesUseCase
+    private val getMessagesUseCase: GetMessagesUseCase,
+    private val sharedPreferences: SharedPreferences,
+    private val relayNodeConnection: RelayNodeConnection, // ADDED
 ) : ViewModel() {
+
+    private val _myDeviceId = MutableStateFlow<String>("")
+    val myDeviceId: StateFlow<String> = _myDeviceId.asStateFlow()
 
     // Expose the list of discovered WiFi Direct peers to the UI
     val peers = wifiDirectManager.peers
-    
-    // Expose the current connection status (connected, group owner, etc.)
+
+    // Expose the current connection status
     val connectionInfo = wifiDirectManager.connectionInfo
 
-    /**
-     * Registers the WiFi Direct broadcast receiver.
-     * This should be called from the UI's onResume lifecycle event.
-     */
+    // Expose the IP address of the connected peer
+    val peerIp = wifiDirectManager.peerIp
+
+    // ADDED: Relay connection status
+    val isRelayConnected = relayNodeConnection.isConnected
+
+    init {
+        _myDeviceId.value = sharedPreferences.getString("device_id", "") ?: ""
+    }
+
     fun onResume() {
         wifiDirectManager.register()
     }
 
-    /**
-     * Unregisters the WiFi Direct broadcast receiver.
-     * This should be called from the UI's onPause lifecycle event.
-     */
     fun onPause() {
         wifiDirectManager.unregister()
     }
 
-    /**
-     * Triggers a search for nearby WiFi Direct-enabled devices.
-     */
     fun discover() {
         wifiDirectManager.discoverPeers()
     }
 
-    /**
-     * Connects to a specific peer device using its MAC address.
-     */
     fun connect(deviceAddress: String) {
         val device = peers.value.find { it.deviceAddress == deviceAddress }
         device?.let {
@@ -67,10 +71,10 @@ class MessageViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Returns a stateful flow of messages for a specific friend.
-     * The UI should collect this to display the chat history.
-     */
+    fun disconnect() {
+        wifiDirectManager.disconnect()
+    }
+
     fun getMessages(friendId: String): StateFlow<List<Message>> {
         return getMessagesUseCase(friendId)
             .stateIn(
@@ -82,28 +86,18 @@ class MessageViewModel @Inject constructor(
 
     /**
      * Sends a text message to the currently connected friend.
-     * It first saves the message locally to Room, then attempts to transmit it via Socket.
      *
-     * @param content The text content of the message.
-     * @param friendId The ID of the friend the message is being sent to.
-     * @param myDeviceId The local user's unique device ID.
+     * Transmission strategy:
+     * 1. Save message to local database
+     * 2. Try WiFi Direct first (if peer is directly connected)
+     * 3. Fall back to ESP32 relay if WiFi Direct unavailable
      */
-    fun sendText(content: String, friendId: String, myDeviceId: String) {
-        val info = connectionInfo.value ?: return
-        if (!info.groupFormed) return
-
-        // Determine the target IP address based on WiFi Direct Group roles.
-        // If we are not the Group Owner (GO), we send to the GO's address.
-        // If we ARE the GO, we send to the client (default P2P subnet IP).
-        val targetIp = if (!info.isGroupOwner) {
-            info.groupOwnerAddress.hostAddress
-        } else {
-            "192.168.49.1" // Default IP for the first client in an Android P2P group
-        }
+    fun sendText(content: String, friendId: String) {
+        val myId = _myDeviceId.value
 
         viewModelScope.launch {
             val message = Message(
-                senderId = myDeviceId,
+                senderId = myId,
                 receiverId = friendId,
                 content = content,
                 isSentByMe = true,
@@ -112,11 +106,42 @@ class MessageViewModel @Inject constructor(
 
             // 1. Save message to Room database locally
             val messageId = sendMessageUseCase(message)
+            val messageWithId = message.copy(id = messageId)
 
-            // 2. Transmit the message data over a raw TCP socket via WifiDirectManager
-            targetIp?.let { ip ->
-                wifiDirectManager.sendMessage(ip, message.copy(id = messageId))
+            // 2. Try direct WiFi Direct connection first
+            val targetIp = peerIp.value
+            if (targetIp != null) {
+                // Direct connection available - use WiFi Direct
+                wifiDirectManager.sendMessage(targetIp, messageWithId)
+            } else if (isRelayConnected.value) {
+                // No direct connection - use ESP32 relay
+                val relayPayload = "${messageWithId.receiverId}:${messageWithId.content}"
+                val success = relayNodeConnection.sendMessage(relayPayload)
+
+                if (!success) {
+                    // Mark as failed if relay send fails
+                    updateMessageStatus(messageId, MessageStatus.FAILED)
+                }
+            } else {
+                // No connection at all - mark as failed
+                updateMessageStatus(messageId, MessageStatus.FAILED)
             }
         }
+    }
+
+    /**
+     * ADDED: Helper function to update message delivery status
+     */
+    private suspend fun updateMessageStatus(messageId: Long, status: MessageStatus) {
+        // You'll need to add this to your MessageRepository
+        // messageRepository.updateMessageStatus(messageId, status)
+    }
+
+    /**
+     * ADDED: Cleanup relay connection when ViewModel is cleared
+     */
+    override fun onCleared() {
+        super.onCleared()
+        relayNodeConnection.disconnect()
     }
 }

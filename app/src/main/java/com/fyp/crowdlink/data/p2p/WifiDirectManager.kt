@@ -16,6 +16,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -42,6 +43,10 @@ class WifiDirectManager @Inject constructor(
     private val _connectionInfo = MutableStateFlow<WifiP2pInfo?>(null)
     val connectionInfo = _connectionInfo.asStateFlow()
 
+    // Store the IP address of the connected peer
+    private val _peerIp = MutableStateFlow<String?>(null)
+    val peerIp = _peerIp.asStateFlow()
+
     private var serverJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
 
@@ -65,7 +70,16 @@ class WifiDirectManager @Inject constructor(
                     manager?.requestConnectionInfo(channel) { info ->
                         _connectionInfo.value = info
                         if (info.groupFormed) {
-                            startServerIfNeeded(info)
+                            startServer(info)
+                            // If I am the client, I know the GO's IP. I should send a handshake
+                            // so the GO knows my IP.
+                            if (!info.isGroupOwner) {
+                                _peerIp.value = info.groupOwnerAddress.hostAddress
+                                sendHandshake(info.groupOwnerAddress.hostAddress)
+                            }
+                        } else {
+                            stopServer()
+                            _peerIp.value = null
                         }
                     }
                 }
@@ -101,8 +115,31 @@ class WifiDirectManager @Inject constructor(
         })
     }
 
-    private fun startServerIfNeeded(info: WifiP2pInfo) {
-        if (info.isGroupOwner && serverJob == null) {
+    /**
+     * Kills all active WiFi Direct connections and removes the current group.
+     * This is a debug tool to reset the P2P state.
+     */
+    fun disconnect() {
+        manager?.removeGroup(channel, object : WifiP2pManager.ActionListener {
+            override fun onSuccess() {
+                Log.d("WifiDirect", "Group removed successfully")
+                _connectionInfo.value = null
+                _peerIp.value = null
+                stopServer()
+            }
+            override fun onFailure(reason: Int) {
+                Log.e("WifiDirect", "Failed to remove group: $reason")
+                // Even if removeGroup fails, we might still be in a middle of connecting
+                manager?.cancelConnect(channel, object : WifiP2pManager.ActionListener {
+                    override fun onSuccess() { Log.d("WifiDirect", "Connect cancelled") }
+                    override fun onFailure(reason: Int) { Log.e("WifiDirect", "Failed to cancel connect: $reason") }
+                })
+            }
+        })
+    }
+
+    private fun startServer(info: WifiP2pInfo) {
+        if (serverJob == null) {
             serverJob = scope.launch {
                 runServer()
             }
@@ -111,14 +148,24 @@ class WifiDirectManager @Inject constructor(
 
     private suspend fun runServer() {
         withContext(Dispatchers.IO) {
+            var serverSocket: ServerSocket? = null
             try {
-                val serverSocket = ServerSocket(8888)
+                serverSocket = ServerSocket(8888)
+                Log.d("WifiDirect", "Server started on port 8888")
                 while (true) {
                     val client = serverSocket.accept()
+                    val clientIp = client.inetAddress.hostAddress
+                    Log.d("WifiDirect", "Accepted connection from $clientIp")
+                    
+                    // Store the IP of the client that just connected
+                    _peerIp.value = clientIp
+                    
                     handleIncomingConnection(client)
                 }
             } catch (e: Exception) {
                 Log.e("WifiDirect", "Server Error", e)
+            } finally {
+                serverSocket?.close()
             }
         }
     }
@@ -129,14 +176,18 @@ class WifiDirectManager @Inject constructor(
                 val input = DataInputStream(socket.getInputStream())
                 val senderId = input.readUTF()
                 val content = input.readUTF()
+                
+                Log.d("WifiDirect", "Received message from $senderId: $content")
 
-                val message = Message(
-                    senderId = senderId,
-                    receiverId = "me", // Need actual local ID
-                    content = content,
-                    isSentByMe = false
-                )
-                messageRepository.sendMessage(message)
+                if (content != "HANDSHAKE_INIT") {
+                    val message = Message(
+                        senderId = senderId,
+                        receiverId = "me", // Mapping to local user
+                        content = content,
+                        isSentByMe = false
+                    )
+                    messageRepository.sendMessage(message)
+                }
                 socket.close()
             } catch (e: Exception) {
                 Log.e("WifiDirect", "Receive Error", e)
@@ -144,9 +195,29 @@ class WifiDirectManager @Inject constructor(
         }
     }
 
+    private fun sendHandshake(targetAddress: String) {
+        scope.launch {
+            // Wait a moment for the server on the other end to start
+            delay(1000)
+            try {
+                val socket = Socket()
+                socket.connect(InetSocketAddress(targetAddress, 8888), 5000)
+                val output = DataOutputStream(socket.getOutputStream())
+                output.writeUTF("CLIENT_HANDSHAKE")
+                output.writeUTF("HANDSHAKE_INIT")
+                output.flush()
+                socket.close()
+                Log.d("WifiDirect", "Handshake sent to $targetAddress")
+            } catch (e: Exception) {
+                Log.e("WifiDirect", "Handshake failed", e)
+            }
+        }
+    }
+
     fun sendMessage(targetAddress: String, message: Message) {
         scope.launch {
             try {
+                Log.d("WifiDirect", "Attempting to send message to $targetAddress")
                 val socket = Socket()
                 socket.connect(InetSocketAddress(targetAddress, 8888), 5000)
                 val output = DataOutputStream(socket.getOutputStream())
@@ -154,7 +225,7 @@ class WifiDirectManager @Inject constructor(
                 output.writeUTF(message.content)
                 output.flush()
                 socket.close()
-                // Update status to SENT in DB
+                Log.d("WifiDirect", "Message sent successfully")
             } catch (e: Exception) {
                 Log.e("WifiDirect", "Send Error", e)
             }

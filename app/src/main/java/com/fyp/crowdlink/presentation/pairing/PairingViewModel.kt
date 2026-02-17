@@ -2,6 +2,7 @@ package com.fyp.crowdlink.presentation.pairing
 
 import android.content.SharedPreferences
 import android.graphics.Bitmap
+import android.os.Build
 import androidx.core.content.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -82,9 +83,12 @@ class PairingViewModel @Inject constructor(
     fun generateQRCode() {
         viewModelScope.launch {
             try {
-                // Get user profile for display name, defaulting to "Anonymous" if not set
+                // Get user profile for display name
                 val userProfile = userProfileRepository.getUserProfile().first()
-                val displayName = userProfile?.displayName ?: "Anonymous"
+                
+                // Use the device model name if no display name is set
+                val deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}"
+                val displayName = userProfile?.displayName?.ifBlank { deviceModel } ?: deviceModel
                 
                 // Create JSON payload
                 val qrData = JSONObject().apply {
@@ -151,8 +155,9 @@ class PairingViewModel @Inject constructor(
                     // Create and save the new Friend entity
                     val friend = Friend(
                         deviceId = friendDeviceId,
-                        shortId = friendDeviceId.take(16), // Use first 16 chars as short ID
-                        displayName = friendName
+                        displayName = friendName,
+                        pairedAt = System.currentTimeMillis(),
+                        lastSeen = System.currentTimeMillis()
                     )
                     friendRepository.addFriend(friend)
                     _pairingState.value = PairingState.Success
