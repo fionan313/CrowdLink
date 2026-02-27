@@ -3,9 +3,10 @@ package com.fyp.crowdlink.di
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.room.Room
-import com.fyp.crowdlink.data.local.FriendDatabase
+import com.fyp.crowdlink.data.local.AppDatabase
 import com.fyp.crowdlink.data.local.dao.FriendDao
 import com.fyp.crowdlink.data.local.dao.MessageDao
+import com.fyp.crowdlink.data.local.dao.RelayMessageDao
 import com.fyp.crowdlink.data.local.dao.UserProfileDao
 import com.fyp.crowdlink.data.repository.FriendRepositoryImpl
 import com.fyp.crowdlink.data.repository.MessageRepositoryImpl
@@ -32,17 +33,17 @@ import javax.inject.Singleton
 object AppModule {
 
     /**
-     * Provides the singleton instance of the FriendDatabase.
+     * Provides the singleton instance of the AppDatabase.
      *
      * @param context The application context.
      * @return The Room database instance for storing friend and user profile data.
      */
     @Provides
     @Singleton
-    fun provideFriendDatabase(@ApplicationContext context: Context): FriendDatabase {
+    fun provideFriendDatabase(@ApplicationContext context: Context): AppDatabase {
         return Room.databaseBuilder(
             context,
-            FriendDatabase::class.java,
+            AppDatabase::class.java,
             "friend_db"
         )
         .fallbackToDestructiveMigration() // Wipes database on version change to prevent crashes during development
@@ -52,37 +53,49 @@ object AppModule {
     /**
      * Provides the FriendDao for accessing friend-related database operations.
      *
-     * @param db The FriendDatabase instance.
+     * @param db The AppDatabase instance.
      * @return The FriendDao implementation.
      */
     @Provides
     @Singleton
-    fun provideFriendDao(db: FriendDatabase): FriendDao {
+    fun provideFriendDao(db: AppDatabase): FriendDao {
         return db.friendDao()
     }
 
     /**
      * Provides the UserProfileDao for accessing user profile database operations.
      *
-     * @param db The FriendDatabase instance.
+     * @param db The AppDatabase instance.
      * @return The UserProfileDao implementation.
      */
     @Provides
     @Singleton
-    fun provideUserProfileDao(db: FriendDatabase): UserProfileDao {
+    fun provideUserProfileDao(db: AppDatabase): UserProfileDao {
         return db.userProfileDao()
     }
 
     /**
      * Provides the MessageDao for accessing message-related database operations.
      *
-     * @param db The FriendDatabase instance.
+     * @param db The AppDatabase instance.
      * @return The MessageDao implementation.
      */
     @Provides
     @Singleton
-    fun provideMessageDao(db: FriendDatabase): MessageDao {
+    fun provideMessageDao(db: AppDatabase): MessageDao {
         return db.messageDao()
+    }
+
+    /**
+     * Provides the RelayMessageDao for accessing relay message database operations.
+     *
+     * @param db The AppDatabase instance.
+     * @return The RelayMessageDao implementation.
+     */
+    @Provides
+    @Singleton
+    fun provideRelayMessageDao(db: AppDatabase): RelayMessageDao {
+        return db.relayMessageDao()
     }
 
     /**
@@ -113,12 +126,16 @@ object AppModule {
      * Provides the MessageRepository implementation.
      *
      * @param messageDao The MessageDao dependency.
+     * @param relayMessageDao The RelayMessageDao dependency.
      * @return The concrete implementation of MessageRepository.
      */
     @Provides
     @Singleton
-    fun provideMessageRepository(messageDao: MessageDao): MessageRepository {
-        return MessageRepositoryImpl(messageDao)
+    fun provideMessageRepository(
+        messageDao: MessageDao,
+        relayMessageDao: RelayMessageDao
+    ): MessageRepository {
+        return MessageRepositoryImpl(messageDao, relayMessageDao)
     }
     
     /**

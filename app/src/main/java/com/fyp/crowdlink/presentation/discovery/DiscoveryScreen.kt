@@ -93,7 +93,7 @@ fun DiscoveryScreen(
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(
-                        if (isAdvertising) Icons.Default.Close else Icons.Default.LocationOn, // Replaced LocationDisabled with Close
+                        if (isAdvertising) Icons.Default.Close else Icons.Default.LocationOn,
                         contentDescription = null
                     )
                     Spacer(Modifier.width(8.dp))
@@ -119,7 +119,7 @@ fun DiscoveryScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         Icon(
-                            Icons.Default.Warning, // Core icon
+                            Icons.Default.Warning,
                             contentDescription = null,
                             modifier = Modifier.size(64.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -165,7 +165,7 @@ fun RelayStatusBanner(isConnected: Boolean, relayCount: Int, onClick: () -> Unit
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                if (isConnected) Icons.Default.BluetoothConnected else Icons.Default.BluetoothSearching,
+                if (isConnected) Icons.Default.CheckCircle else Icons.Default.Refresh,
                 contentDescription = null
             )
             Spacer(Modifier.width(16.dp))
@@ -182,7 +182,7 @@ fun RelayStatusBanner(isConnected: Boolean, relayCount: Int, onClick: () -> Unit
                     )
                 }
             }
-            Icon(Icons.Default.ChevronRight, contentDescription = "Details")
+            Icon(Icons.Default.PlayArrow, contentDescription = "Details")
         }
     }
 }

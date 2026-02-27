@@ -43,6 +43,9 @@ android {
 
     // Ensure 16 KB page size compatibility for Android 15+
     packaging {
+        resources {
+            excludes += "/META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+        }
         jniLibs {
             // Setting useLegacyPackaging to false ensures that native libraries 
             // are page-aligned and uncompressed in the APK, which is required 
@@ -100,4 +103,6 @@ dependencies {
     // Debugging Tools
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+
+    implementation(libs.timber)
 }

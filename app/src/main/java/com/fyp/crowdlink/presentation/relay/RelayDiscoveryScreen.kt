@@ -83,7 +83,7 @@ fun RelayDiscoveryScreen(
                         modifier = Modifier.padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.BluetoothConnected, contentDescription = null)
+                        Icon(Icons.Default.CheckCircle, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Connected to Relay", fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.weight(1f))
@@ -124,7 +124,7 @@ fun RelayItem(relay: RelayNode, onClick: () -> Unit) {
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Default.Router, contentDescription = null)
+            Icon(Icons.Default.Build, contentDescription = null) // Router is missing too
             Spacer(modifier = Modifier.width(16.dp))
             Column {
                 Text(relay.name, fontWeight = FontWeight.Bold)
