@@ -118,8 +118,8 @@ class MeshMessageSerialiser @Inject constructor() {
     }
 
     companion object {
-        const val HEADER_SIZE = 60
-        const val DEVICE_ID_SIZE = 16
-        const val MAX_PAYLOAD_BYTES = 452  // 512 - 60 header bytes
+        const val HEADER_SIZE = 100
+        const val DEVICE_ID_SIZE = 36
+        const val MAX_PAYLOAD_BYTES = 412  // 512 - 100
     }
 }

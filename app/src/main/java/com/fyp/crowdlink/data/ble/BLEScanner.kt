@@ -19,7 +19,10 @@ import com.fyp.crowdlink.data.mesh.MeshMessageSerialiser
 import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
 import com.fyp.crowdlink.domain.model.DiscoveredDevice
 import com.fyp.crowdlink.domain.model.MeshMessage
+import com.fyp.crowdlink.domain.repository.MessageRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,6 +30,10 @@ import java.nio.ByteBuffer
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 
 @Singleton
 class BleScanner @Inject constructor(
@@ -34,11 +41,14 @@ class BleScanner @Inject constructor(
     private val meshRoutingEngine: MeshRoutingEngine,
     private val serializer: MeshMessageSerialiser
 ) {
+    private val scope = CoroutineScope(Dispatchers.IO)
+
     init {
-        android.util.Log.wtf("BLE_SCANNER", "BleScanner CREATED!")
+        Log.wtf("BLE_SCANNER", "BleScanner CREATED!")
 
         // Wire relay callback — when engine decides to relay,
         // broadcast to all currently connected peers
+        // Updated to handle suspend function
         meshRoutingEngine.onRelay = { message ->
             relayToAllPeers(message)
         }
@@ -73,17 +83,30 @@ class BleScanner @Inject constructor(
                 status: Int,
                 newState: Int
             ) {
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    Log.w("BLE_SCANNER", "GATT connection failed for $deviceAddress status=$status")
+                    activeConnections.remove(deviceAddress)
+                    pendingMessages.remove(deviceAddress)
+                    gatt.close()
+                    return
+                }
                 when (newState) {
                     BluetoothProfile.STATE_CONNECTED -> {
                         Log.d("BLE_SCANNER", "GATT connected to $deviceAddress")
-                        gatt.discoverServices()
+                        gatt.requestMtu(512)
                     }
                     BluetoothProfile.STATE_DISCONNECTED -> {
                         Log.d("BLE_SCANNER", "GATT disconnected from $deviceAddress")
                         activeConnections.remove(deviceAddress)
+                        pendingMessages.remove(deviceAddress)
                         gatt.close()
                     }
                 }
+            }
+
+            override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+                Log.d("BLE_SCANNER", "MTU changed to $mtu for $deviceAddress")
+                gatt.discoverServices()  // NOW discover services
             }
 
             override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
@@ -102,6 +125,7 @@ class BleScanner @Inject constructor(
                     return
                 }
 
+                // Store connection for direct sends after flush
                 activeConnections[deviceAddress] = gatt
                 Log.d("BLE_SCANNER", "Services discovered on $deviceAddress, flushing queue")
                 flushPendingMessages(deviceAddress, gatt, characteristic)
@@ -123,6 +147,29 @@ class BleScanner @Inject constructor(
     @SuppressLint("MissingPermission")
     fun sendMeshMessage(message: MeshMessage, device: BluetoothDevice) {
         val address = device.address
+
+        // Only block if actively connected, not if pending
+        if (activeConnections.containsKey(address)) {
+            Log.d("BLE_SCANNER", "Already connected to $address, sending directly")
+            // send directly instead of skipping
+            val gatt = activeConnections[address]!!
+            val characteristic = gatt
+                .getService(BleAdvertiser.SERVICE_UUID)
+                ?.getCharacteristic(BleAdvertiser.MESH_CHARACTERISTIC_UUID)
+            
+            val bytes = serializer.serialize(message) ?: run {
+                Log.e("BLE_SCANNER", "Failed to serialize mesh message for direct send")
+                return
+            }
+            
+            characteristic?.let {
+                it.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                it.value = bytes
+                gatt.writeCharacteristic(it)
+            }
+            return
+        }
+
         knownDevices[address] = device
 
         val bytes = serializer.serialize(message) ?: run {
@@ -130,22 +177,9 @@ class BleScanner @Inject constructor(
             return
         }
 
-        val existingGatt = activeConnections[address]
-        if (existingGatt != null) {
-            val characteristic = existingGatt
-                .getService(BleAdvertiser.SERVICE_UUID)
-                ?.getCharacteristic(BleAdvertiser.MESH_CHARACTERISTIC_UUID)
-
-            characteristic?.let {
-                it.value = bytes
-                existingGatt.writeCharacteristic(it)
-                Log.d("BLE_SCANNER", "Sent mesh message directly to $address")
-            }
-        } else {
-            pendingMessages.getOrPut(address) { mutableListOf() }.add(message)
-            Log.d("BLE_SCANNER", "Queuing message, connecting to $address")
-            device.connectGatt(context, false, buildGattCallback(address))
-        }
+        pendingMessages.getOrPut(address) { mutableListOf() }.add(message)
+        Log.d("BLE_SCANNER", "Queuing message, connecting to $address")
+        device.connectGatt(context, false, buildGattCallback(address))
     }
 
     //  relay a message to all currently connected peers
@@ -177,6 +211,7 @@ class BleScanner @Inject constructor(
         val first = queue.firstOrNull() ?: return
         val bytes = serializer.serialize(first) ?: return
 
+        characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         characteristic.value = bytes
         val success = gatt.writeCharacteristic(characteristic)
         Log.d("BLE_SCANNER", "Flushed pending message to $deviceAddress success=$success")
@@ -264,6 +299,26 @@ class BleScanner @Inject constructor(
             Log.e("BLE_SCANNER", "Scan failed: $errorCode")
             isScanning = false
         }
+    }
+
+    fun observeRelayQueue(scope: CoroutineScope, repository: MessageRepository) {
+        repository.getRelayQueue()
+            .distinctUntilChanged()  // only react to actual changes
+            .onEach { messages ->
+                if (messages.isEmpty()) return@onEach
+                // Only send the FIRST unsent message, not all of them
+                val message = messages.first()
+                Log.d("BLE_SCANNER", "Processing 1 message from relay queue, ${knownDevices.size} known devices")
+                
+                // Issue 1 Fix: Move removal to BEFORE sending to prevent duplicate processing 
+                // if the Flow emits again before the database operation completes.
+                repository.removeFromRelayQueue(message.messageId)
+
+                knownDevices.values.forEach { device ->
+                    sendMeshMessage(message, device)
+                }
+            }
+            .launchIn(scope)
     }
 
     private fun updateDeviceRssi(deviceId: String, rssi: Int) {

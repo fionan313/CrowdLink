@@ -13,7 +13,9 @@ import com.fyp.crowdlink.data.ble.RelayNodeScanner
 import com.fyp.crowdlink.domain.model.NearbyFriend
 import com.fyp.crowdlink.domain.model.RelayNode
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
@@ -34,6 +36,12 @@ class DiscoveryViewModel @Inject constructor(
             }
         id
     }
+
+    private val _isDiscovering = MutableStateFlow(false)
+    val isDiscovering: StateFlow<Boolean> = _isDiscovering.asStateFlow()
+
+    private val _isAdvertising = MutableStateFlow(false)
+    val isAdvertising: StateFlow<Boolean> = _isAdvertising.asStateFlow()
 
     // Expose nearby friends with distance
     val nearbyFriends: StateFlow<List<NearbyFriend>> =
@@ -59,26 +67,32 @@ class DiscoveryViewModel @Inject constructor(
     fun startDiscovery() {
         deviceRepository.startDiscovery()
         relayNodeScanner.startScanning()
+        _isDiscovering.value = true
     }
 
     @SuppressLint("MissingPermission")
     fun stopDiscovery() {
         deviceRepository.stopDiscovery()
         relayNodeScanner.stopScanning()
+        _isDiscovering.value = false
     }
 
     @SuppressLint("MissingPermission")
     fun startAdvertising() {
         deviceRepository.startAdvertising(myDeviceId)
+        _isAdvertising.value = true
     }
 
     @SuppressLint("MissingPermission")
     fun stopAdvertising() {
         deviceRepository.stopAdvertising()
+        _isAdvertising.value = false
     }
 
     override fun onCleared() {
         super.onCleared()
+        // We keep discovery running even when navigating away, 
+        // but if the ViewModel is truly destroyed (app exit/back from start), we stop.
         try {
             stopDiscovery()
             stopAdvertising()

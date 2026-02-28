@@ -73,6 +73,7 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     implementation(libs.identity.jvm)
+    implementation(libs.generativeai)
     ksp(libs.androidx.room.compiler) // Annotation processor for Room
 
     // QR Code generation & scanning (ZXing)

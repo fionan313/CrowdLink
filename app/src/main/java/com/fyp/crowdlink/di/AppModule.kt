@@ -3,6 +3,9 @@ package com.fyp.crowdlink.di
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.room.Room
+import com.fyp.crowdlink.data.ble.BleAdvertiser
+import com.fyp.crowdlink.data.ble.BleScanner
+import com.fyp.crowdlink.data.ble.DeviceRepositoryImpl
 import com.fyp.crowdlink.data.local.AppDatabase
 import com.fyp.crowdlink.data.local.dao.FriendDao
 import com.fyp.crowdlink.data.local.dao.MessageDao
@@ -14,6 +17,7 @@ import com.fyp.crowdlink.data.mesh.SeenMessageCache
 import com.fyp.crowdlink.data.repository.FriendRepositoryImpl
 import com.fyp.crowdlink.data.repository.MessageRepositoryImpl
 import com.fyp.crowdlink.data.repository.UserProfileRepositoryImpl
+import com.fyp.crowdlink.domain.repository.DeviceRepository
 import com.fyp.crowdlink.domain.repository.FriendRepository
 import com.fyp.crowdlink.domain.repository.MessageRepository
 import com.fyp.crowdlink.domain.repository.UserProfileRepository
@@ -170,7 +174,33 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideDeviceRepository(
+        bleScanner: BleScanner,
+        bleAdvertiser: BleAdvertiser,
+        friendRepository: FriendRepository,
+        messageRepository: MessageRepository,
+        sharedPreferences: SharedPreferences,
+        meshRoutingEngine: MeshRoutingEngine
+    ): DeviceRepository {
+        return DeviceRepositoryImpl(
+            bleScanner,
+            bleAdvertiser,
+            friendRepository,
+            messageRepository,
+            sharedPreferences,
+            meshRoutingEngine
+        )
+    }
+
+    @Provides
+    @Singleton
     fun provideMeshMessageSerializer(): MeshMessageSerialiser {
         return MeshMessageSerialiser()
+    }
+
+    @Provides
+    @Singleton
+    fun provideSeenMessageCache(): SeenMessageCache {
+        return SeenMessageCache()
     }
 }

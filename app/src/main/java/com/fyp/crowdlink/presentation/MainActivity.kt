@@ -7,6 +7,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -20,6 +21,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.fyp.crowdlink.presentation.chat.ChatScreen
 import com.fyp.crowdlink.presentation.discovery.DiscoveryScreen
+import com.fyp.crowdlink.presentation.discovery.DiscoveryViewModel
 import com.fyp.crowdlink.presentation.friends.FriendsScreen
 import com.fyp.crowdlink.presentation.pairing.PairingScreen
 import com.fyp.crowdlink.presentation.pairing.PairingViewModel
@@ -32,22 +34,25 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    private var pendingAction: (() -> Unit)? = null
+    private val discoveryViewModel: DiscoveryViewModel by viewModels()
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val allGranted = permissions.values.all { it }
         if (allGranted) {
-            pendingAction?.invoke()
-            pendingAction = null
+            startMeshServices()
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        requestPermissions()
+        if (hasPermissions()) {
+            startMeshServices()
+        } else {
+            requestPermissions()
+        }
 
         setContent {
             CrowdLinkTheme {
@@ -65,7 +70,8 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onNavigateToRelay = {
                                     navController.navigate("relay_discovery")
-                                }
+                                },
+                                viewModel = discoveryViewModel
                             )
                         }
                         
@@ -119,11 +125,10 @@ class MainActivity : ComponentActivity() {
                         
                         composable("pairing") { backStackEntry ->
                             val viewModel: PairingViewModel = hiltViewModel()
-                            val savedStateHandle = backStackEntry.savedStateHandle
-                            val scannedQr = savedStateHandle.get<String>("scanned_qr")
+                            val scannedQr = backStackEntry.savedStateHandle.get<String>("scanned_qr")
                             
                             if (scannedQr != null) {
-                                savedStateHandle.remove<String>("scanned_qr")
+                                backStackEntry.savedStateHandle.remove<String>("scanned_qr")
                                 viewModel.onQRScanned(scannedQr, "Friend")
                             }
 
@@ -154,8 +159,24 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun startMeshServices() {
+        discoveryViewModel.startDiscovery()
+        discoveryViewModel.startAdvertising()
+    }
+
+    private fun hasPermissions(): Boolean {
+        val permissions = getRequiredPermissions()
+        return permissions.all {
+            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
     private fun requestPermissions() {
-        val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        permissionLauncher.launch(getRequiredPermissions())
+    }
+
+    private fun getRequiredPermissions(): Array<String> {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             arrayOf(
                 Manifest.permission.BLUETOOTH_SCAN,
                 Manifest.permission.BLUETOOTH_CONNECT,
@@ -177,15 +198,6 @@ class MainActivity : ComponentActivity() {
                 Manifest.permission.ACCESS_FINE_LOCATION,
                 Manifest.permission.ACCESS_COARSE_LOCATION
             )
-        }
-
-        val permissionsNeeded = permissions.filter {
-            ContextCompat.checkSelfPermission(this, it) !=
-                    PackageManager.PERMISSION_GRANTED
-        }
-
-        if (permissionsNeeded.isNotEmpty()) {
-            permissionLauncher.launch(permissionsNeeded.toTypedArray())
         }
     }
 }

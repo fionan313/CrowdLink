@@ -260,6 +260,20 @@ fun MessageBubble(message: Message) {
                     text = message.content,
                     style = MaterialTheme.typography.bodyMedium
                 )
+                if (message.hopCount > 0) {
+                    Text(
+                        text = "↗ ${message.hopCount} hop${if (message.hopCount > 1) "s" else ""}",
+                        fontSize = 10.sp,
+                        color = Color.Gray
+                    )
+                }
+                else {
+                    Text(
+                        text = "↗ NO HOPS",
+                        fontSize = 10.sp,
+                        color = Color.Gray
+                    )
+                }
                 
                 Row(
                     modifier = Modifier.padding(top = 4.dp),

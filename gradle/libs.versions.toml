@@ -1,5 +1,5 @@
 [versions]
-agp = "8.9.1"
+agp = "8.13.2"
 cameraCamera2 = "1.3.0"
 core = "3.5.4"
 kotlin = "2.1.0"
@@ -30,6 +30,7 @@ roomKtx = "2.8.4"
 turbine = "1.2.1"
 zxingAndroidEmbedded = "4.3.0"
 identityJvm = "202411.1"
+generativeai = "0.9.0"
 
 
 [libraries]
@@ -91,6 +92,7 @@ accompanist-permissions = { group = "com.google.accompanist", name = "accompanis
 room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "roomKtx" }
 zxing-android-embedded = { module = "com.journeyapps:zxing-android-embedded", version.ref = "zxingAndroidEmbedded" }
 identity-jvm = { group = "com.android.identity", name = "identity-jvm", version.ref = "identityJvm" }
+generativeai = { group = "com.google.ai.client.generativeai", name = "generativeai", version.ref = "generativeai" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

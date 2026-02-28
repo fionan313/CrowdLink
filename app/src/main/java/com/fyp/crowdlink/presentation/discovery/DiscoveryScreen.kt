@@ -27,8 +27,14 @@ fun DiscoveryScreen(
     val nearbyFriends by viewModel.nearbyFriends.collectAsState()
     val discoveredRelays by viewModel.discoveredRelays.collectAsState()
     val isRelayConnected by viewModel.isRelayConnected.collectAsState()
-    var isDiscovering by remember { mutableStateOf(false) }
-    var isAdvertising by remember { mutableStateOf(false) }
+    val isDiscovering by viewModel.isDiscovering.collectAsState()
+    val isAdvertising by viewModel.isAdvertising.collectAsState()
+
+    // Auto-start discovery and advertising on first launch of this screen
+    LaunchedEffect(Unit) {
+        if (!isDiscovering) viewModel.startDiscovery()
+        if (!isAdvertising) viewModel.startAdvertising()
+    }
 
     Scaffold(
         topBar = {
@@ -64,10 +70,8 @@ fun DiscoveryScreen(
                     onClick = {
                         if (isDiscovering) {
                             viewModel.stopDiscovery()
-                            isDiscovering = false
                         } else {
                             viewModel.startDiscovery()
-                            isDiscovering = true
                         }
                     },
                     modifier = Modifier.weight(1f)
@@ -84,10 +88,8 @@ fun DiscoveryScreen(
                     onClick = {
                         if (isAdvertising) {
                             viewModel.stopAdvertising()
-                            isAdvertising = false
                         } else {
                             viewModel.startAdvertising()
-                            isAdvertising = true
                         }
                     },
                     modifier = Modifier.weight(1f)

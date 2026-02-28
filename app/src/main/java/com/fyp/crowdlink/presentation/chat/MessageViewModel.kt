@@ -1,5 +1,6 @@
 package com.fyp.crowdlink.presentation.chat
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fyp.crowdlink.data.ble.BleScanner
@@ -114,6 +115,8 @@ class MessageViewModel @Inject constructor(
      */
     fun sendText(content: String, friendId: String) {
         val myId = _myDeviceId.value
+
+        Log.d("MessageViewModel", "Adding to relay queue: $content")
 
         viewModelScope.launch {
             // 1. Save to local database for UI display immediately

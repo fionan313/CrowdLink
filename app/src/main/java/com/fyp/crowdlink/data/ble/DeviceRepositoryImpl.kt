@@ -1,11 +1,16 @@
 package com.fyp.crowdlink.data.ble
 
+import android.content.SharedPreferences
 import android.util.Log
+import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
 import com.fyp.crowdlink.domain.model.DiscoveredDevice
 import com.fyp.crowdlink.domain.model.Friend
+import com.fyp.crowdlink.domain.model.Message
+import com.fyp.crowdlink.domain.model.MessageStatus
 import com.fyp.crowdlink.domain.model.NearbyFriend
 import com.fyp.crowdlink.domain.repository.DeviceRepository
 import com.fyp.crowdlink.domain.repository.FriendRepository
+import com.fyp.crowdlink.domain.repository.MessageRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +20,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -32,8 +38,13 @@ import javax.inject.Singleton
 class DeviceRepositoryImpl @Inject constructor(
     private val bleScanner: BleScanner,
     private val bleAdvertiser: BleAdvertiser,
-    private val friendRepository: FriendRepository
+    private val friendRepository: FriendRepository,
+    private val messageRepository: MessageRepository,
+    private val sharedPreferences: SharedPreferences,
+    private val meshRoutingEngine: MeshRoutingEngine
 ) : DeviceRepository {
+
+    private val scope = CoroutineScope(Dispatchers.IO)
 
     // Exposes the raw, unfiltered list of discovered devices directly from the scanner.
     override val discoveredDevices: StateFlow<List<DiscoveredDevice>> = bleScanner.discoveredDevices
@@ -43,6 +54,43 @@ class DeviceRepositoryImpl @Inject constructor(
     val nearbyFriends: StateFlow<List<NearbyFriend>> = _nearbyFriends.asStateFlow()
 
     init {
+        // SET THIS FIRST — must happen before any messages are processed
+        meshRoutingEngine.localDeviceId = sharedPreferences
+            .getString("device_id", "") ?: ""
+        
+        Log.d("MeshRouting", "localDeviceId set to: ${meshRoutingEngine.localDeviceId}")
+
+        // Wire MeshRoutingEngine callbacks
+        meshRoutingEngine.onMessageForMe = { meshMessage ->
+            scope.launch {
+                val senderIdString = meshMessage.senderId.toString()
+                val content = meshMessage.payload.toString(Charsets.UTF_8)
+                
+                val incomingMessage = Message(
+                    messageId = meshMessage.messageId.toString(),
+                    senderId = senderIdString,
+                    receiverId = meshRoutingEngine.localDeviceId,
+                    content = content,
+                    timestamp = meshMessage.timestamp,
+                    isSentByMe = false,
+                    deliveryStatus = MessageStatus.DELIVERED,
+                    hopCount = meshMessage.hopCount,
+                    transportType = "Mesh"
+                )
+                
+                messageRepository.sendMessage(incomingMessage)
+                Log.d("MeshRouting", "Saved incoming message from $senderIdString")
+            }
+        }
+
+        meshRoutingEngine.onRelay = { relayedMessage ->
+            messageRepository.addToRelayQueue(relayedMessage)
+            Log.d("MeshRouting", "Added relayed message ${relayedMessage.messageId} to relay queue")
+        }
+
+        // wire relay queue to BLE transport
+        bleScanner.observeRelayQueue(scope, messageRepository)
+
         // Create a reactive pipeline that triggers whenever new devices are scanned OR the friends list changes.
         combine(
             bleScanner.discoveredDevices, // Flow of raw BLE scan results
@@ -77,7 +125,7 @@ class DeviceRepositoryImpl @Inject constructor(
         }.onEach { result ->
             // Emit the newly combined list to the _nearbyFriends StateFlow.
             _nearbyFriends.value = result
-        }.launchIn(CoroutineScope(Dispatchers.IO)) // Launch this coroutine in a background IO thread.
+        }.launchIn(scope) // Use the existing scope
     }
 
     /**
@@ -88,7 +136,7 @@ class DeviceRepositoryImpl @Inject constructor(
     }
 
     /**
-     * Stops the BLE scanning process by delegating to the BleScanner.
+     * Starts BLE advertising by delegating to the BleAdvertiser.
      */
     override fun stopDiscovery() {
         bleScanner.stopDiscovery()

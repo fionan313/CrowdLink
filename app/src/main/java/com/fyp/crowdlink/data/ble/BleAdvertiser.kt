@@ -18,6 +18,10 @@ import android.util.Log
 import com.fyp.crowdlink.data.mesh.MeshMessageSerialiser
 import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.nio.ByteBuffer
 import java.util.UUID
 import javax.inject.Inject
@@ -39,6 +43,7 @@ class BleAdvertiser @Inject constructor(
 
     private var isAdvertising = false
     private var gattServer: BluetoothGattServer? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     // GATT server callback handles incoming mesh packets
     @SuppressLint("MissingPermission")
@@ -50,6 +55,11 @@ class BleAdvertiser @Inject constructor(
             newState: Int
         ) {
             Log.d("BLE_ADVERTISER", "GATT connection state changed: device=${device.address} newState=$newState")
+        }
+
+        // ADD THIS
+        override fun onServiceAdded(status: Int, service: BluetoothGattService?) {
+            Log.d("BLE_ADVERTISER", "GATT service added status=$status uuid=${service?.uuid}")
         }
 
         override fun onCharacteristicWriteRequest(
@@ -67,7 +77,9 @@ class BleAdvertiser @Inject constructor(
                 // Deserialise and hand to routing engine
                 val message = serializer.deserialize(value)
                 if (message != null) {
-                    meshRoutingEngine.processIncoming(message)
+                    scope.launch {
+                        meshRoutingEngine.processIncoming(message)
+                    }
                     Log.d("BLE_ADVERTISER", "Handed to routing engine: ${message.messageId}")
                 } else {
                     Log.w("BLE_ADVERTISER", "Failed to deserialise incoming mesh packet")
