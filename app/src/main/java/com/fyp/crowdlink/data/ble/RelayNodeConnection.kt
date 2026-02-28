@@ -6,17 +6,23 @@ import android.bluetooth.*
 import android.content.Context
 import android.util.Log
 import androidx.annotation.RequiresPermission
+import com.fyp.crowdlink.domain.repository.MessageRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class RelayNodeConnection @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val messageRepository: MessageRepository
 ) {
     companion object {
         const val SERVICE_UUID = "12345678-1234-1234-1234-123456789abc"
@@ -29,6 +35,13 @@ class RelayNodeConnection @Inject constructor(
 
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
+
+    private var relayObserverJob: Job? = null
+    private val scope = CoroutineScope(Dispatchers.IO)
+
+    init {
+        startRelayQueueObserver()
+    }
 
     private val gattCallback = object : BluetoothGattCallback() {
         @SuppressLint("MissingPermission")
@@ -66,6 +79,30 @@ class RelayNodeConnection @Inject constructor(
                 Log.d(TAG, "Message sent to relay successfully")
             } else {
                 Log.e(TAG, "Failed to send message to relay, status: $status")
+            }
+        }
+    }
+
+    /**
+     * Observes the relay queue and attempts to deliver messages via ESP32 
+     * if a node is currently connected.
+     */
+    private fun startRelayQueueObserver() {
+        relayObserverJob?.cancel()
+        relayObserverJob = scope.launch {
+            messageRepository.getRelayQueue().collect { queue ->
+                if (_isConnected.value && queue.isNotEmpty()) {
+                    Log.d(TAG, "Relay queue update: ${queue.size} messages waiting, ESP32 connected")
+                    queue.forEach { meshMessage ->
+                        // Attempt delivery via ESP32 BLE fallback
+                        val payload = "${meshMessage.recipientId}:${String(meshMessage.payload, Charsets.UTF_8)}"
+                        val success = sendMessage(payload)
+                        if (success) {
+                            Log.d(TAG, "Successfully delivered message ${meshMessage.messageId} via ESP32, removing from queue")
+                            messageRepository.removeFromRelayQueue(meshMessage.messageId)
+                        }
+                    }
+                }
             }
         }
     }

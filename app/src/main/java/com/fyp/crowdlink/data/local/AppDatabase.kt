@@ -18,7 +18,7 @@ import com.fyp.crowdlink.domain.model.UserProfile
  */
 @Database(
     entities = [Friend::class, UserProfile::class, Message::class, RelayMessageEntity::class],
-    version = 8, // Incremented to version 8 as version 7 was incomplete
+    version = 9, // Incremented to version 8 as version 7 was incomplete
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

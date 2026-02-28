@@ -48,6 +48,7 @@ class WifiDirectManager @Inject constructor(
     val peerIp = _peerIp.asStateFlow()
 
     private var serverJob: Job? = null
+    private var relayObserverJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
 
     private val intentFilter = IntentFilter().apply {
@@ -55,6 +56,10 @@ class WifiDirectManager @Inject constructor(
         addAction(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION)
         addAction(WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION)
         addAction(WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION)
+    }
+
+    init {
+        startRelayQueueObserver()
     }
 
     private val receiver = object : BroadcastReceiver() {
@@ -87,6 +92,58 @@ class WifiDirectManager @Inject constructor(
         }
     }
 
+    /**
+     * Observes the relay queue and attempts to deliver messages via WiFi Direct 
+     * if a peer is currently connected.
+     */
+    private fun startRelayQueueObserver() {
+        relayObserverJob?.cancel()
+        relayObserverJob = scope.launch {
+            messageRepository.getRelayQueue().collect { queue ->
+                val targetIp = _peerIp.value
+                if (targetIp != null && queue.isNotEmpty()) {
+                    Log.d("WifiDirect", "Relay queue update: ${queue.size} messages waiting, peer connected at $targetIp")
+                    queue.forEach { meshMessage ->
+                        // Attempt delivery via WiFi Direct fallback
+                        val success = attemptWifiDirectDelivery(targetIp, meshMessage)
+                        if (success) {
+                            Log.d("WifiDirect", "Successfully delivered message ${meshMessage.messageId} via WiFi Direct, removing from queue")
+                            messageRepository.removeFromRelayQueue(meshMessage.messageId)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Helper to wrap mesh message for WiFi Direct transport
+     */
+    private suspend fun attemptWifiDirectDelivery(targetAddress: String, meshMessage: com.fyp.crowdlink.domain.model.MeshMessage): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val socket = Socket()
+                socket.connect(InetSocketAddress(targetAddress, 8888), 2000)
+                val output = DataOutputStream(socket.getOutputStream())
+                
+                // We send a special prefix to indicate this is a MeshMessage payload
+                output.writeUTF("MESH_RELAY_V1")
+                output.writeUTF(meshMessage.senderId)
+                // Sending the content as a string for now as the existing WifiDirectManager expects strings,
+                // but in a real mesh we might send the raw payload.
+                output.writeUTF(String(meshMessage.payload, Charsets.UTF_8))
+                output.writeUTF(meshMessage.messageId.toString())
+                
+                output.flush()
+                socket.close()
+                true
+            } catch (e: Exception) {
+                Log.e("WifiDirect", "Failed to deliver mesh message to $targetAddress", e)
+                false
+            }
+        }
+    }
+
     fun register() {
         context.registerReceiver(receiver, intentFilter)
     }
@@ -115,10 +172,6 @@ class WifiDirectManager @Inject constructor(
         })
     }
 
-    /**
-     * Kills all active WiFi Direct connections and removes the current group.
-     * This is a debug tool to reset the P2P state.
-     */
     fun disconnect() {
         manager?.removeGroup(channel, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
@@ -129,7 +182,6 @@ class WifiDirectManager @Inject constructor(
             }
             override fun onFailure(reason: Int) {
                 Log.e("WifiDirect", "Failed to remove group: $reason")
-                // Even if removeGroup fails, we might still be in a middle of connecting
                 manager?.cancelConnect(channel, object : WifiP2pManager.ActionListener {
                     override fun onSuccess() { Log.d("WifiDirect", "Connect cancelled") }
                     override fun onFailure(reason: Int) { Log.e("WifiDirect", "Failed to cancel connect: $reason") }
@@ -156,10 +208,7 @@ class WifiDirectManager @Inject constructor(
                     val client = serverSocket.accept()
                     val clientIp = client.inetAddress.hostAddress
                     Log.d("WifiDirect", "Accepted connection from $clientIp")
-                    
-                    // Store the IP of the client that just connected
                     _peerIp.value = clientIp
-                    
                     handleIncomingConnection(client)
                 }
             } catch (e: Exception) {
@@ -174,19 +223,40 @@ class WifiDirectManager @Inject constructor(
         scope.launch {
             try {
                 val input = DataInputStream(socket.getInputStream())
-                val senderId = input.readUTF()
-                val content = input.readUTF()
+                val header = input.readUTF()
                 
-                Log.d("WifiDirect", "Received message from $senderId: $content")
-
-                if (content != "HANDSHAKE_INIT") {
+                if (header == "MESH_RELAY_V1") {
+                    val senderId = input.readUTF()
+                    val content = input.readUTF()
+                    val messageIdStr = input.readUTF()
+                    
+                    Log.d("WifiDirect", "Received MESH message from $senderId: $content")
+                    
+                    // In a real mesh refactor, we would reconstruct the MeshMessage 
+                    // and hand it to MeshRoutingEngine.processIncoming().
+                    // For now, to maintain functionality, we'll just insert as a domain message.
                     val message = Message(
                         senderId = senderId,
-                        receiverId = "me", // Mapping to local user
+                        receiverId = "me",
                         content = content,
                         isSentByMe = false
                     )
                     messageRepository.sendMessage(message)
+                    // TODO: Notify MeshRoutingEngine so it marks it as seen
+                } else {
+                    // Legacy handling
+                    val senderId = header // In legacy, first string was senderId
+                    val content = input.readUTF()
+                    
+                    if (content != "HANDSHAKE_INIT") {
+                        val message = Message(
+                            senderId = senderId,
+                            receiverId = "me",
+                            content = content,
+                            isSentByMe = false
+                        )
+                        messageRepository.sendMessage(message)
+                    }
                 }
                 socket.close()
             } catch (e: Exception) {
@@ -197,7 +267,6 @@ class WifiDirectManager @Inject constructor(
 
     private fun sendHandshake(targetAddress: String) {
         scope.launch {
-            // Wait a moment for the server on the other end to start
             delay(1000)
             try {
                 val socket = Socket()
@@ -210,24 +279,6 @@ class WifiDirectManager @Inject constructor(
                 Log.d("WifiDirect", "Handshake sent to $targetAddress")
             } catch (e: Exception) {
                 Log.e("WifiDirect", "Handshake failed", e)
-            }
-        }
-    }
-
-    fun sendMessage(targetAddress: String, message: Message) {
-        scope.launch {
-            try {
-                Log.d("WifiDirect", "Attempting to send message to $targetAddress")
-                val socket = Socket()
-                socket.connect(InetSocketAddress(targetAddress, 8888), 5000)
-                val output = DataOutputStream(socket.getOutputStream())
-                output.writeUTF(message.senderId)
-                output.writeUTF(message.content)
-                output.flush()
-                socket.close()
-                Log.d("WifiDirect", "Message sent successfully")
-            } catch (e: Exception) {
-                Log.e("WifiDirect", "Send Error", e)
             }
         }
     }
