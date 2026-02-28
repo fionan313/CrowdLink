@@ -8,6 +8,9 @@ import com.fyp.crowdlink.data.local.dao.FriendDao
 import com.fyp.crowdlink.data.local.dao.MessageDao
 import com.fyp.crowdlink.data.local.dao.RelayMessageDao
 import com.fyp.crowdlink.data.local.dao.UserProfileDao
+import com.fyp.crowdlink.data.mesh.MeshMessageSerialiser
+import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
+import com.fyp.crowdlink.data.mesh.SeenMessageCache
 import com.fyp.crowdlink.data.repository.FriendRepositoryImpl
 import com.fyp.crowdlink.data.repository.MessageRepositoryImpl
 import com.fyp.crowdlink.data.repository.UserProfileRepositoryImpl
@@ -114,12 +117,16 @@ object AppModule {
      * Provides the UserProfileRepository implementation.
      *
      * @param userProfileDao The UserProfileDao dependency.
+     * @param sharedPreferences The SharedPreferences dependency.
      * @return The concrete implementation of UserProfileRepository.
      */
     @Provides
     @Singleton
-    fun provideUserProfileRepository(userProfileDao: UserProfileDao): UserProfileRepository {
-        return UserProfileRepositoryImpl(userProfileDao)
+    fun provideUserProfileRepository(
+        userProfileDao: UserProfileDao,
+        sharedPreferences: SharedPreferences
+    ): UserProfileRepository {
+        return UserProfileRepositoryImpl(userProfileDao, sharedPreferences)
     }
 
     /**
@@ -148,5 +155,22 @@ object AppModule {
     @Singleton
     fun provideSharedPreferences(@ApplicationContext context: Context): SharedPreferences {
         return context.getSharedPreferences("crowdlink_prefs", Context.MODE_PRIVATE)
+    }
+
+    @Provides
+    @Singleton
+    fun provideMeshRoutingEngine(
+        cache: SeenMessageCache,
+        userProfileRepository: UserProfileRepository
+    ): MeshRoutingEngine {
+        return MeshRoutingEngine(cache).apply {
+            localDeviceId = userProfileRepository.getPersistentDeviceId()
+        }
+    }
+
+    @Provides
+    @Singleton
+    fun provideMeshMessageSerializer(): MeshMessageSerialiser {
+        return MeshMessageSerialiser()
     }
 }

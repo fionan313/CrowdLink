@@ -1,12 +1,13 @@
 package com.fyp.crowdlink.presentation.chat
 
-import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.fyp.crowdlink.data.ble.RelayNodeConnection
+import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
 import com.fyp.crowdlink.data.p2p.WifiDirectManager
 import com.fyp.crowdlink.domain.model.Message
 import com.fyp.crowdlink.domain.model.MessageStatus
+import com.fyp.crowdlink.domain.repository.MessageRepository
+import com.fyp.crowdlink.domain.repository.UserProfileRepository
 import com.fyp.crowdlink.domain.usecase.GetMessagesUseCase
 import com.fyp.crowdlink.domain.usecase.SendMessageUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -22,15 +23,16 @@ import javax.inject.Inject
  * MessageViewModel
  *
  * This ViewModel manages the UI state for the peer-to-peer messaging feature.
- * Now includes relay node support for extended range via ESP32 devices.
+ * It now integrates with the MeshRoutingEngine for gossip-based message delivery.
  */
 @HiltViewModel
 class MessageViewModel @Inject constructor(
     private val wifiDirectManager: WifiDirectManager,
     private val sendMessageUseCase: SendMessageUseCase,
     private val getMessagesUseCase: GetMessagesUseCase,
-    private val sharedPreferences: SharedPreferences,
-    private val relayNodeConnection: RelayNodeConnection, // ADDED
+    private val userProfileRepository: UserProfileRepository,
+    private val meshRoutingEngine: MeshRoutingEngine,
+    private val messageRepository: MessageRepository
 ) : ViewModel() {
 
     private val _myDeviceId = MutableStateFlow<String>("")
@@ -45,11 +47,8 @@ class MessageViewModel @Inject constructor(
     // Expose the IP address of the connected peer
     val peerIp = wifiDirectManager.peerIp
 
-    // ADDED: Relay connection status
-    val isRelayConnected = relayNodeConnection.isConnected
-
     init {
-        _myDeviceId.value = sharedPreferences.getString("device_id", "") ?: ""
+        _myDeviceId.value = userProfileRepository.getPersistentDeviceId()
     }
 
     fun onResume() {
@@ -85,63 +84,35 @@ class MessageViewModel @Inject constructor(
     }
 
     /**
-     * Sends a text message to the currently connected friend.
+     * Sends a text message to a friend using the Mesh Routing Engine.
      *
      * Transmission strategy:
-     * 1. Save message to local database
-     * 2. Try WiFi Direct first (if peer is directly connected)
-     * 3. Fall back to ESP32 relay if WiFi Direct unavailable
+     * 1. Save message to local Room database (for UI history)
+     * 2. Create a MeshMessage via MeshRoutingEngine
+     * 3. Add MeshMessage to the local Relay Queue for BLE/P2P dissemination
      */
     fun sendText(content: String, friendId: String) {
         val myId = _myDeviceId.value
 
         viewModelScope.launch {
-            val message = Message(
+            // 1. Save message to local database for UI
+            val localMessage = Message(
                 senderId = myId,
                 receiverId = friendId,
                 content = content,
                 isSentByMe = true,
                 deliveryStatus = MessageStatus.PENDING
             )
+            sendMessageUseCase(localMessage)
 
-            // 1. Save message to Room database locally
-            val messageId = sendMessageUseCase(message)
-            val messageWithId = message.copy(id = messageId)
-
-            // 2. Try direct WiFi Direct connection first
-            val targetIp = peerIp.value
-            if (targetIp != null) {
-                // Direct connection available - use WiFi Direct
-                wifiDirectManager.sendMessage(targetIp, messageWithId)
-            } else if (isRelayConnected.value) {
-                // No direct connection - use ESP32 relay
-                val relayPayload = "${messageWithId.receiverId}:${messageWithId.content}"
-                val success = relayNodeConnection.sendMessage(relayPayload)
-
-                if (!success) {
-                    // Mark as failed if relay send fails
-                    updateMessageStatus(messageId, MessageStatus.FAILED)
-                }
-            } else {
-                // No connection at all - mark as failed
-                updateMessageStatus(messageId, MessageStatus.FAILED)
-            }
+            // 2. Create mesh message and add to relay queue for transmission
+            val meshMessage = meshRoutingEngine.createOutbound(
+                senderId = myId,
+                recipientId = friendId,
+                payload = content.toByteArray(Charsets.UTF_8)
+            )
+            
+            messageRepository.addToRelayQueue(meshMessage)
         }
-    }
-
-    /**
-     * ADDED: Helper function to update message delivery status
-     */
-    private suspend fun updateMessageStatus(messageId: Long, status: MessageStatus) {
-        // You'll need to add this to your MessageRepository
-        // messageRepository.updateMessageStatus(messageId, status)
-    }
-
-    /**
-     * ADDED: Cleanup relay connection when ViewModel is cleared
-     */
-    override fun onCleared() {
-        super.onCleared()
-        relayNodeConnection.disconnect()
     }
 }
