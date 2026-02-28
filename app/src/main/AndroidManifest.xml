@@ -36,6 +36,12 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.CrowdLink">
+
+        <!-- 16KB page size support for Android 15+ -->
+        <meta-data
+            android:name="android.support.LARGE_PAGE_SIZE"
+            android:value="true" />
+
         <activity
             android:name=".presentation.MainActivity"
             android:exported="true"
