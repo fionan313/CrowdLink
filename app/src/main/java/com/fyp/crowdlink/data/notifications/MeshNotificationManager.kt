@@ -6,9 +6,11 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import androidx.annotation.RequiresPermission
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.fyp.crowdlink.R
 import com.fyp.crowdlink.presentation.MainActivity
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -40,8 +42,17 @@ class MeshNotificationManager @Inject constructor(
         manager.createNotificationChannel(channel)
     }
 
-    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     fun showMessageNotification(senderName: String, content: String, friendId: String) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                return
+            }
+        }
+
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra("navigate_to_chat", friendId)  // handle in MainActivity
