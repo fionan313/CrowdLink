@@ -53,6 +53,8 @@ class RelayNodeScanner @Inject constructor(
             }
         }
 
+        // known Android lint false positive for BLE scan callbacks
+        @SuppressLint("MissingPermission")
         override fun onBatchScanResults(results: MutableList<ScanResult>) {
             results.forEach { onScanResult(ScanSettings.CALLBACK_TYPE_ALL_MATCHES, it) }
         }
