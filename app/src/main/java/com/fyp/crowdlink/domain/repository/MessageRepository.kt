@@ -4,6 +4,7 @@ import com.fyp.crowdlink.domain.model.MeshMessage
 import com.fyp.crowdlink.domain.model.Message
 import com.fyp.crowdlink.domain.model.MessageStatus
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import java.util.UUID
 
 /**
@@ -20,4 +21,8 @@ interface MessageRepository {
     fun getRelayQueue(): Flow<List<MeshMessage>>
     suspend fun removeFromRelayQueue(messageId: UUID)
     suspend fun purgeExpiredRelayMessages()
+    
+    // Tracks the currently active chat friend ID to suppress notifications
+    val activeChatFriendId: StateFlow<String?>
+    fun setActiveChatFriend(friendId: String?)
 }

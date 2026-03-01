@@ -9,6 +9,9 @@ import com.fyp.crowdlink.domain.model.Message
 import com.fyp.crowdlink.domain.model.MessageStatus
 import com.fyp.crowdlink.domain.repository.MessageRepository
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import java.util.UUID
 import javax.inject.Inject
@@ -19,6 +22,13 @@ class MessageRepositoryImpl @Inject constructor(
     private val messageDao: MessageDao,
     private val relayMessageDao: RelayMessageDao
 ) : MessageRepository {
+
+    private val _activeChatFriendId = MutableStateFlow<String?>(null)
+    override val activeChatFriendId: StateFlow<String?> = _activeChatFriendId.asStateFlow()
+
+    override fun setActiveChatFriend(friendId: String?) {
+        _activeChatFriendId.value = friendId
+    }
 
     override fun getMessagesWithFriend(friendId: String): Flow<List<Message>> {
         return messageDao.getMessagesWithFriend(friendId)

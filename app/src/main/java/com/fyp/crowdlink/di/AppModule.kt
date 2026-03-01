@@ -14,6 +14,7 @@ import com.fyp.crowdlink.data.local.dao.UserProfileDao
 import com.fyp.crowdlink.data.mesh.MeshMessageSerialiser
 import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
 import com.fyp.crowdlink.data.mesh.SeenMessageCache
+import com.fyp.crowdlink.data.notifications.MeshNotificationManager
 import com.fyp.crowdlink.data.repository.FriendRepositoryImpl
 import com.fyp.crowdlink.data.repository.MessageRepositoryImpl
 import com.fyp.crowdlink.data.repository.UserProfileRepositoryImpl
@@ -180,7 +181,8 @@ object AppModule {
         friendRepository: FriendRepository,
         messageRepository: MessageRepository,
         sharedPreferences: SharedPreferences,
-        meshRoutingEngine: MeshRoutingEngine
+        meshRoutingEngine: MeshRoutingEngine,
+        meshNotificationManager: MeshNotificationManager
     ): DeviceRepository {
         return DeviceRepositoryImpl(
             bleScanner,
@@ -188,7 +190,8 @@ object AppModule {
             friendRepository,
             messageRepository,
             sharedPreferences,
-            meshRoutingEngine
+            meshRoutingEngine,
+            meshNotificationManager
         )
     }
 

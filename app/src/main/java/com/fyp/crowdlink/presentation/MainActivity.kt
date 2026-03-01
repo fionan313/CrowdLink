@@ -1,6 +1,7 @@
 package com.fyp.crowdlink.presentation
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -52,6 +53,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleNotificationDeepLink(intent)
+    }
+
+    private fun handleNotificationDeepLink(intent: Intent) {
+        intent.getStringExtra("navigate_to_chat")?.let { friendId ->
+            // Note: Since NavController is managed inside MainScreen's Composable, 
+            // you might need a shared navigation manager or use a callback 
+            // if you want to navigate immediately from the Activity.
+            // For now, this is where the logic resides.
+        }
+    }
+
     private fun startMeshServices() {
         discoveryViewModel.startDiscovery()
         discoveryViewModel.startAdvertising()
@@ -69,28 +84,33 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun getRequiredPermissions(): Array<String> {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            arrayOf(
+        val permissions = mutableListOf<String>()
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.addAll(listOf(
                 Manifest.permission.BLUETOOTH_SCAN,
                 Manifest.permission.BLUETOOTH_CONNECT,
                 Manifest.permission.BLUETOOTH_ADVERTISE,
                 Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.NEARBY_WIFI_DEVICES
-            )
+                Manifest.permission.NEARBY_WIFI_DEVICES,
+                Manifest.permission.POST_NOTIFICATIONS
+            ))
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            arrayOf(
+            permissions.addAll(listOf(
                 Manifest.permission.BLUETOOTH_SCAN,
                 Manifest.permission.BLUETOOTH_CONNECT,
                 Manifest.permission.BLUETOOTH_ADVERTISE,
                 Manifest.permission.ACCESS_FINE_LOCATION
-            )
+            ))
         } else {
-            arrayOf(
+            permissions.addAll(listOf(
                 Manifest.permission.BLUETOOTH,
                 Manifest.permission.BLUETOOTH_ADMIN,
                 Manifest.permission.ACCESS_FINE_LOCATION,
                 Manifest.permission.ACCESS_COARSE_LOCATION
-            )
+            ))
         }
+        
+        return permissions.toTypedArray()
     }
 }
