@@ -3,6 +3,7 @@ package com.fyp.crowdlink.data.ble
 import android.content.SharedPreferences
 import android.util.Log
 import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
+import com.fyp.crowdlink.data.notifications.MeshNotificationManager
 import com.fyp.crowdlink.domain.model.DiscoveredDevice
 import com.fyp.crowdlink.domain.model.Friend
 import com.fyp.crowdlink.domain.model.Message
@@ -32,7 +33,8 @@ class DeviceRepositoryImpl @Inject constructor(
     private val friendRepository: FriendRepository,
     private val messageRepository: MessageRepository,
     private val sharedPreferences: SharedPreferences,
-    private val meshRoutingEngine: MeshRoutingEngine
+    private val meshRoutingEngine: MeshRoutingEngine,
+    private val meshNotificationManager: MeshNotificationManager
 ) : DeviceRepository {
 
     private val scope = CoroutineScope(Dispatchers.IO)
@@ -51,6 +53,7 @@ class DeviceRepositoryImpl @Inject constructor(
             scope.launch {
                 val senderIdString = meshMessage.senderId.toString()
                 val content = meshMessage.payload.toString(Charsets.UTF_8)
+                val friend = friendRepository.getFriendById(senderIdString)
                 
                 val incomingMessage = Message(
                     messageId = meshMessage.messageId.toString(),
@@ -69,7 +72,14 @@ class DeviceRepositoryImpl @Inject constructor(
                 // UPDATE: Refresh last seen when a message is received
                 friendRepository.updateLastSeen(senderIdString, meshMessage.timestamp)
                 
-                Log.d("MeshRouting", "Saved incoming message and updated lastSeen for $senderIdString")
+                // Fire notification
+                meshNotificationManager.showMessageNotification(
+                    senderName = friend?.displayName ?: "Unknown",
+                    content = content,
+                    friendId = senderIdString
+                )
+                
+                Log.d("MeshRouting", "Saved incoming message, updated lastSeen and notified for $senderIdString")
             }
         }
 
