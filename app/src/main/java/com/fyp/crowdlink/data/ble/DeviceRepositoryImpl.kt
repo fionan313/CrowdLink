@@ -25,16 +25,6 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * DeviceRepositoryImpl
- *
- * This class implements the [DeviceRepository] interface and serves as the central point for managing
- * device discovery. It orchestrates the [BleScanner] and [BleAdvertiser] and combines the raw
- * scan results with the user's list of paired friends from the [FriendRepository].
- *
- * The primary output is the [nearbyFriends] flow, which emits a list of [NearbyFriend] objects,
- * representing discovered devices that are also confirmed friends, enriched with display names.
- */
 @Singleton
 class DeviceRepositoryImpl @Inject constructor(
     private val bleScanner: BleScanner,
@@ -47,20 +37,15 @@ class DeviceRepositoryImpl @Inject constructor(
 
     private val scope = CoroutineScope(Dispatchers.IO)
 
-    // Exposes the raw, unfiltered list of discovered devices directly from the scanner.
     override val discoveredDevices: StateFlow<List<DiscoveredDevice>> = bleScanner.discoveredDevices
 
-    // A new StateFlow that will hold the list of discovered devices that are confirmed friends.
     private val _nearbyFriends = MutableStateFlow<List<NearbyFriend>>(emptyList())
     val nearbyFriends: StateFlow<List<NearbyFriend>> = _nearbyFriends.asStateFlow()
 
     init {
-        // SET THIS FIRST — must happen before any messages are processed
         meshRoutingEngine.localDeviceId = sharedPreferences
             .getString("device_id", "") ?: ""
         
-        Log.d("MeshRouting", "localDeviceId set to: ${meshRoutingEngine.localDeviceId}")
-
         // Wire MeshRoutingEngine callbacks
         meshRoutingEngine.onMessageForMe = { meshMessage ->
             scope.launch {
@@ -80,36 +65,41 @@ class DeviceRepositoryImpl @Inject constructor(
                 )
                 
                 messageRepository.sendMessage(incomingMessage)
-                Log.d("MeshRouting", "Saved incoming message from $senderIdString")
+                
+                // UPDATE: Refresh last seen when a message is received
+                friendRepository.updateLastSeen(senderIdString, meshMessage.timestamp)
+                
+                Log.d("MeshRouting", "Saved incoming message and updated lastSeen for $senderIdString")
             }
         }
 
         meshRoutingEngine.onRelay = { relayedMessage ->
             messageRepository.addToRelayQueue(relayedMessage)
-            Log.d("MeshRouting", "Added relayed message ${relayedMessage.messageId} to relay queue")
         }
 
-        // wire relay queue to BLE transport
         bleScanner.observeRelayQueue(scope, messageRepository)
 
-        // Create a reactive pipeline that triggers whenever new devices are scanned OR the friends list changes.
+        // UPDATE: Sync real-time BLE discovery back to the database
+        bleScanner.discoveredDevices
+            .onEach { devices ->
+                devices.forEach { device ->
+                    scope.launch {
+                        if (friendRepository.isFriendPaired(device.deviceId)) {
+                            friendRepository.updateLastSeen(device.deviceId, device.lastSeen)
+                        }
+                    }
+                }
+            }
+            .launchIn(scope)
+
         combine(
-            bleScanner.discoveredDevices, // Flow of raw BLE scan results
-            friendRepository.getAllFriends()    // Flow of friends from the database
+            bleScanner.discoveredDevices,
+            friendRepository.getAllFriends()
         ) { rawDevices, friends ->
-            Log.d("DeviceRepositoryImpl", "Combining ${rawDevices.size} devices with ${friends.size} friends.")
-
-            // For efficient lookup, create a map of Friend's Device ID -> Friend object.
             val friendsMap = friends.associateBy { it.deviceId }
-
-            // Iterate through the raw scanned devices and filter for those that are in our friends map.
-            val nearbyFriendsList = rawDevices.mapNotNull { device ->
-                // Check if the scanned device's ID exists in our map of friends.
+            rawDevices.mapNotNull { device ->
                 val friend = friendsMap[device.deviceId]
-
                 if (friend != null) {
-                    Log.d("DeviceRepositoryImpl", "✓ Matched friend: ${friend.displayName}")
-                    // If a match is found, create a richer NearbyFriend object.
                     NearbyFriend(
                         deviceId = friend.deviceId,
                         displayName = friend.displayName,
@@ -117,50 +107,16 @@ class DeviceRepositoryImpl @Inject constructor(
                         estimatedDistance = device.estimatedDistance,
                         lastSeen = device.lastSeen
                     )
-                } else {
-                    // If no match, this device is not a paired friend, so we ignore it.
-                    null
-                }
+                } else null
             }
-            nearbyFriendsList
         }.onEach { result ->
-            // Emit the newly combined list to the _nearbyFriends StateFlow.
             _nearbyFriends.value = result
-        }.launchIn(scope) // Use the existing scope
+        }.launchIn(scope)
     }
 
-    /**
-     * Starts the BLE scanning process by delegating to the BleScanner.
-     */
-    override fun startDiscovery() {
-        bleScanner.startDiscovery()
-    }
-
-    /**
-     * Starts BLE advertising by delegating to the BleAdvertiser.
-     */
-    override fun stopDiscovery() {
-        bleScanner.stopDiscovery()
-    }
-
-    /**
-     * Starts BLE advertising by delegating to the BleAdvertiser.
-     */
-    override fun startAdvertising(myDeviceId: String) {
-        bleAdvertiser.startAdvertising(myDeviceId)
-    }
-
-    /**
-     * Stops BLE advertising by delegating to the BleAdvertiser.
-     */
-    override fun stopAdvertising() {
-        bleAdvertiser.stopAdvertising()
-    }
-
-    /**
-     * Retrieves the list of all paired friends as a one-shot operation.
-     */
-    override suspend fun getPairedFriends(): List<Friend> {
-        return friendRepository.getAllFriends().first()
-    }
+    override fun startDiscovery() = bleScanner.startDiscovery()
+    override fun stopDiscovery() = bleScanner.stopDiscovery()
+    override fun startAdvertising(myDeviceId: String) = bleAdvertiser.startAdvertising(myDeviceId)
+    override fun stopAdvertising() = bleAdvertiser.stopAdvertising()
+    override suspend fun getPairedFriends(): List<Friend> = friendRepository.getAllFriends().first()
 }
