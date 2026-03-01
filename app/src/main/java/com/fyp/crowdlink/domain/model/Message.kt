@@ -22,9 +22,14 @@ data class Message(
     val deliveryStatus: MessageStatus = MessageStatus.PENDING,
     val ttl: Int = 5,
     val hopCount: Int = 0,
-    val transportType: String = "Mesh" // BLE, WiFi, ESP32, or Mesh
+    val transportType: TransportType,
+    val relayNodes: String = ""
 )
 
 enum class MessageStatus {
     PENDING, SENT, DELIVERED, FAILED
+}
+
+enum class TransportType {
+    BLE, WIFI, ESP32, MESH, USB
 }

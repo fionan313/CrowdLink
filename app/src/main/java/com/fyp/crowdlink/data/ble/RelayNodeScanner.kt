@@ -1,5 +1,6 @@
 package com.fyp.crowdlink.data.ble
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
@@ -9,6 +10,7 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.ParcelUuid
 import android.util.Log
+import androidx.annotation.RequiresPermission
 import com.fyp.crowdlink.domain.model.RelayNode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,6 +37,7 @@ class RelayNodeScanner @Inject constructor(
     val discoveredRelays: StateFlow<List<RelayNode>> = _discoveredRelays.asStateFlow()
 
     private val scanCallback = object : ScanCallback() {
+        @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val device = result.device
             val name = result.scanRecord?.deviceName ?: device.name ?: "Unknown"

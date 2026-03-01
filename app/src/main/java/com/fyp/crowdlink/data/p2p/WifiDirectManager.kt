@@ -11,6 +11,7 @@ import android.net.wifi.p2p.WifiP2pInfo
 import android.net.wifi.p2p.WifiP2pManager
 import android.util.Log
 import com.fyp.crowdlink.domain.model.Message
+import com.fyp.crowdlink.domain.model.TransportType
 import com.fyp.crowdlink.domain.repository.MessageRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -239,7 +240,8 @@ class WifiDirectManager @Inject constructor(
                         senderId = senderId,
                         receiverId = "me",
                         content = content,
-                        isSentByMe = false
+                        isSentByMe = false,
+                        transportType = TransportType.WIFI
                     )
                     messageRepository.sendMessage(message)
                     // TODO: Notify MeshRoutingEngine so it marks it as seen
@@ -253,7 +255,8 @@ class WifiDirectManager @Inject constructor(
                             senderId = senderId,
                             receiverId = "me",
                             content = content,
-                            isSentByMe = false
+                            isSentByMe = false,
+                            transportType = TransportType.WIFI
                         )
                         messageRepository.sendMessage(message)
                     }

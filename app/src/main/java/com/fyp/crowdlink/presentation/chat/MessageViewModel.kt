@@ -8,6 +8,7 @@ import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
 import com.fyp.crowdlink.data.p2p.WifiDirectManager
 import com.fyp.crowdlink.domain.model.Message
 import com.fyp.crowdlink.domain.model.MessageStatus
+import com.fyp.crowdlink.domain.model.TransportType
 import com.fyp.crowdlink.domain.repository.MessageRepository
 import com.fyp.crowdlink.domain.repository.UserProfileRepository
 import com.fyp.crowdlink.domain.usecase.GetMessagesUseCase
@@ -127,7 +128,7 @@ class MessageViewModel @Inject constructor(
                 isSentByMe = true,
                 deliveryStatus = MessageStatus.PENDING,
                 hopCount = 0,
-                transportType = "Mesh"
+                transportType = TransportType.MESH
             )
             sendMessageUseCase(localMessage)
 

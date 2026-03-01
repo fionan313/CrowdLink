@@ -8,6 +8,7 @@ import com.fyp.crowdlink.domain.model.Friend
 import com.fyp.crowdlink.domain.model.Message
 import com.fyp.crowdlink.domain.model.MessageStatus
 import com.fyp.crowdlink.domain.model.NearbyFriend
+import com.fyp.crowdlink.domain.model.TransportType
 import com.fyp.crowdlink.domain.repository.DeviceRepository
 import com.fyp.crowdlink.domain.repository.FriendRepository
 import com.fyp.crowdlink.domain.repository.MessageRepository
@@ -75,7 +76,7 @@ class DeviceRepositoryImpl @Inject constructor(
                     isSentByMe = false,
                     deliveryStatus = MessageStatus.DELIVERED,
                     hopCount = meshMessage.hopCount,
-                    transportType = "Mesh"
+                    transportType = TransportType.MESH
                 )
                 
                 messageRepository.sendMessage(incomingMessage)
