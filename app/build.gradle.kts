@@ -43,6 +43,9 @@ android {
 
     // Ensure 16 KB page size compatibility for Android 15+
     packaging {
+        resources {
+            excludes += "/META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+        }
         jniLibs {
             // Setting useLegacyPackaging to false ensures that native libraries 
             // are page-aligned and uncompressed in the APK, which is required 
@@ -65,11 +68,13 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.extended)
 
     // Room Database (Persistence)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     implementation(libs.identity.jvm)
+    implementation(libs.generativeai)
     ksp(libs.androidx.room.compiler) // Annotation processor for Room
 
     // QR Code generation & scanning (ZXing)
@@ -100,4 +105,6 @@ dependencies {
     // Debugging Tools
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+
+    implementation(libs.timber)
 }

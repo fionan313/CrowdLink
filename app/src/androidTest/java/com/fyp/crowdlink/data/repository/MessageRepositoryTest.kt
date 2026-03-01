@@ -4,9 +4,10 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.fyp.crowdlink.data.local.FriendDatabase
+import com.fyp.crowdlink.data.local.AppDatabase
 import com.fyp.crowdlink.domain.model.Message
 import com.fyp.crowdlink.domain.model.MessageStatus
+import com.fyp.crowdlink.domain.model.TransportType
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -18,7 +19,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class MessageRepositoryIntegrationTest {
     
-    private lateinit var database: FriendDatabase
+    private lateinit var database: AppDatabase
     private lateinit var repository: MessageRepositoryImpl
     
     @Before
@@ -26,7 +27,7 @@ class MessageRepositoryIntegrationTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         database = Room.inMemoryDatabaseBuilder(
             context,
-            FriendDatabase::class.java
+            AppDatabase::class.java
         ).allowMainThreadQueries().build()
         
         repository = MessageRepositoryImpl(database.messageDao())
@@ -44,7 +45,8 @@ class MessageRepositoryIntegrationTest {
             senderId = "ME",
             receiverId = "FRIEND",
             content = "Hello!",
-            isSentByMe = true
+            isSentByMe = true,
+            transportType = TransportType.MESH
         )
         
         // When
@@ -60,9 +62,9 @@ class MessageRepositoryIntegrationTest {
     @Test
     fun getMessagesWithFriend_returnsOnlyRelevantMessages() = runBlocking {
         // Given
-        val message1 = Message(senderId = "ME", receiverId = "FRIEND1", content = "Msg to Friend 1", isSentByMe = true)
-        val message2 = Message(senderId = "ME", receiverId = "FRIEND2", content = "Msg to Friend 2", isSentByMe = true)
-        val message3 = Message(senderId = "FRIEND1", receiverId = "ME", content = "Reply from Friend 1", isSentByMe = false)
+        val message1 = Message(senderId = "ME", receiverId = "FRIEND1", content = "Msg to Friend 1", isSentByMe = true, transportType = TransportType.MESH)
+        val message2 = Message(senderId = "ME", receiverId = "FRIEND2", content = "Msg to Friend 2", isSentByMe = true, transportType = TransportType.MESH)
+        val message3 = Message(senderId = "FRIEND1", receiverId = "ME", content = "Reply from Friend 1", isSentByMe = false, transportType = TransportType.MESH)
         
         repository.sendMessage(message1)
         repository.sendMessage(message2)
@@ -78,7 +80,7 @@ class MessageRepositoryIntegrationTest {
     @Test
     fun updateMessageStatus_statusIsUpdated() = runBlocking {
         // Given
-        val message = Message(senderId = "ME", receiverId = "FRIEND", content = "Test", isSentByMe = true)
+        val message = Message(senderId = "ME", receiverId = "FRIEND", content = "Test", isSentByMe = true, transportType = TransportType.MESH)
         val messageId = repository.sendMessage(message)
         
         // When

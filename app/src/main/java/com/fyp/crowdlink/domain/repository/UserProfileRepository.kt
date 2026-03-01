@@ -45,4 +45,9 @@ interface UserProfileRepository {
      * This is typically used when resetting the app or clearing user data.
      */
     suspend fun deleteUserProfile()
+
+    /**
+     * Retrieves a unique, persistent ID for this device.
+     */
+    fun getPersistentDeviceId(): String
 }

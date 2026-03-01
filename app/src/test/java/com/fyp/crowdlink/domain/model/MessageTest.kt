@@ -14,7 +14,8 @@ class MessageTest {
             content = "Hello, World!",
             timestamp = 1234567890L,
             deliveryStatus = MessageStatus.SENT,
-            isSentByMe = true
+            isSentByMe = true,
+            transportType = TransportType.MESH
         )
 
         assertEquals(1L, message.id)
@@ -31,7 +32,8 @@ class MessageTest {
             senderId = "SENDER",
             receiverId = "RECEIVER",
             content = "Test",
-            isSentByMe = true
+            isSentByMe = true,
+            transportType = TransportType.MESH
         )
 
         assertEquals(MessageStatus.PENDING, message.deliveryStatus)
@@ -43,14 +45,16 @@ class MessageTest {
             senderId = "ME",
             receiverId = "FRIEND",
             content = "Sent",
-            isSentByMe = true
+            isSentByMe = true,
+            transportType = TransportType.MESH
         )
 
         val receivedMessage = Message(
             senderId = "FRIEND",
             receiverId = "ME",
             content = "Received",
-            isSentByMe = false
+            isSentByMe = false,
+            transportType = TransportType.MESH
         )
 
         assertTrue(sentMessage.isSentByMe)
@@ -64,7 +68,8 @@ class MessageTest {
             receiverId = "FRIEND",
             content = "Test",
             isSentByMe = true,
-            deliveryStatus = MessageStatus.PENDING
+            deliveryStatus = MessageStatus.PENDING,
+            transportType = TransportType.MESH
         )
 
         val sentMessage = message.copy(deliveryStatus = MessageStatus.SENT)

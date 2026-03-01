@@ -1,6 +1,12 @@
 package com.fyp.crowdlink.data.ble
 
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCallback
+import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
@@ -9,8 +15,14 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.ParcelUuid
 import android.util.Log
+import com.fyp.crowdlink.data.mesh.MeshMessageSerialiser
+import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
 import com.fyp.crowdlink.domain.model.DiscoveredDevice
+import com.fyp.crowdlink.domain.model.MeshMessage
+import com.fyp.crowdlink.domain.repository.MessageRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,79 +30,221 @@ import java.nio.ByteBuffer
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 
-/**
- * BleScanner
- *
- * This class is responsible for scanning for nearby devices using Bluetooth Low Energy (BLE).
- * It filters scan results to find only devices advertising the CrowdLink service UUID.
- *
- * Key features:
- * - Scans for specific Service UUID to avoid picking up unrelated BLE devices.
- * - Extracts the custom device ID embedded in the advertisement service data.
- * - Calculates estimated distance based on RSSI (Received Signal Strength Indicator).
- * - Implements RSSI smoothing (moving average) to reduce signal noise.
- */
 @Singleton
 class BleScanner @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val meshRoutingEngine: MeshRoutingEngine,
+    private val serializer: MeshMessageSerialiser
 ) {
+    private val scope = CoroutineScope(Dispatchers.IO)
+
     init {
         Log.wtf("BLE_SCANNER", "BleScanner CREATED!")
+
+        // Wire relay callback — when engine decides to relay,
+        // broadcast to all currently connected peers
+        // Updated to handle suspend function
+        meshRoutingEngine.onRelay = { message ->
+            relayToAllPeers(message)
+        }
     }
-    
+
     private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
-    
-    // NOTE: bluetoothLeScanner can be null if Bluetooth is off when the app starts. 
-    // We should fetch it dynamically via the getter.
-    private val bluetoothLeScanner: BluetoothLeScanner? 
+    private val bluetoothLeScanner: BluetoothLeScanner?
         get() = bluetoothAdapter?.bluetoothLeScanner
-    
-    // StateFlow to emit the list of currently discovered devices to the UI
+
     private val _discoveredDevices = MutableStateFlow<List<DiscoveredDevice>>(emptyList())
     val discoveredDevices: StateFlow<List<DiscoveredDevice>> = _discoveredDevices.asStateFlow()
-    
-    // Cache for RSSI smoothing: stores the last few RSSI values for each device ID
+
     private val deviceCache = mutableMapOf<String, MutableList<Int>>()
     private var isScanning = false
-    
-    /**
-     * Starts the BLE scanning process.
-     * Configures filters to look for the specific app service UUID and sets scan mode to low latency.
-     */
+
+    //  active GATT connections keyed by device address
+    private val activeConnections = mutableMapOf<String, BluetoothGatt>()
+
+    //  messages queued while waiting for connection
+    private val pendingMessages = mutableMapOf<String, MutableList<MeshMessage>>()
+
+    //  map of device address to BluetoothDevice for reconnection
+    private val knownDevices = mutableMapOf<String, BluetoothDevice>()
+
+    //  GATT client callback
+    @SuppressLint("MissingPermission")
+    private fun buildGattCallback(deviceAddress: String): BluetoothGattCallback {
+        return object : BluetoothGattCallback() {
+
+            override fun onConnectionStateChange(
+                gatt: BluetoothGatt,
+                status: Int,
+                newState: Int
+            ) {
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    Log.w("BLE_SCANNER", "GATT connection failed for $deviceAddress status=$status")
+                    activeConnections.remove(deviceAddress)
+                    pendingMessages.remove(deviceAddress)
+                    gatt.close()
+                    return
+                }
+                when (newState) {
+                    BluetoothProfile.STATE_CONNECTED -> {
+                        Log.d("BLE_SCANNER", "GATT connected to $deviceAddress")
+                        gatt.requestMtu(512)
+                    }
+                    BluetoothProfile.STATE_DISCONNECTED -> {
+                        Log.d("BLE_SCANNER", "GATT disconnected from $deviceAddress")
+                        activeConnections.remove(deviceAddress)
+                        pendingMessages.remove(deviceAddress)
+                        gatt.close()
+                    }
+                }
+            }
+
+            override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+                Log.d("BLE_SCANNER", "MTU changed to $mtu for $deviceAddress")
+                gatt.discoverServices()  // NOW discover services
+            }
+
+            override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    Log.w("BLE_SCANNER", "Service discovery failed on $deviceAddress status=$status")
+                    return
+                }
+
+                val characteristic = gatt
+                    .getService(BleAdvertiser.SERVICE_UUID)
+                    ?.getCharacteristic(BleAdvertiser.MESH_CHARACTERISTIC_UUID)
+
+                if (characteristic == null) {
+                    Log.w("BLE_SCANNER", "Mesh characteristic not found on $deviceAddress")
+                    gatt.disconnect()
+                    return
+                }
+
+                // Store connection for direct sends after flush
+                activeConnections[deviceAddress] = gatt
+                Log.d("BLE_SCANNER", "Services discovered on $deviceAddress, flushing queue")
+                flushPendingMessages(deviceAddress, gatt, characteristic)
+            }
+
+            @SuppressLint("MissingPermission")
+            override fun onCharacteristicWrite(
+                gatt: BluetoothGatt,
+                characteristic: BluetoothGattCharacteristic,
+                status: Int
+            ) {
+                val result = if (status == BluetoothGatt.GATT_SUCCESS) "OK" else "FAILED($status)"
+                Log.d("BLE_SCANNER", "Write to $deviceAddress: $result")
+            }
+        }
+    }
+
+    //  connect to a peer and send a mesh message
+    @SuppressLint("MissingPermission")
+    fun sendMeshMessage(message: MeshMessage, device: BluetoothDevice) {
+        val address = device.address
+
+        // Only block if actively connected, not if pending
+        if (activeConnections.containsKey(address)) {
+            Log.d("BLE_SCANNER", "Already connected to $address, sending directly")
+            // send directly instead of skipping
+            val gatt = activeConnections[address]!!
+            val characteristic = gatt
+                .getService(BleAdvertiser.SERVICE_UUID)
+                ?.getCharacteristic(BleAdvertiser.MESH_CHARACTERISTIC_UUID)
+            
+            val bytes = serializer.serialize(message) ?: run {
+                Log.e("BLE_SCANNER", "Failed to serialize mesh message for direct send")
+                return
+            }
+            
+            characteristic?.let {
+                it.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                it.value = bytes
+                gatt.writeCharacteristic(it)
+            }
+            return
+        }
+
+        knownDevices[address] = device
+
+        val bytes = serializer.serialize(message) ?: run {
+            Log.e("BLE_SCANNER", "Failed to serialize mesh message")
+            return
+        }
+
+        pendingMessages.getOrPut(address) { mutableListOf() }.add(message)
+        Log.d("BLE_SCANNER", "Queuing message, connecting to $address")
+        device.connectGatt(context, false, buildGattCallback(address))
+    }
+
+    //  relay a message to all currently connected peers
+    @SuppressLint("MissingPermission")
+    private fun relayToAllPeers(message: MeshMessage) {
+        val bytes = serializer.serialize(message) ?: return
+
+        activeConnections.forEach { (address, gatt) ->
+            val characteristic = gatt
+                .getService(BleAdvertiser.SERVICE_UUID)
+                ?.getCharacteristic(BleAdvertiser.MESH_CHARACTERISTIC_UUID)
+
+            characteristic?.let {
+                it.value = bytes
+                val success = gatt.writeCharacteristic(it)
+                Log.d("BLE_SCANNER", "Relayed to $address ttl=${message.ttl} success=$success")
+            }
+        }
+    }
+
+    //  flush queued messages after connection established
+    @SuppressLint("MissingPermission")
+    private fun flushPendingMessages(
+        deviceAddress: String,
+        gatt: BluetoothGatt,
+        characteristic: BluetoothGattCharacteristic
+    ) {
+        val queue = pendingMessages.remove(deviceAddress) ?: return
+        val first = queue.firstOrNull() ?: return
+        val bytes = serializer.serialize(first) ?: return
+
+        characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+        characteristic.value = bytes
+        val success = gatt.writeCharacteristic(characteristic)
+        Log.d("BLE_SCANNER", "Flushed pending message to $deviceAddress success=$success")
+    }
+
+    // --- Existing methods below — unchanged ---
+
     fun startDiscovery() {
         if (isScanning) {
             Log.d("BLE_SCANNER", "Already scanning")
             return
         }
-        
         if (bluetoothAdapter == null) {
-            Log.e("BLE_SCANNER", "Bluetooth Adapter is NULL (Device does not support Bluetooth?)")
+            Log.e("BLE_SCANNER", "Bluetooth Adapter is NULL")
             return
         }
-        
         if (!bluetoothAdapter.isEnabled) {
-            Log.e("BLE_SCANNER", "Bluetooth is DISABLED. Cannot start scan.")
+            Log.e("BLE_SCANNER", "Bluetooth is DISABLED")
             return
         }
-        
         if (bluetoothLeScanner == null) {
-            Log.e("BLE_SCANNER", "Bluetooth LE Scanner is NULL (Bluetooth might be off or unavailable)")
+            Log.e("BLE_SCANNER", "BLE Scanner is NULL")
             return
         }
-        
-        Log.d("BLE_SCANNER", "Starting BLE scan")
-        
-        // Filter specifically for our app's Service UUID
+
         val scanFilter = ScanFilter.Builder()
             .setServiceUuid(ParcelUuid(BleAdvertiser.SERVICE_UUID))
             .build()
-        
-        // Low Latency mode is battery intensive but provides faster results
+
         val scanSettings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
-        
+
         try {
             bluetoothLeScanner?.startScan(listOf(scanFilter), scanSettings, scanCallback)
             isScanning = true
@@ -99,132 +253,105 @@ class BleScanner @Inject constructor(
             Log.e("BLE_SCANNER", "✗ Permission denied", e)
         }
     }
-    
-    /**
-     * Stops the BLE scanning process and clears the current results.
-     */
+
     fun stopDiscovery() {
         if (!isScanning) return
-        
         try {
             bluetoothLeScanner?.stopScan(scanCallback)
             isScanning = false
             deviceCache.clear()
-            _discoveredDevices.value = emptyList() // Clear UI list
+            _discoveredDevices.value = emptyList()
             Log.d("BLE_SCANNER", "Scan stopped")
         } catch (e: SecurityException) {
             Log.e("BLE_SCANNER", "Permission denied when stopping", e)
         }
     }
-    
-    /**
-     * Callback for handling BLE scan results.
-     */
+
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
             result?.let {
                 val rssi = it.rssi
-                
-                // Extract device ID from SERVICE DATA as UUID bytes
-                // The device ID was compressed into 16 bytes in BleAdvertiser
-                val serviceData = it.scanRecord?.getServiceData(ParcelUuid(BleAdvertiser.SERVICE_UUID))
+                val serviceData = it.scanRecord
+                    ?.getServiceData(ParcelUuid(BleAdvertiser.SERVICE_UUID))
+
                 val deviceId = serviceData?.let { bytes ->
                     if (bytes.size == 16) {
-                        // Convert 16 bytes back to UUID string
                         try {
                             val buffer = ByteBuffer.wrap(bytes)
-                            val mostSigBits = buffer.long
-                            val leastSigBits = buffer.long
-                            val uuid = UUID(mostSigBits, leastSigBits)
-                            val uuidString = uuid.toString()
-                            Log.d("BLE_SCANNER", "✓ Extracted device ID from bytes: $uuidString")
-                            uuidString
+                            val msb = buffer.long
+                            val lsb = buffer.long
+                            UUID(msb, lsb).toString()
                         } catch (e: Exception) {
-                            Log.e("BLE_SCANNER", "Failed to parse UUID bytes", e)
                             null
                         }
-                    } else {
-                        Log.w("BLE_SCANNER", "Invalid service data size: ${bytes.size}, expected 16")
-                        null
-                    }
+                    } else null
                 }
-                
+
                 if (deviceId != null) {
-                    Log.d("BLE_SCANNER", "Discovered: $deviceId, RSSI: $rssi")
-                    // It's one of ours! Update the device list with new signal info
+                    //  store BluetoothDevice for later GATT connections
+                    knownDevices[it.device.address] = it.device
                     updateDeviceRssi(deviceId, rssi)
                 }
             }
         }
-        
+
         override fun onScanFailed(errorCode: Int) {
-            val errorMsg = when (errorCode) {
-                SCAN_FAILED_ALREADY_STARTED -> "Already started"
-                SCAN_FAILED_APPLICATION_REGISTRATION_FAILED -> "App registration failed"
-                SCAN_FAILED_INTERNAL_ERROR -> "Internal error"
-                SCAN_FAILED_FEATURE_UNSUPPORTED -> "Feature unsupported"
-                else -> "Unknown error"
-            }
-            Log.e("BLE_SCANNER", "✗ Scan failed: $errorMsg (code: $errorCode)")
+            Log.e("BLE_SCANNER", "Scan failed: $errorCode")
             isScanning = false
         }
     }
-    
-    /**
-     * Updates the RSSI for a discovered device and recalculates distance using a moving average.
-     *
-     * @param deviceId The unique identifier of the device.
-     * @param rssi The raw RSSI value from the latest scan result.
-     */
+
+    fun observeRelayQueue(scope: CoroutineScope, repository: MessageRepository) {
+        repository.getRelayQueue()
+            .distinctUntilChanged()  // only react to actual changes
+            .onEach { messages ->
+                if (messages.isEmpty()) return@onEach
+                // Only send the FIRST unsent message, not all of them
+                val message = messages.first()
+                Log.d("BLE_SCANNER", "Processing 1 message from relay queue, ${knownDevices.size} known devices")
+                
+                // Issue 1 Fix: Move removal to BEFORE sending to prevent duplicate processing 
+                // if the Flow emits again before the database operation completes.
+                repository.removeFromRelayQueue(message.messageId)
+
+                knownDevices.values.forEach { device ->
+                    sendMeshMessage(message, device)
+                }
+            }
+            .launchIn(scope)
+    }
+
     private fun updateDeviceRssi(deviceId: String, rssi: Int) {
-        // Add new RSSI to history for smoothing
-        val rssiHistory = deviceCache.getOrPut(deviceId) { mutableListOf() }
-        rssiHistory.add(rssi)
-        
-        // Keep only the last 10 readings
-        if (rssiHistory.size > 10) {
-            rssiHistory.removeAt(0)
-        }
-        
-        // Calculate average RSSI to reduce noise
-        val smoothedRssi = rssiHistory.average().toInt()
-        val distance = calculateDistance(smoothedRssi)
-        
-        Log.d("BLE_SCANNER", "Device: $deviceId, Smoothed RSSI: $smoothedRssi, Distance: ${String.format("%.1f", distance)}m")
-        
-        // Update the list of discovered devices
-        val currentDevices = _discoveredDevices.value.toMutableList()
-        val existingIndex = currentDevices.indexOfFirst { it.deviceId == deviceId }
-        
-        val device = DiscoveredDevice(
+        val readings = deviceCache.getOrPut(deviceId) { mutableListOf() }
+        readings.add(rssi)
+        if (readings.size > RSSI_SAMPLE_SIZE) readings.removeAt(0)
+
+        val smoothedRssi = readings.average().toInt()
+        val distance = estimateDistance(smoothedRssi)
+
+        val currentList = _discoveredDevices.value.toMutableList()
+        val existing = currentList.indexOfFirst { it.deviceId == deviceId }
+
+        val updated = DiscoveredDevice(
             deviceId = deviceId,
             rssi = smoothedRssi,
             estimatedDistance = distance,
             lastSeen = System.currentTimeMillis()
         )
-        
-        if (existingIndex >= 0) {
-            currentDevices[existingIndex] = device
-        } else {
-            currentDevices.add(device)
-        }
-        
-        _discoveredDevices.value = currentDevices
+
+        if (existing >= 0) currentList[existing] = updated
+        else currentList.add(updated)
+
+        _discoveredDevices.value = currentList
     }
-    
-    /**
-     * Calculates the estimated distance to the device based on RSSI.
-     * Uses the Log-Distance Path Loss Model.
-     *
-     * @param rssi The smoothed RSSI value.
-     * @return Estimated distance in meters.
-     */
-    private fun calculateDistance(rssi: Int): Double {
-        if (rssi == 0) return -1.0
-        
-        val txPower = -59 // Measured RSSI at 1 meter (calibrated constant)
-        val pathLossExponent = 2.5 // Environmental factor (2.0-4.0 for outdoors/crowds)
-        
-        return Math.pow(10.0, (txPower - rssi) / (10.0 * pathLossExponent))
+
+    private fun estimateDistance(rssi: Int): Double {
+        val txPower = -59
+        return if (rssi == 0) -1.0
+        else Math.pow(10.0, (txPower - rssi) / (10.0 * 2.5))
+    }
+
+    companion object {
+        private const val RSSI_SAMPLE_SIZE = 10
     }
 }

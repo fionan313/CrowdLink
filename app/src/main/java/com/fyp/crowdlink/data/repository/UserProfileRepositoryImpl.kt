@@ -1,9 +1,12 @@
 package com.fyp.crowdlink.data.repository
 
+import android.content.SharedPreferences
+import androidx.core.content.edit
 import com.fyp.crowdlink.data.local.dao.UserProfileDao
 import com.fyp.crowdlink.domain.model.UserProfile
 import com.fyp.crowdlink.domain.repository.UserProfileRepository
 import kotlinx.coroutines.flow.Flow
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -16,7 +19,8 @@ import javax.inject.Singleton
  */
 @Singleton
 class UserProfileRepositoryImpl @Inject constructor(
-    private val userProfileDao: UserProfileDao
+    private val userProfileDao: UserProfileDao,
+    private val sharedPreferences: SharedPreferences
 ) : UserProfileRepository {
     
     /**
@@ -53,5 +57,14 @@ class UserProfileRepositoryImpl @Inject constructor(
      */
     override suspend fun deleteUserProfile() {
         userProfileDao.deleteUserProfile()
+    }
+
+    override fun getPersistentDeviceId(): String {
+        val key = "device_id"
+        return sharedPreferences.getString(key, null) ?: run {
+            val newId = UUID.randomUUID().toString()
+            sharedPreferences.edit { putString(key, newId) }
+            newId
+        }
     }
 }

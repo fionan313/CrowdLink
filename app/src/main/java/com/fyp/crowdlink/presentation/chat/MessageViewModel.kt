@@ -1,12 +1,16 @@
 package com.fyp.crowdlink.presentation.chat
 
-import android.content.SharedPreferences
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.fyp.crowdlink.data.ble.RelayNodeConnection
+import com.fyp.crowdlink.data.ble.BleScanner
+import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
 import com.fyp.crowdlink.data.p2p.WifiDirectManager
 import com.fyp.crowdlink.domain.model.Message
 import com.fyp.crowdlink.domain.model.MessageStatus
+import com.fyp.crowdlink.domain.model.TransportType
+import com.fyp.crowdlink.domain.repository.MessageRepository
+import com.fyp.crowdlink.domain.repository.UserProfileRepository
 import com.fyp.crowdlink.domain.usecase.GetMessagesUseCase
 import com.fyp.crowdlink.domain.usecase.SendMessageUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -14,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -21,47 +26,65 @@ import javax.inject.Inject
 /**
  * MessageViewModel
  *
- * This ViewModel manages the UI state for the peer-to-peer messaging feature.
- * Now includes relay node support for extended range via ESP32 devices.
+ * This ViewModel manages the UI state for the mesh-based messaging feature.
+ * It uses the MeshRoutingEngine as the primary send path, with WiFi Direct
+ * and ESP32 acting as background fallback transports observing the relay queue.
  */
 @HiltViewModel
 class MessageViewModel @Inject constructor(
     private val wifiDirectManager: WifiDirectManager,
+    private val bleScanner: BleScanner,
     private val sendMessageUseCase: SendMessageUseCase,
     private val getMessagesUseCase: GetMessagesUseCase,
-    private val sharedPreferences: SharedPreferences,
-    private val relayNodeConnection: RelayNodeConnection, // ADDED
+    private val userProfileRepository: UserProfileRepository,
+    private val meshRoutingEngine: MeshRoutingEngine,
+    private val messageRepository: MessageRepository
 ) : ViewModel() {
 
     private val _myDeviceId = MutableStateFlow<String>("")
     val myDeviceId: StateFlow<String> = _myDeviceId.asStateFlow()
 
-    // Expose the list of discovered WiFi Direct peers to the UI
+    // Expose the list of discovered WiFi Direct peers for connection setup
     val peers = wifiDirectManager.peers
 
-    // Expose the current connection status
-    val connectionInfo = wifiDirectManager.connectionInfo
+    // Expose connection info for status display
+    val wifiDirectConnectionInfo = wifiDirectManager.connectionInfo
 
-    // Expose the IP address of the connected peer
-    val peerIp = wifiDirectManager.peerIp
+    // Mesh status - Active if we are scanning for other BLE mesh devices
+    private val _isMeshActive = MutableStateFlow(true)
+    val isMeshActive: StateFlow<Boolean> = _isMeshActive.asStateFlow()
 
-    // ADDED: Relay connection status
-    val isRelayConnected = relayNodeConnection.isConnected
+    // Combined discovery status for the UI
+    val discoveryStatus: StateFlow<String> = combine(
+        wifiDirectConnectionInfo,
+        bleScanner.discoveredDevices
+    ) { wifi, bleDevices ->
+        when {
+            wifi?.groupFormed == true -> "Connected (WiFi Direct)"
+            bleDevices.isNotEmpty() -> "Mesh Active (${bleDevices.size} peers)"
+            else -> "Searching for peers..."
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "Initialising...")
 
     init {
-        _myDeviceId.value = sharedPreferences.getString("device_id", "") ?: ""
+        _myDeviceId.value = userProfileRepository.getPersistentDeviceId()
+        // Ensure routing engine has the correct ID for header generation
+        meshRoutingEngine.localDeviceId = _myDeviceId.value
     }
 
     fun onResume() {
         wifiDirectManager.register()
+        bleScanner.startDiscovery()
     }
 
     fun onPause() {
         wifiDirectManager.unregister()
+        bleScanner.stopDiscovery()
     }
 
     fun discover() {
         wifiDirectManager.discoverPeers()
+        bleScanner.startDiscovery()
     }
 
     fun connect(deviceAddress: String) {
@@ -85,63 +108,39 @@ class MessageViewModel @Inject constructor(
     }
 
     /**
-     * Sends a text message to the currently connected friend.
-     *
-     * Transmission strategy:
-     * 1. Save message to local database
-     * 2. Try WiFi Direct first (if peer is directly connected)
-     * 3. Fall back to ESP32 relay if WiFi Direct unavailable
+     * Sends a text message via the Mesh Routing Engine.
+     * The engine adds it to the relay queue, which is then observed by:
+     * 1. BleScanner (for BLE Mesh relay)
+     * 2. WifiDirectManager (for WiFi fallback)
+     * 3. RelayNodeConnection (for ESP32 fallback)
      */
     fun sendText(content: String, friendId: String) {
         val myId = _myDeviceId.value
 
+        Log.d("MessageViewModel", "Adding to relay queue: $content")
+
         viewModelScope.launch {
-            val message = Message(
+            // 1. Save to local database for UI display immediately
+            val localMessage = Message(
                 senderId = myId,
                 receiverId = friendId,
                 content = content,
                 isSentByMe = true,
-                deliveryStatus = MessageStatus.PENDING
+                deliveryStatus = MessageStatus.PENDING,
+                hopCount = 0,
+                transportType = TransportType.MESH
             )
+            sendMessageUseCase(localMessage)
 
-            // 1. Save message to Room database locally
-            val messageId = sendMessageUseCase(message)
-            val messageWithId = message.copy(id = messageId)
-
-            // 2. Try direct WiFi Direct connection first
-            val targetIp = peerIp.value
-            if (targetIp != null) {
-                // Direct connection available - use WiFi Direct
-                wifiDirectManager.sendMessage(targetIp, messageWithId)
-            } else if (isRelayConnected.value) {
-                // No direct connection - use ESP32 relay
-                val relayPayload = "${messageWithId.receiverId}:${messageWithId.content}"
-                val success = relayNodeConnection.sendMessage(relayPayload)
-
-                if (!success) {
-                    // Mark as failed if relay send fails
-                    updateMessageStatus(messageId, MessageStatus.FAILED)
-                }
-            } else {
-                // No connection at all - mark as failed
-                updateMessageStatus(messageId, MessageStatus.FAILED)
-            }
+            // 2. Hand off to MeshRoutingEngine
+            val meshMessage = meshRoutingEngine.createOutbound(
+                senderId = myId,
+                recipientId = friendId,
+                payload = content.toByteArray(Charsets.UTF_8)
+            )
+            
+            // 3. Persist to relay queue - background transports will handle the rest
+            messageRepository.addToRelayQueue(meshMessage)
         }
-    }
-
-    /**
-     * ADDED: Helper function to update message delivery status
-     */
-    private suspend fun updateMessageStatus(messageId: Long, status: MessageStatus) {
-        // You'll need to add this to your MessageRepository
-        // messageRepository.updateMessageStatus(messageId, status)
-    }
-
-    /**
-     * ADDED: Cleanup relay connection when ViewModel is cleared
-     */
-    override fun onCleared() {
-        super.onCleared()
-        relayNodeConnection.disconnect()
     }
 }

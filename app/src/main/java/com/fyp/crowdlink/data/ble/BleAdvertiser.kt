@@ -1,67 +1,160 @@
 package com.fyp.crowdlink.data.ble
 
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattServer
+import android.bluetooth.BluetoothGattServerCallback
+import android.bluetooth.BluetoothGattService
+import android.bluetooth.BluetoothManager
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
 import android.content.Context
 import android.os.ParcelUuid
 import android.util.Log
+import com.fyp.crowdlink.data.mesh.MeshMessageSerialiser
+import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.nio.ByteBuffer
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * BleAdvertiser
- *
- * This class is responsible for broadcasting the local device's presence using Bluetooth Low Energy (BLE) Advertising.
- * It broadcasts the device's unique ID so that other nearby devices running the app can discover it.
- *
- * The advertising packet includes:
- * - Service UUID: Identifies the app to filtering scanners.
- * - Service Data: Contains the device's UUID (compressed to 16 bytes).
- */
 @Singleton
 class BleAdvertiser @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val meshRoutingEngine: MeshRoutingEngine,
+    private val serializer: MeshMessageSerialiser
 ) {
     init {
-        Log.wtf("BLE_ADVERTISER", "BleAdvertiser CREATED!")
+        android.util.Log.wtf("BLE_ADVERTISER", "BleAdvertiser CREATED!")
     }
+
     private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
+    private val bluetoothManager: BluetoothManager =
+        context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+
     private var isAdvertising = false
-    
-    /**
-     * Starts advertising the local device's presence.
-     *
-     * @param myDeviceId The unique UUID string of the local device.
-     */
+    private var gattServer: BluetoothGattServer? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    // GATT server callback handles incoming mesh packets
+    @SuppressLint("MissingPermission")
+    private val gattServerCallback = object : BluetoothGattServerCallback() {
+
+        override fun onConnectionStateChange(
+            device: BluetoothDevice,
+            status: Int,
+            newState: Int
+        ) {
+            Log.d("BLE_ADVERTISER", "GATT connection state changed: device=${device.address} newState=$newState")
+        }
+
+        // ADD THIS
+        override fun onServiceAdded(status: Int, service: BluetoothGattService?) {
+            Log.d("BLE_ADVERTISER", "GATT service added status=$status uuid=${service?.uuid}")
+        }
+
+        override fun onCharacteristicWriteRequest(
+            device: BluetoothDevice,
+            requestId: Int,
+            characteristic: BluetoothGattCharacteristic,
+            preparedWrite: Boolean,
+            responseNeeded: Boolean,
+            offset: Int,
+            value: ByteArray
+        ) {
+            if (characteristic.uuid == MESH_CHARACTERISTIC_UUID) {
+                Log.d("BLE_ADVERTISER", "Mesh packet received from ${device.address}, ${value.size} bytes")
+
+                // Deserialise and hand to routing engine
+                val message = serializer.deserialize(value)
+                if (message != null) {
+                    scope.launch {
+                        meshRoutingEngine.processIncoming(message)
+                    }
+                    Log.d("BLE_ADVERTISER", "Handed to routing engine: ${message.messageId}")
+                } else {
+                    Log.w("BLE_ADVERTISER", "Failed to deserialise incoming mesh packet")
+                }
+
+                // Acknowledge if required
+                if (responseNeeded) {
+                    gattServer?.sendResponse(
+                        device,
+                        requestId,
+                        BluetoothGatt.GATT_SUCCESS,
+                        0,
+                        null
+                    )
+                }
+            }
+        }
+    }
+
+    // builds the GATT service with both discovery and mesh characteristics
+    private fun buildGattService(): BluetoothGattService {
+        val service = BluetoothGattService(
+            SERVICE_UUID,
+            BluetoothGattService.SERVICE_TYPE_PRIMARY
+        )
+
+        // Existing discovery characteristic — read only
+        val discoveryCharacteristic = BluetoothGattCharacteristic(
+            DISCOVERY_CHARACTERISTIC_UUID,
+            BluetoothGattCharacteristic.PROPERTY_READ,
+            BluetoothGattCharacteristic.PERMISSION_READ
+        )
+
+         // mesh relay characteristic — writable by remote devices
+        val meshCharacteristic = BluetoothGattCharacteristic(
+            MESH_CHARACTERISTIC_UUID,
+            BluetoothGattCharacteristic.PROPERTY_WRITE or
+                    BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE,
+            BluetoothGattCharacteristic.PERMISSION_WRITE
+        )
+
+        service.addCharacteristic(discoveryCharacteristic)
+        service.addCharacteristic(meshCharacteristic)
+
+        return service
+    }
+
+    @SuppressLint("MissingPermission")
     fun startAdvertising(myDeviceId: String) {
         Log.d("BLE_ADVERTISER", "Starting advertising with device ID: $myDeviceId")
-        
+
         val advertiser = bluetoothAdapter?.bluetoothLeAdvertiser
         if (advertiser == null) {
             Log.e("BLE_ADVERTISER", "Bluetooth LE Advertiser not available")
             return
         }
-        
-        // Ensure we don't start multiple overlapping advertisements
+
         if (isAdvertising) {
             Log.d("BLE_ADVERTISER", "Already advertising, stopping first")
             stopAdvertising()
         }
-        
-        // Configure advertising settings for low latency (faster discovery) and high power (better range)
+
+        // start GATT server before advertising so it's ready when peers connect
+        gattServer = bluetoothManager.openGattServer(context, gattServerCallback)
+        gattServer?.addService(buildGattService())
+        Log.d("BLE_ADVERTISER", "GATT server started")
+
+        // setConnectable(true) so peers can connect for mesh relay
         val settings = AdvertiseSettings.Builder()
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
             .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
-            .setConnectable(false) // Broadcast only, no connections allowed
-            .setTimeout(0) // No time limit
+            .setConnectable(true)   // WAS false — must be true for GATT server
+            .setTimeout(0)
             .build()
-        
-        // Convert UUID string to 16-byte array to fit in the limited BLE advertisement packet size
+
         val deviceIdBytes = try {
             val uuid = UUID.fromString(myDeviceId)
             val buffer = ByteBuffer.allocate(16)
@@ -70,20 +163,16 @@ class BleAdvertiser @Inject constructor(
             buffer.array()
         } catch (e: Exception) {
             Log.e("BLE_ADVERTISER", "Invalid UUID format: $myDeviceId", e)
-            // Fallback to UTF-8 bytes of truncated string if UUID parse fails
             myDeviceId.take(16).toByteArray(Charsets.UTF_8)
         }
-        
-        Log.d("BLE_ADVERTISER", "Device ID bytes length: ${deviceIdBytes.size} (UUID as bytes)")
-        
-        // Construct the advertisement data packet
+
         val data = AdvertiseData.Builder()
-            .setIncludeDeviceName(false) // Exclude name to save space
+            .setIncludeDeviceName(false)
             .setIncludeTxPowerLevel(false)
-            .addServiceUuid(ParcelUuid(SERVICE_UUID)) // Standard service UUID for filtering
-            .addServiceData(ParcelUuid(SERVICE_UUID), deviceIdBytes) // Embed device ID in service data
+            .addServiceUuid(ParcelUuid(SERVICE_UUID))
+            .addServiceData(ParcelUuid(SERVICE_UUID), deviceIdBytes)
             .build()
-        
+
         try {
             advertiser.startAdvertising(settings, data, advertiseCallback)
         } catch (e: SecurityException) {
@@ -91,25 +180,25 @@ class BleAdvertiser @Inject constructor(
         }
     }
 
+    @SuppressLint("MissingPermission")
     fun stopAdvertising() {
         try {
             bluetoothAdapter?.bluetoothLeAdvertiser?.stopAdvertising(advertiseCallback)
+            gattServer?.close()      // close GATT server alongside advertising
+            gattServer = null
             isAdvertising = false
-            Log.d("BLE_ADVERTISER", "Advertising stopped")
+            Log.d("BLE_ADVERTISER", "Advertising and GATT server stopped")
         } catch (e: SecurityException) {
             Log.e("BLE_ADVERTISER", "Permission denied when stopping", e)
         }
     }
-    
-    /**
-     * Callback handling advertising success or failure events.
-     */
+
     private val advertiseCallback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
             isAdvertising = true
             Log.d("BLE_ADVERTISER", "✓ Advertising started successfully")
         }
-        
+
         override fun onStartFailure(errorCode: Int) {
             isAdvertising = false
             val errorMsg = when (errorCode) {
@@ -123,9 +212,12 @@ class BleAdvertiser @Inject constructor(
             Log.e("BLE_ADVERTISER", "✗ Advertising failed: $errorMsg (code: $errorCode)")
         }
     }
-    
+
     companion object {
-        // A dedicated UUID for the CrowdLink service
         val SERVICE_UUID: UUID = UUID.fromString("0000FE9F-0000-1000-8000-00805f9b34fb")
+        val DISCOVERY_CHARACTERISTIC_UUID: UUID =
+            UUID.fromString("0000FE9E-0000-1000-8000-00805f9b34fb")
+        val MESH_CHARACTERISTIC_UUID: UUID =
+            UUID.fromString("a8f2e3d1-4b5c-6e7f-8a9b-0c1d2e3f4a5b")
     }
 }

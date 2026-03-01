@@ -30,7 +30,6 @@ import com.fyp.crowdlink.presentation.pairing.PairingScreen
 import com.fyp.crowdlink.presentation.pairing.PairingViewModel
 import com.fyp.crowdlink.presentation.pairing.QRScannerScreen
 import com.fyp.crowdlink.presentation.relay.RelayDiscoveryScreen
-import com.fyp.crowdlink.presentation.settings.ProfileScreen
 import com.fyp.crowdlink.presentation.settings.SettingsScreen
 
 enum class Destination(
@@ -86,12 +85,6 @@ fun AppNavHost(
         }
         composable(Destination.SETTINGS.route) {
             SettingsScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToProfile = { navController.navigate("profile") }
-            )
-        }
-        composable("profile") {
-            ProfileScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
