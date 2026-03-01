@@ -1,6 +1,7 @@
 package com.fyp.crowdlink.presentation.discovery
 
 import android.annotation.SuppressLint
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -10,23 +11,30 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.fyp.crowdlink.domain.model.DiscoveredDevice
 import com.fyp.crowdlink.domain.model.NearbyFriend
-import kotlin.math.roundToInt
 
 @SuppressLint("MissingPermission")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DiscoveryScreen(
     onNavigateToFriends: () -> Unit,
+    onNavigateToRelay: () -> Unit,
     viewModel: DiscoveryViewModel = hiltViewModel()
 ) {
     val nearbyFriends by viewModel.nearbyFriends.collectAsState()
-    var isDiscovering by remember { mutableStateOf(false) }
-    var isAdvertising by remember { mutableStateOf(false) }
+    val discoveredRelays by viewModel.discoveredRelays.collectAsState()
+    val isRelayConnected by viewModel.isRelayConnected.collectAsState()
+    val isDiscovering by viewModel.isDiscovering.collectAsState()
+    val isAdvertising by viewModel.isAdvertising.collectAsState()
+
+    // Auto-start discovery and advertising on first launch of this screen
+    LaunchedEffect(Unit) {
+        if (!isDiscovering) viewModel.startDiscovery()
+        if (!isAdvertising) viewModel.startAdvertising()
+    }
 
     Scaffold(
         topBar = {
@@ -44,9 +52,15 @@ fun DiscoveryScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp),
+                .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            RelayStatusBanner(
+                isConnected = isRelayConnected,
+                relayCount = discoveredRelays.size,
+                onClick = onNavigateToRelay
+            )
+
             // Control buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -56,10 +70,8 @@ fun DiscoveryScreen(
                     onClick = {
                         if (isDiscovering) {
                             viewModel.stopDiscovery()
-                            isDiscovering = false
                         } else {
                             viewModel.startDiscovery()
-                            isDiscovering = true
                         }
                     },
                     modifier = Modifier.weight(1f)
@@ -76,16 +88,14 @@ fun DiscoveryScreen(
                     onClick = {
                         if (isAdvertising) {
                             viewModel.stopAdvertising()
-                            isAdvertising = false
                         } else {
                             viewModel.startAdvertising()
-                            isAdvertising = true
                         }
                     },
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(
-                        if (isAdvertising) Icons.Default.Close else Icons.Default.LocationOn, // Replaced LocationDisabled with Close
+                        if (isAdvertising) Icons.Default.Close else Icons.Default.LocationOn,
                         contentDescription = null
                     )
                     Spacer(Modifier.width(8.dp))
@@ -111,7 +121,7 @@ fun DiscoveryScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         Icon(
-                            Icons.Default.Warning, // Core icon
+                            Icons.Default.Warning,
                             contentDescription = null,
                             modifier = Modifier.size(64.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -138,6 +148,43 @@ fun DiscoveryScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun RelayStatusBanner(isConnected: Boolean, relayCount: Int, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isConnected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                if (isConnected) Icons.Default.CheckCircle else Icons.Default.Refresh,
+                contentDescription = null
+            )
+            Spacer(Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (isConnected) "Relay Connected" else "Searching for Relay...",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                if (!isConnected) {
+                    Text(
+                        text = "$relayCount relays found",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+            Icon(Icons.Default.PlayArrow, contentDescription = "Details")
         }
     }
 }
@@ -172,10 +219,6 @@ fun NearbyFriendCard(friend: NearbyFriend) {
                 )
             }
 
-            // Distance indicator icon (Using Core Icons only)
-            // < 5m: Close (CheckCircle)
-            // < 15m: Medium (Info)
-            // > 15m: Far (Warning)
             Icon(
                 when {
                     friend.estimatedDistance < 5 -> Icons.Default.CheckCircle

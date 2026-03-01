@@ -1,7 +1,7 @@
 package com.fyp.crowdlink.data.ble
 
+import android.Manifest
 import android.annotation.SuppressLint
-import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
@@ -10,6 +10,7 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.ParcelUuid
 import android.util.Log
+import androidx.annotation.RequiresPermission
 import com.fyp.crowdlink.domain.model.RelayNode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,62 +25,80 @@ class RelayNodeScanner @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     companion object {
-        const val RELAY_SERVICE_UUID = "12345678-1234-1234-1234-123456789abc"
         private const val TAG = "RelayNodeScanner"
+        const val SERVICE_UUID = "12345678-1234-1234-1234-123456789abc"
     }
 
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-    private val bluetoothAdapter: BluetoothAdapter? = bluetoothManager.adapter
-    private val bleScanner = bluetoothAdapter?.bluetoothLeScanner
+    private val adapter = bluetoothManager.adapter
+    private val scanner = adapter?.bluetoothLeScanner
 
     private val _discoveredRelays = MutableStateFlow<List<RelayNode>>(emptyList())
     val discoveredRelays: StateFlow<List<RelayNode>> = _discoveredRelays.asStateFlow()
 
-    private val relayMap = mutableMapOf<String, RelayNode>()
-
-    @SuppressLint("MissingPermission")
     private val scanCallback = object : ScanCallback() {
+        @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val device = result.device
-            val deviceName = device.name ?: return
-
-            if (deviceName.startsWith("CrowdLink-Relay")) {
+            val name = result.scanRecord?.deviceName ?: device.name ?: "Unknown"
+            
+            if (name.startsWith("CrowdLink-Relay")) {
                 val relay = RelayNode(
                     deviceId = device.address,
-                    name = deviceName,
+                    name = name,
                     rssi = result.rssi,
-                    isConnected = false
+                    lastSeen = System.currentTimeMillis()
                 )
-
-                relayMap[device.address] = relay
-                _discoveredRelays.value = relayMap.values.toList()
-
-                Log.d(TAG, "Found relay: $deviceName at ${result.rssi} dBm")
+                updateDiscoveredRelays(relay)
             }
         }
 
-        override fun onScanFailed(errorCode: Int) {
-            Log.e(TAG, "BLE scan failed with error: $errorCode")
+        // known Android lint false positive for BLE scan callbacks
+        @SuppressLint("MissingPermission")
+        override fun onBatchScanResults(results: MutableList<ScanResult>) {
+            results.forEach { onScanResult(ScanSettings.CALLBACK_TYPE_ALL_MATCHES, it) }
         }
+
+        override fun onScanFailed(errorCode: Int) {
+            Log.e(TAG, "Scan failed with error code: $errorCode")
+        }
+    }
+
+    private fun updateDiscoveredRelays(relay: RelayNode) {
+        val currentList = _discoveredRelays.value.toMutableList()
+        val index = currentList.indexOfFirst { it.deviceId == relay.deviceId }
+        if (index != -1) {
+            currentList[index] = relay
+        } else {
+            currentList.add(relay)
+        }
+        _discoveredRelays.value = currentList.sortedByDescending { it.rssi }
     }
 
     @SuppressLint("MissingPermission")
     fun startScanning() {
-        val scanFilter = ScanFilter.Builder()
-            .setServiceUuid(ParcelUuid(UUID.fromString(RELAY_SERVICE_UUID)))
-            .build()
+        if (scanner == null) {
+            Log.e(TAG, "BluetoothLeScanner is null")
+            return
+        }
 
-        val scanSettings = ScanSettings.Builder()
+        val filters = listOf(
+            ScanFilter.Builder()
+                .setServiceUuid(ParcelUuid(UUID.fromString(SERVICE_UUID)))
+                .build()
+        )
+
+        val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
 
-        bleScanner?.startScan(listOf(scanFilter), scanSettings, scanCallback)
-        Log.d(TAG, "Started scanning for relay nodes")
+        scanner.startScan(filters, settings, scanCallback)
+        Log.d(TAG, "Started scanning for relays")
     }
 
     @SuppressLint("MissingPermission")
     fun stopScanning() {
-        bleScanner?.stopScan(scanCallback)
-        Log.d(TAG, "Stopped scanning for relay nodes")
+        scanner?.stopScan(scanCallback)
+        Log.d(TAG, "Stopped scanning for relays")
     }
 }

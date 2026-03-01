@@ -1,9 +1,7 @@
 package com.fyp.crowdlink.presentation.pairing
 
-import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.os.Build
-import androidx.core.content.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fyp.crowdlink.domain.model.Friend
@@ -19,7 +17,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.json.JSONObject
-import java.util.UUID
 import javax.inject.Inject
 
 /**
@@ -33,7 +30,6 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class PairingViewModel @Inject constructor(
-    private val sharedPreferences: SharedPreferences,
     private val userProfileRepository: UserProfileRepository,
     private val pairFriendUseCase: PairFriendUseCase,
     private val friendRepository: FriendRepository
@@ -59,21 +55,7 @@ class PairingViewModel @Inject constructor(
      * Loads the unique device ID from persistent storage.
      */
     private fun loadDeviceId() {
-        val deviceId = getPersistentDeviceId()
-        _myDeviceId.value = deviceId
-    }
-    
-    /**
-     * Retrieves the device ID from SharedPreferences. 
-     * If not found, generates a new UUID, saves it, and returns it.
-     */
-    private fun getPersistentDeviceId(): String {
-        val key = "device_id"
-        return sharedPreferences.getString(key, null) ?: run {
-            val newId = UUID.randomUUID().toString()
-            sharedPreferences.edit { putString(key, newId) }
-            newId
-        }
+        _myDeviceId.value = userProfileRepository.getPersistentDeviceId()
     }
     
     /**

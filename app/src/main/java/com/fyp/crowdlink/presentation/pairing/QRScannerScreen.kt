@@ -33,7 +33,7 @@ fun QRScannerScreen(
         val options = ScanOptions()
         options.setPrompt("Scan a QR Code") // Message displayed to the user
         options.setBeepEnabled(false)     // Disable beep sound on scan
-        options.setOrientationLocked(false) // Allow rotation
+        options.setOrientationLocked(true) // Lock orientation to match manifest
         launcher.launch(options)
     }
 }

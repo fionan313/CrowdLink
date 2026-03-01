@@ -4,7 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.fyp.crowdlink.data.local.FriendDatabase
+import com.fyp.crowdlink.data.local.AppDatabase
 import com.fyp.crowdlink.domain.model.Friend
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -17,7 +17,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class FriendRepositoryIntegrationTest {
     
-    private lateinit var database: FriendDatabase
+    private lateinit var database: AppDatabase
     private lateinit var repository: FriendRepositoryImpl
     
     @Before
@@ -25,7 +25,7 @@ class FriendRepositoryIntegrationTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         database = Room.inMemoryDatabaseBuilder(
             context,
-            FriendDatabase::class.java
+            AppDatabase::class.java
         ).allowMainThreadQueries().build()
         
         repository = FriendRepositoryImpl(database.friendDao())

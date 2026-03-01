@@ -19,5 +19,5 @@ data class Friend(
     val phoneNumber: String? = null,    // Optional phone number for emergency contact
     val publicKey: String? = null,      // Public key for end-to-end encryption (planned for Week 8)
     val pairedAt: Long = System.currentTimeMillis(), // Timestamp of when the pairing occurred
-    val lastSeen: Long = 0L             // Timestamp of when this friend was last detected nearby
+    val lastSeen : Long = 0L             // Timestamp of when this friend was last detected nearby
 )
