@@ -30,6 +30,7 @@ import com.fyp.crowdlink.presentation.pairing.PairingScreen
 import com.fyp.crowdlink.presentation.pairing.PairingViewModel
 import com.fyp.crowdlink.presentation.pairing.QRScannerScreen
 import com.fyp.crowdlink.presentation.relay.RelayDiscoveryScreen
+import com.fyp.crowdlink.presentation.settings.ProfileScreen
 import com.fyp.crowdlink.presentation.settings.SettingsScreen
 
 enum class Destination(
@@ -63,8 +64,8 @@ fun AppNavHost(
             FriendsScreen(
                 onNavigateToPairing = { navController.navigate("pairing") },
                 onNavigateToSettings = { navController.navigate(Destination.SETTINGS.route) },
-                onNavigateToChat = { id, name -> 
-                    navController.navigate("chat/$id/$name") 
+                onNavigateToChat = { id, name ->
+                    navController.navigate("chat/$id/$name")
                 }
             )
         }
@@ -85,6 +86,12 @@ fun AppNavHost(
         }
         composable(Destination.SETTINGS.route) {
             SettingsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToProfile = { navController.navigate("profile") }
+            )
+        }
+        composable("profile") {
+            ProfileScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
@@ -96,7 +103,7 @@ fun AppNavHost(
         composable("pairing") { backStackEntry ->
             val viewModel: PairingViewModel = hiltViewModel()
             val scannedQr = backStackEntry.savedStateHandle.get<String>("scanned_qr")
-            
+
             if (scannedQr != null) {
                 backStackEntry.savedStateHandle.remove<String>("scanned_qr")
                 viewModel.onQRScanned(scannedQr, "Friend")
