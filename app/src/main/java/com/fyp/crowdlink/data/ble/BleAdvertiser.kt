@@ -17,11 +17,13 @@ import android.os.ParcelUuid
 import android.util.Log
 import com.fyp.crowdlink.data.mesh.MeshMessageSerialiser
 import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
+import com.fyp.crowdlink.domain.model.PairingRequest
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import java.nio.ByteBuffer
 import java.util.UUID
 import javax.inject.Inject
@@ -34,7 +36,7 @@ class BleAdvertiser @Inject constructor(
     private val serializer: MeshMessageSerialiser
 ) {
     init {
-        android.util.Log.wtf("BLE_ADVERTISER", "BleAdvertiser CREATED!")
+        Log.wtf("BLE_ADVERTISER", "BleAdvertiser CREATED!")
     }
 
     private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
@@ -44,6 +46,9 @@ class BleAdvertiser @Inject constructor(
     private var isAdvertising = false
     private var gattServer: BluetoothGattServer? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    var onPairingRequestReceived: ((PairingRequest) -> Unit)? = null
+    var onPairingAcceptedReceived: ((String) -> Unit)? = null
 
     // GATT server callback handles incoming mesh packets
     @SuppressLint("MissingPermission")
@@ -57,7 +62,6 @@ class BleAdvertiser @Inject constructor(
             Log.d("BLE_ADVERTISER", "GATT connection state changed: device=${device.address} newState=$newState")
         }
 
-        // ADD THIS
         override fun onServiceAdded(status: Int, service: BluetoothGattService?) {
             Log.d("BLE_ADVERTISER", "GATT service added status=$status uuid=${service?.uuid}")
         }
@@ -72,17 +76,12 @@ class BleAdvertiser @Inject constructor(
             value: ByteArray
         ) {
             if (characteristic.uuid == MESH_CHARACTERISTIC_UUID) {
-                Log.d("BLE_ADVERTISER", "Mesh packet received from ${device.address}, ${value.size} bytes")
-
-                // Deserialise and hand to routing engine
-                val message = serializer.deserialize(value)
-                if (message != null) {
-                    scope.launch {
-                        meshRoutingEngine.processIncoming(message)
+                if (value.isNotEmpty()) {
+                    when (value[0]) {
+                        PAIRING_REQUEST_PREFIX -> handlePairingRequest(value)
+                        PAIRING_ACCEPTED_PREFIX -> handlePairingAccepted(value)
+                        else -> handleMeshMessage(value)
                     }
-                    Log.d("BLE_ADVERTISER", "Handed to routing engine: ${message.messageId}")
-                } else {
-                    Log.w("BLE_ADVERTISER", "Failed to deserialise incoming mesh packet")
                 }
 
                 // Acknowledge if required
@@ -96,6 +95,46 @@ class BleAdvertiser @Inject constructor(
                     )
                 }
             }
+        }
+    }
+
+    private fun handlePairingRequest(value: ByteArray) {
+        try {
+            // Skip prefix byte
+            val jsonString = value.decodeToString(startIndex = 1)
+            val json = JSONObject(jsonString)
+            val request = PairingRequest(
+                senderDeviceId = json.getString("senderId"),
+                senderDisplayName = json.getString("senderName")
+            )
+            onPairingRequestReceived?.invoke(request)
+            Log.d("BLE_ADVERTISER", "Pairing request received from ${request.senderDisplayName}")
+        } catch (e: Exception) {
+            Log.e("BLE_ADVERTISER", "Failed to parse pairing request", e)
+        }
+    }
+
+    private fun handlePairingAccepted(value: ByteArray) {
+        try {
+            val jsonString = value.decodeToString(startIndex = 1)
+            val json = JSONObject(jsonString)
+            val senderId = json.getString("senderId")
+            onPairingAcceptedReceived?.invoke(senderId)
+            Log.d("BLE_ADVERTISER", "Pairing accepted by $senderId")
+        } catch (e: Exception) {
+            Log.e("BLE_ADVERTISER", "Failed to parse pairing acceptance", e)
+        }
+    }
+
+    private fun handleMeshMessage(value: ByteArray) {
+        val message = serializer.deserialize(value)
+        if (message != null) {
+            scope.launch {
+                meshRoutingEngine.processIncoming(message)
+            }
+            Log.d("BLE_ADVERTISER", "Handed to routing engine: ${message.messageId}")
+        } else {
+            Log.w("BLE_ADVERTISER", "Failed to deserialise incoming mesh packet")
         }
     }
 
@@ -151,7 +190,7 @@ class BleAdvertiser @Inject constructor(
         val settings = AdvertiseSettings.Builder()
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
             .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
-            .setConnectable(true)   // WAS false — must be true for GATT server
+            .setConnectable(true)
             .setTimeout(0)
             .build()
 
@@ -219,5 +258,8 @@ class BleAdvertiser @Inject constructor(
             UUID.fromString("0000FE9E-0000-1000-8000-00805f9b34fb")
         val MESH_CHARACTERISTIC_UUID: UUID =
             UUID.fromString("a8f2e3d1-4b5c-6e7f-8a9b-0c1d2e3f4a5b")
+        
+        const val PAIRING_REQUEST_PREFIX: Byte = 0x01
+        const val PAIRING_ACCEPTED_PREFIX: Byte = 0x02
     }
 }

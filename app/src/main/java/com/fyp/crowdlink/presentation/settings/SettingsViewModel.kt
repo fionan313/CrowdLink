@@ -1,19 +1,28 @@
 package com.fyp.crowdlink.presentation.settings
 
+import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fyp.crowdlink.domain.model.UserProfile
+import com.fyp.crowdlink.domain.repository.FriendRepository
+import com.fyp.crowdlink.domain.repository.MessageRepository
 import com.fyp.crowdlink.domain.repository.UserProfileRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val userProfileRepository: UserProfileRepository
+    private val userProfileRepository: UserProfileRepository,
+    private val friendRepository: FriendRepository,
+    private val messageRepository: MessageRepository,
+    private val sharedPreferences: SharedPreferences
 ) : ViewModel() {
     
     private val _userProfile = MutableStateFlow<UserProfile?>(null)
@@ -21,6 +30,24 @@ class SettingsViewModel @Inject constructor(
     
     private val _saveStatus = MutableStateFlow<SaveStatus>(SaveStatus.Idle)
     val saveStatus: StateFlow<SaveStatus> = _saveStatus.asStateFlow()
+
+    private val _autoStart = MutableStateFlow(sharedPreferences.getBoolean("auto_start", true))
+    val autoStart: StateFlow<Boolean> = _autoStart.asStateFlow()
+
+    private val _meshRelay = MutableStateFlow(sharedPreferences.getBoolean("mesh_relay", true))
+    val meshRelay: StateFlow<Boolean> = _meshRelay.asStateFlow()
+
+    private val _esp32Scanning = MutableStateFlow(sharedPreferences.getBoolean("esp32_scanning", false))
+    val esp32Scanning: StateFlow<Boolean> = _esp32Scanning.asStateFlow()
+
+    private val _ghostMode = MutableStateFlow(sharedPreferences.getBoolean("ghost_mode", false))
+    val ghostMode: StateFlow<Boolean> = _ghostMode.asStateFlow()
+
+    val pairedFriendsCount: StateFlow<Int> = friendRepository.getAllFriends()
+        .map { it.size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    val deviceId: String = userProfileRepository.getPersistentDeviceId()
     
     init {
         loadUserProfile()
@@ -63,6 +90,37 @@ class SettingsViewModel @Inject constructor(
             } catch (e: Exception) {
                 _saveStatus.value = SaveStatus.Error(e.message ?: "Failed to save")
             }
+        }
+    }
+
+    fun setAutoStart(enabled: Boolean) {
+        sharedPreferences.edit().putBoolean("auto_start", enabled).apply()
+        _autoStart.value = enabled
+    }
+
+    fun setMeshRelay(enabled: Boolean) {
+        sharedPreferences.edit().putBoolean("mesh_relay", enabled).apply()
+        _meshRelay.value = enabled
+    }
+
+    fun setEsp32Scanning(enabled: Boolean) {
+        sharedPreferences.edit().putBoolean("esp32_scanning", enabled).apply()
+        _esp32Scanning.value = enabled
+    }
+
+    fun setGhostMode(enabled: Boolean) {
+        sharedPreferences.edit().putBoolean("ghost_mode", enabled).apply()
+        _ghostMode.value = enabled
+        // If ghost mode is enabled, we should probably disable advertising/discovery
+        if (enabled) {
+            // Note: DiscoveryViewModel or the Mesh service should observe this pref
+            // and stop discovery/advertising accordingly.
+        }
+    }
+
+    fun clearMessageHistory() {
+        viewModelScope.launch {
+            messageRepository.clearAllMessages()
         }
     }
 }

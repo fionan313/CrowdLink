@@ -22,6 +22,7 @@ fun FriendsScreen(
     onNavigateToPairing: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToChat: (String, String) -> Unit,
+    onNavigateToCompass: (String, String) -> Unit,
     viewModel: FriendsViewModel = hiltViewModel()
 ) {
     val friends by viewModel.friends.collectAsState()
@@ -84,7 +85,8 @@ fun FriendsScreen(
                     FriendListItem(
                         friend = friend,
                         onDelete = { friendToDelete = friend },
-                        onClick = { onNavigateToChat(friend.deviceId, friend.displayName) }
+                        onClick = { onNavigateToChat(friend.deviceId, friend.displayName) },
+                        onFindClick = { onNavigateToCompass(friend.deviceId, friend.displayName) }
                     )
                 }
             }
@@ -122,7 +124,8 @@ fun FriendsScreen(
 fun FriendListItem(
     friend: Friend,
     onDelete: () -> Unit,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onFindClick: () -> Unit
 ) {
     val dateFormat = remember { SimpleDateFormat("MMM d, yyyy 'at' h:mm a", Locale.getDefault()) }
     
@@ -169,12 +172,21 @@ fun FriendListItem(
                 }
             }
             
-            IconButton(onClick = onDelete) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Unpair friend",
-                    tint = MaterialTheme.colorScheme.error
-                )
+            Row {
+                IconButton(onClick = onFindClick) {
+                    Icon(
+                        Icons.Default.Explore,
+                        contentDescription = "Find friend",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Unpair friend",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
             }
         }
     }

@@ -89,6 +89,13 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
 
+    // Location
+    implementation(libs.play.services.location)
+    implementation(libs.kotlinx.coroutines.play.services)
+
+    // Permissions
+    implementation(libs.accompanist.permissions)
+
     // Unit Testing
     testImplementation(libs.junit)
     testImplementation(libs.mockk)

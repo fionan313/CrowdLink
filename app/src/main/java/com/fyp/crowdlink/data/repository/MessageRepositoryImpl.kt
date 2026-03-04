@@ -59,4 +59,8 @@ class MessageRepositoryImpl @Inject constructor(
     override suspend fun purgeExpiredRelayMessages() {
         relayMessageDao.purgeExpired()
     }
+
+    override suspend fun clearAllMessages() {
+        messageDao.deleteAllMessages()
+    }
 }
