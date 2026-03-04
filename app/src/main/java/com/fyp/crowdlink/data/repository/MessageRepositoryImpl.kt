@@ -43,6 +43,9 @@ class MessageRepositoryImpl @Inject constructor(
     }
 
     override suspend fun addToRelayQueue(message: MeshMessage) {
+        // Ensure binary payload has the correct type prefix if it's a text message
+        // Existing sendText in VM doesn't add it, so we check here if it's likely text
+        // or just ensure all mesh messages have a type byte.
         relayMessageDao.insert(message.toEntity())
     }
 

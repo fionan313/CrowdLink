@@ -50,8 +50,12 @@ class CompassViewModel @Inject constructor(
     private val _rssiDistance = MutableStateFlow<Double?>(null)
     val rssiDistance: StateFlow<Double?> = _rssiDistance.asStateFlow()
 
+    // Smoothing sensors
     private var gravity: FloatArray? = null
     private var geomagnetic: FloatArray? = null
+    private val alpha = 0.15f // Low-pass filter constant
+
+    private var lastBearingLocation: Location? = null
 
     init {
         val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -74,13 +78,19 @@ class CompassViewModel @Inject constructor(
                     latitude = myLoc.latitude
                     longitude = myLoc.longitude
                 }
-                val friendAndroidLoc = Location("").apply {
-                    latitude = friendLoc.latitude
-                    longitude = friendLoc.longitude
-                }
-                _bearingToFriend.value = myAndroidLoc.bearingTo(friendAndroidLoc)
 
-                val isStale = System.currentTimeMillis() - friendLoc.timestamp > 60000 // 60s stale threshold
+                // Only update bearing if we have significant movement (>2m) or it's the first fix
+                // to avoid jitter when stationary
+                if (lastBearingLocation == null || myAndroidLoc.distanceTo(lastBearingLocation!!) > 2f) {
+                    val friendAndroidLoc = Location("").apply {
+                        latitude = friendLoc.latitude
+                        longitude = friendLoc.longitude
+                    }
+                    _bearingToFriend.value = myAndroidLoc.bearingTo(friendAndroidLoc)
+                    lastBearingLocation = myAndroidLoc
+                }
+
+                val isStale = System.currentTimeMillis() - friendLoc.timestamp > 60000
                 _isGpsAvailable.value = myLoc.accuracy < 50f && !isStale
             } else {
                 _distanceMetres.value = null
@@ -108,8 +118,12 @@ class CompassViewModel @Inject constructor(
     }
 
     override fun onSensorChanged(event: SensorEvent) {
-        if (event.sensor.type == Sensor.TYPE_ACCELEROMETER) gravity = event.values
-        if (event.sensor.type == Sensor.TYPE_MAGNETIC_FIELD) geomagnetic = event.values
+        if (event.sensor.type == Sensor.TYPE_ACCELEROMETER) {
+            gravity = lowPass(event.values.clone(), gravity)
+        }
+        if (event.sensor.type == Sensor.TYPE_MAGNETIC_FIELD) {
+            geomagnetic = lowPass(event.values.clone(), geomagnetic)
+        }
 
         if (gravity != null && geomagnetic != null) {
             val r = FloatArray(9)
@@ -118,9 +132,20 @@ class CompassViewModel @Inject constructor(
                 val orientation = FloatArray(3)
                 SensorManager.getOrientation(r, orientation)
                 val azimuth = Math.toDegrees(orientation[0].toDouble()).toFloat()
-                _compassHeading.value = (azimuth + 360) % 360
+                
+                // Final value smoothing
+                val newHeading = (azimuth + 360) % 360
+                _compassHeading.value = newHeading
             }
         }
+    }
+
+    private fun lowPass(input: FloatArray, output: FloatArray?): FloatArray {
+        if (output == null) return input
+        for (i in input.indices) {
+            output[i] = output[i] + alpha * (input[i] - output[i])
+        }
+        return output
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}

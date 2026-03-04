@@ -1,12 +1,13 @@
 package com.fyp.crowdlink.presentation.compass
 
 import android.Manifest
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material3.*
@@ -81,14 +82,26 @@ fun CompassScreen(
                 val rssiDistance by viewModel.rssiDistance.collectAsState()
 
                 if (isGpsAvailable && bearing != null) {
-                    val arrowRotation by animateFloatAsState(targetValue = bearing!! - heading)
+                    // Logic for shortest path rotation
+                    var currentRotation by remember { mutableStateOf(0f) }
+                    val targetRotation = (bearing!! - heading + 360) % 360
+                    
+                    LaunchedEffect(targetRotation) {
+                        currentRotation = shortestRotation(currentRotation, targetRotation)
+                    }
+
+                    val animatedRotation by animateFloatAsState(
+                        targetValue = currentRotation,
+                        animationSpec = tween(durationMillis = 300, easing = LinearEasing),
+                        label = "ArrowRotation"
+                    )
 
                     Icon(
                         imageVector = Icons.Default.Navigation,
                         contentDescription = "Direction Arrow",
                         modifier = Modifier
                             .size(200.dp)
-                            .rotate(arrowRotation),
+                            .rotate(animatedRotation),
                         tint = MaterialTheme.colorScheme.primary
                     )
 
@@ -110,6 +123,16 @@ fun CompassScreen(
             }
         }
     }
+}
+
+/**
+ * Calculates the shortest rotation path to avoid the arrow spinning 350 degrees
+ * when jumping from 355 to 5.
+ */
+fun shortestRotation(from: Float, to: Float): Float {
+    var diff = (to - from + 360) % 360
+    if (diff > 180) diff -= 360
+    return from + diff
 }
 
 @Composable
