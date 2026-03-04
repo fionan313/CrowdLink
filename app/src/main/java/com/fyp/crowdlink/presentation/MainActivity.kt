@@ -1,6 +1,7 @@
 package com.fyp.crowdlink.presentation
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -12,6 +13,7 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import com.fyp.crowdlink.presentation.discovery.DiscoveryViewModel
@@ -22,21 +24,24 @@ import dagger.hilt.android.AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
     private val discoveryViewModel: DiscoveryViewModel by viewModels()
+    private val navigateToChatFriendId = mutableStateOf<String?>(null)
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val allGranted = permissions.values.all { it }
         if (allGranted) {
-            startMeshServices()
+            startMeshServicesIfEnabled()
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        handleNotificationDeepLink(intent)
+
         if (hasPermissions()) {
-            startMeshServices()
+            startMeshServicesIfEnabled()
         } else {
             requestPermissions()
         }
@@ -47,7 +52,10 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    MainScreen()
+                    MainScreen(
+                        pendingChatFriendId = navigateToChatFriendId.value,
+                        onChatNavigated = { navigateToChatFriendId.value = null }
+                    )
                 }
             }
         }
@@ -60,16 +68,18 @@ class MainActivity : ComponentActivity() {
 
     private fun handleNotificationDeepLink(intent: Intent) {
         intent.getStringExtra("navigate_to_chat")?.let { friendId ->
-            // Note: Since NavController is managed inside MainScreen's Composable, 
-            // you might need a shared navigation manager or use a callback 
-            // if you want to navigate immediately from the Activity.
-            // For now, this is where the logic resides.
+            navigateToChatFriendId.value = friendId
         }
     }
 
-    private fun startMeshServices() {
-        discoveryViewModel.startDiscovery()
-        discoveryViewModel.startAdvertising()
+    private fun startMeshServicesIfEnabled() {
+        val sharedPrefs = getSharedPreferences("crowdlink_prefs", MODE_PRIVATE)
+        val autoStart = sharedPrefs.getBoolean("auto_start", true)
+        
+        if (autoStart) {
+            discoveryViewModel.startDiscovery()
+            discoveryViewModel.startAdvertising()
+        }
     }
 
     private fun hasPermissions(): Boolean {

@@ -3,9 +3,11 @@ package com.fyp.crowdlink.data.local
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import com.fyp.crowdlink.data.local.dao.FriendDao
+import com.fyp.crowdlink.data.local.dao.LocationDao
 import com.fyp.crowdlink.data.local.dao.MessageDao
 import com.fyp.crowdlink.data.local.dao.RelayMessageDao
 import com.fyp.crowdlink.data.local.dao.UserProfileDao
+import com.fyp.crowdlink.data.local.entity.LocationEntity
 import com.fyp.crowdlink.data.local.entity.RelayMessageEntity
 import com.fyp.crowdlink.domain.model.Friend
 import com.fyp.crowdlink.domain.model.Message
@@ -17,8 +19,14 @@ import com.fyp.crowdlink.domain.model.UserProfile
  * This is the main Room database definition for the application.
  */
 @Database(
-    entities = [Friend::class, UserProfile::class, Message::class, RelayMessageEntity::class],
-    version = 10,
+    entities = [
+        Friend::class,
+        UserProfile::class,
+        Message::class,
+        RelayMessageEntity::class,
+        LocationEntity::class
+    ],
+    version = 11,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -30,4 +38,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun messageDao(): MessageDao
 
     abstract fun relayMessageDao(): RelayMessageDao
+
+    abstract fun locationDao(): LocationDao
 }

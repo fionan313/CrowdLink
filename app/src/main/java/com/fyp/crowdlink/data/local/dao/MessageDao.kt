@@ -26,4 +26,7 @@ interface MessageDao {
 
     @Query("DELETE FROM messages WHERE senderId = :friendId OR receiverId = :friendId")
     suspend fun deleteMessagesWithFriend(friendId: String)
+
+    @Query("DELETE FROM messages")
+    suspend fun deleteAllMessages()
 }

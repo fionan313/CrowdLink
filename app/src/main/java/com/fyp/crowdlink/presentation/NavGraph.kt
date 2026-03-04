@@ -12,6 +12,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -24,6 +25,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.fyp.crowdlink.presentation.chat.ChatScreen
+import com.fyp.crowdlink.presentation.compass.CompassScreen
 import com.fyp.crowdlink.presentation.discovery.DiscoveryScreen
 import com.fyp.crowdlink.presentation.friends.FriendsScreen
 import com.fyp.crowdlink.presentation.pairing.PairingScreen
@@ -66,6 +68,9 @@ fun AppNavHost(
                 onNavigateToSettings = { navController.navigate(Destination.SETTINGS.route) },
                 onNavigateToChat = { id, name ->
                     navController.navigate("chat/$id/$name")
+                },
+                onNavigateToCompass = { id, name ->
+                    navController.navigate("compass/$id/$name")
                 }
             )
         }
@@ -79,6 +84,21 @@ fun AppNavHost(
             val friendId = backStackEntry.arguments?.getString("friendId") ?: ""
             val friendName = backStackEntry.arguments?.getString("friendName") ?: ""
             ChatScreen(
+                friendId = friendId,
+                friendName = friendName,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable(
+            route = "compass/{friendId}/{friendName}",
+            arguments = listOf(
+                navArgument("friendId") { type = NavType.StringType },
+                navArgument("friendName") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val friendId = backStackEntry.arguments?.getString("friendId") ?: ""
+            val friendName = backStackEntry.arguments?.getString("friendName") ?: ""
+            CompassScreen(
                 friendId = friendId,
                 friendName = friendName,
                 onNavigateBack = { navController.popBackStack() }
@@ -133,10 +153,28 @@ fun AppNavHost(
 }
 
 @Composable
-fun MainScreen() {
+fun MainScreen(
+    pendingChatFriendId: String? = null,
+    onChatNavigated: () -> Unit = {}
+) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+
+    // Deep link handling
+    LaunchedEffect(pendingChatFriendId) {
+        pendingChatFriendId?.let { friendId ->
+            // Use "Chat" as a placeholder name; ChatScreen should handle it.
+            navController.navigate("chat/$friendId/Chat") {
+                popUpTo(navController.graph.startDestinationId) {
+                    saveState = true
+                }
+                launchSingleTop = true
+                restoreState = true
+            }
+            onChatNavigated()
+        }
+    }
 
     val destinations = listOf(
         Destination.DISCOVERY,
@@ -146,7 +184,7 @@ fun MainScreen() {
 
     Scaffold(
         bottomBar = {
-            // Only show bottom bar on top-level destinations to avoid overlap with detail screens
+            // Only show bottom bar on top-level destinations
             val showBottomBar = destinations.any { it.route == currentRoute }
             if (showBottomBar) {
                 NavigationBar(windowInsets = NavigationBarDefaults.windowInsets) {

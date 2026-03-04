@@ -2,6 +2,7 @@ package com.fyp.crowdlink.data.ble
 
 import android.content.SharedPreferences
 import android.util.Log
+import com.fyp.crowdlink.data.mesh.LocationMessageSerialiser
 import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
 import com.fyp.crowdlink.data.notifications.MeshNotificationManager
 import com.fyp.crowdlink.domain.model.DiscoveredDevice
@@ -9,20 +10,17 @@ import com.fyp.crowdlink.domain.model.Friend
 import com.fyp.crowdlink.domain.model.Message
 import com.fyp.crowdlink.domain.model.MessageStatus
 import com.fyp.crowdlink.domain.model.NearbyFriend
+import com.fyp.crowdlink.domain.model.PairingRequest
 import com.fyp.crowdlink.domain.model.TransportType
 import com.fyp.crowdlink.domain.repository.DeviceRepository
 import com.fyp.crowdlink.domain.repository.FriendRepository
+import com.fyp.crowdlink.domain.repository.LocationRepository
 import com.fyp.crowdlink.domain.repository.MessageRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -32,14 +30,22 @@ class DeviceRepositoryImpl @Inject constructor(
     private val bleAdvertiser: BleAdvertiser,
     private val friendRepository: FriendRepository,
     private val messageRepository: MessageRepository,
+    private val locationRepository: LocationRepository,
     private val sharedPreferences: SharedPreferences,
     private val meshRoutingEngine: MeshRoutingEngine,
-    private val meshNotificationManager: MeshNotificationManager
+    private val meshNotificationManager: MeshNotificationManager,
+    private val locationSerialiser: LocationMessageSerialiser
 ) : DeviceRepository {
 
     private val scope = CoroutineScope(Dispatchers.IO)
 
     override val discoveredDevices: StateFlow<List<DiscoveredDevice>> = bleScanner.discoveredDevices
+
+    private val _incomingPairingRequest = MutableStateFlow<PairingRequest?>(null)
+    override val incomingPairingRequest: StateFlow<PairingRequest?> = _incomingPairingRequest.asStateFlow()
+
+    private val _pairingAccepted = MutableSharedFlow<String>(replay = 0)
+    override val pairingAccepted: SharedFlow<String> = _pairingAccepted.asSharedFlow()
 
     private val _nearbyFriends = MutableStateFlow<List<NearbyFriend>>(emptyList())
     val nearbyFriends: StateFlow<List<NearbyFriend>> = _nearbyFriends.asStateFlow()
@@ -52,34 +58,18 @@ class DeviceRepositoryImpl @Inject constructor(
         meshRoutingEngine.onMessageForMe = { meshMessage ->
             scope.launch {
                 val senderIdString = meshMessage.senderId.toString()
-                val content = meshMessage.payload.toString(Charsets.UTF_8)
-                val friend = friendRepository.getFriendById(senderIdString)
+                val payload = meshMessage.payload
                 
-                val incomingMessage = Message(
-                    messageId = meshMessage.messageId.toString(),
-                    senderId = senderIdString,
-                    receiverId = meshRoutingEngine.localDeviceId,
-                    content = content,
-                    timestamp = meshMessage.timestamp,
-                    isSentByMe = false,
-                    deliveryStatus = MessageStatus.DELIVERED,
-                    hopCount = meshMessage.hopCount,
-                    transportType = TransportType.MESH
-                )
+                if (payload.isNotEmpty()) {
+                    when (payload[0]) {
+                        0x01.toByte() -> handleIncomingTextMessage(senderIdString, meshMessage)
+                        0x03.toByte() -> handleIncomingLocationUpdate(senderIdString, payload)
+                        else -> Log.w("DeviceRepo", "Unknown message type: ${payload[0]}")
+                    }
+                }
                 
-                messageRepository.sendMessage(incomingMessage)
-                
-                // UPDATE: Refresh last seen when a message is received
+                // Refresh last seen when any message is received
                 friendRepository.updateLastSeen(senderIdString, meshMessage.timestamp)
-                
-                // Fire notification
-                meshNotificationManager.showMessageNotification(
-                    senderName = friend?.displayName ?: "Unknown",
-                    content = content,
-                    friendId = senderIdString
-                )
-                
-                Log.d("MeshRouting", "Saved incoming message, updated lastSeen and notified for $senderIdString")
             }
         }
 
@@ -89,7 +79,19 @@ class DeviceRepositoryImpl @Inject constructor(
 
         bleScanner.observeRelayQueue(scope, messageRepository)
 
-        // UPDATE: Sync real-time BLE discovery back to the database
+        // Wire pairing request callbacks
+        bleAdvertiser.onPairingRequestReceived = { request ->
+            _incomingPairingRequest.value = request
+        }
+
+        bleAdvertiser.onPairingAcceptedReceived = { acceptedDeviceId ->
+            scope.launch {
+                Log.d("DeviceRepo", "Pairing accepted received from $acceptedDeviceId")
+                _pairingAccepted.emit(acceptedDeviceId)
+            }
+        }
+
+        // Sync real-time BLE discovery back to the database
         bleScanner.discoveredDevices
             .onEach { devices ->
                 devices.forEach { device ->
@@ -124,9 +126,80 @@ class DeviceRepositoryImpl @Inject constructor(
         }.launchIn(scope)
     }
 
+    private suspend fun handleIncomingTextMessage(senderId: String, meshMessage: com.fyp.crowdlink.domain.model.MeshMessage) {
+        val content = meshMessage.payload.toString(Charsets.UTF_8).substring(1) // Skip type byte
+        val friend = friendRepository.getFriendById(senderId)
+        
+        val incomingMessage = Message(
+            messageId = meshMessage.messageId.toString(),
+            senderId = senderId,
+            receiverId = meshRoutingEngine.localDeviceId,
+            content = content,
+            timestamp = meshMessage.timestamp,
+            isSentByMe = false,
+            deliveryStatus = MessageStatus.DELIVERED,
+            hopCount = meshMessage.hopCount,
+            transportType = TransportType.MESH
+        )
+        
+        messageRepository.sendMessage(incomingMessage)
+        
+        meshNotificationManager.showMessageNotification(
+            senderName = friend?.displayName ?: "Unknown",
+            content = content,
+            friendId = senderId
+        )
+    }
+
+    private suspend fun handleIncomingLocationUpdate(senderId: String, payload: ByteArray) {
+        val location = locationSerialiser.deserialize(payload, senderId)
+        if (location != null) {
+            locationRepository.cacheFriendLocation(location)
+            Log.d("DeviceRepo", "Cached location update from $senderId")
+        }
+    }
+
     override fun startDiscovery() = bleScanner.startDiscovery()
     override fun stopDiscovery() = bleScanner.stopDiscovery()
     override fun startAdvertising(myDeviceId: String) = bleAdvertiser.startAdvertising(myDeviceId)
     override fun stopAdvertising() = bleAdvertiser.stopAdvertising()
     override suspend fun getPairedFriends(): List<Friend> = friendRepository.getAllFriends().first()
+
+    override fun sendPairingRequest(targetDeviceId: String, senderDisplayName: String) {
+        val device = bleScanner.getDeviceById(targetDeviceId)
+        if (device == null) {
+            Log.e("DeviceRepo", "Cannot send pairing request: target device $targetDeviceId not in range")
+            return
+        }
+
+        val payload = JSONObject().apply {
+            put("senderId", meshRoutingEngine.localDeviceId)
+            put("senderName", senderDisplayName)
+        }.toString().toByteArray(Charsets.UTF_8)
+
+        val finalPayload = ByteArray(payload.size + 1)
+        finalPayload[0] = BleAdvertiser.PAIRING_REQUEST_PREFIX
+        System.arraycopy(payload, 0, finalPayload, 1, payload.size)
+
+        bleScanner.sendData(finalPayload, device)
+    }
+
+    override fun sendPairingAccepted(targetDeviceId: String) {
+        val device = bleScanner.getDeviceById(targetDeviceId)
+        if (device == null) return
+
+        val payload = JSONObject().apply {
+            put("senderId", meshRoutingEngine.localDeviceId)
+        }.toString().toByteArray(Charsets.UTF_8)
+
+        val finalPayload = ByteArray(payload.size + 1)
+        finalPayload[0] = BleAdvertiser.PAIRING_ACCEPTED_PREFIX
+        System.arraycopy(payload, 0, finalPayload, 1, payload.size)
+
+        bleScanner.sendData(finalPayload, device)
+    }
+
+    override fun clearIncomingPairingRequest() {
+        _incomingPairingRequest.value = null
+    }
 }

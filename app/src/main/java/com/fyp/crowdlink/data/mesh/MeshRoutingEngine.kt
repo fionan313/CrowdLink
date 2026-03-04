@@ -1,5 +1,6 @@
 package com.fyp.crowdlink.data.mesh
 
+import android.content.SharedPreferences
 import android.util.Log
 import com.fyp.crowdlink.domain.model.MeshMessage
 import java.util.UUID
@@ -9,7 +10,8 @@ import kotlin.random.Random
 
 @Singleton
 class MeshRoutingEngine @Inject constructor(
-    private val seenMessageCache: SeenMessageCache
+    private val seenMessageCache: SeenMessageCache,
+    private val sharedPreferences: SharedPreferences
 ) {
 
     // Set this from outside — the local device's ID
@@ -38,6 +40,13 @@ class MeshRoutingEngine @Inject constructor(
         // 3. TTL check
         if (message.ttl <= 0) {
             Log.d(TAG, "DROP ttl=0: ${message.messageId}")
+            return
+        }
+
+        // Check if Mesh Relay is enabled in settings
+        val relayEnabled = sharedPreferences.getBoolean("mesh_relay", true)
+        if (!relayEnabled) {
+            Log.d(TAG, "DROP relay disabled in settings: ${message.messageId}")
             return
         }
 
