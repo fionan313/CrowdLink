@@ -49,6 +49,7 @@ class BleAdvertiser @Inject constructor(
 
     var onPairingRequestReceived: ((PairingRequest) -> Unit)? = null
     var onPairingAcceptedReceived: ((String) -> Unit)? = null
+    var onUnpairRequestReceived: ((String) -> Unit)? = null
 
     // GATT server callback handles incoming mesh packets
     @SuppressLint("MissingPermission")
@@ -80,6 +81,7 @@ class BleAdvertiser @Inject constructor(
                     when (value[0]) {
                         PAIRING_REQUEST_PREFIX -> handlePairingRequest(value)
                         PAIRING_ACCEPTED_PREFIX -> handlePairingAccepted(value)
+                        UNPAIR_REQUEST_PREFIX -> handleUnpairRequest(value)
                         else -> handleMeshMessage(value)
                     }
                 }
@@ -123,6 +125,17 @@ class BleAdvertiser @Inject constructor(
             Log.d("BLE_ADVERTISER", "Pairing accepted by $senderId")
         } catch (e: Exception) {
             Log.e("BLE_ADVERTISER", "Failed to parse pairing acceptance", e)
+        }
+    }
+
+    private fun handleUnpairRequest(value: ByteArray) {
+        try {
+            val json = JSONObject(value.decodeToString(startIndex = 1))
+            val senderId = json.getString("senderId")
+            onUnpairRequestReceived?.invoke(senderId)
+            Log.d("BLE_ADVERTISER", "Unpair request received from $senderId")
+        } catch (e: Exception) {
+            Log.e("BLE_ADVERTISER", "Failed to parse unpair request", e)
         }
     }
 
@@ -261,5 +274,6 @@ class BleAdvertiser @Inject constructor(
         
         const val PAIRING_REQUEST_PREFIX: Byte = 0x01
         const val PAIRING_ACCEPTED_PREFIX: Byte = 0x02
+        const val UNPAIR_REQUEST_PREFIX: Byte = 0x04
     }
 }

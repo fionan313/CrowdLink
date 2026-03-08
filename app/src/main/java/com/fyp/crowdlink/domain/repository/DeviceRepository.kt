@@ -40,6 +40,11 @@ interface DeviceRepository {
     fun sendPairingAccepted(targetDeviceId: String)
 
     /**
+     * Notifies a target device that we have unpaired from them.
+     */
+    fun sendUnpairNotification(targetDeviceId: String)
+
+    /**
      * Clears the current incoming pairing request.
      */
     fun clearIncomingPairingRequest()

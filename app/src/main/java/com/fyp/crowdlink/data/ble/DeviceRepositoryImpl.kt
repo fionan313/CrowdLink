@@ -91,6 +91,13 @@ class DeviceRepositoryImpl @Inject constructor(
             }
         }
 
+        bleAdvertiser.onUnpairRequestReceived = { senderId ->
+            scope.launch {
+                friendRepository.removeFriendById(senderId)
+                Log.d("DeviceRepo", "Removed $senderId from friends list via unpair notification")
+            }
+        }
+
         // Sync real-time BLE discovery back to the database
         bleScanner.discoveredDevices
             .onEach { devices ->
@@ -194,6 +201,24 @@ class DeviceRepositoryImpl @Inject constructor(
 
         val finalPayload = ByteArray(payload.size + 1)
         finalPayload[0] = BleAdvertiser.PAIRING_ACCEPTED_PREFIX
+        System.arraycopy(payload, 0, finalPayload, 1, payload.size)
+
+        bleScanner.sendData(finalPayload, device)
+    }
+
+    override fun sendUnpairNotification(targetDeviceId: String) {
+        val device = bleScanner.getDeviceById(targetDeviceId)
+        if (device == null) {
+            Log.w("DeviceRepo", "Unpair target not in range — they'll clean up on next seen")
+            return
+        }
+
+        val payload = JSONObject().apply {
+            put("senderId", meshRoutingEngine.localDeviceId)
+        }.toString().toByteArray(Charsets.UTF_8)
+
+        val finalPayload = ByteArray(payload.size + 1)
+        finalPayload[0] = BleAdvertiser.UNPAIR_REQUEST_PREFIX
         System.arraycopy(payload, 0, finalPayload, 1, payload.size)
 
         bleScanner.sendData(finalPayload, device)

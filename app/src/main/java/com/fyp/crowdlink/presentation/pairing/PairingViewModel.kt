@@ -170,6 +170,7 @@ class PairingViewModel @Inject constructor(
             // Send acceptance back so Device A saves Device B
             deviceRepository.sendPairingAccepted(targetDeviceId = request.senderDeviceId)
             deviceRepository.clearIncomingPairingRequest()
+            _pairingState.value = PairingState.Success
         }
     }
 

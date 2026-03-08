@@ -132,11 +132,13 @@ class MessageViewModel @Inject constructor(
             )
             sendMessageUseCase(localMessage)
 
-            // 2. Hand off to MeshRoutingEngine
+            // 2. Hand off to MeshRoutingEngine with type prefix (0x01 for text)
+            val payload = byteArrayOf(0x01) + content.toByteArray(Charsets.UTF_8)
+
             val meshMessage = meshRoutingEngine.createOutbound(
                 senderId = myId,
                 recipientId = friendId,
-                payload = content.toByteArray(Charsets.UTF_8)
+                payload = payload
             )
             
             // 3. Persist to relay queue - background transports will handle the rest
