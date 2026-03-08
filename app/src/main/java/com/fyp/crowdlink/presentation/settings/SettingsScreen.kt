@@ -12,11 +12,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -25,6 +22,38 @@ fun SettingsScreen(
     onNavigateToProfile: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
+    val autoStart by viewModel.autoStart.collectAsState()
+    val meshRelay by viewModel.meshRelay.collectAsState()
+    val esp32Scanning by viewModel.esp32Scanning.collectAsState()
+    val ghostMode by viewModel.ghostMode.collectAsState()
+    val pairedFriendsCount by viewModel.pairedFriendsCount.collectAsState()
+    val deviceId = viewModel.deviceId
+
+    var showClearHistoryDialog by remember { mutableStateOf(false) }
+
+    if (showClearHistoryDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearHistoryDialog = false },
+            title = { Text("Clear Message History") },
+            text = { Text("Are you sure you want to delete all local chat messages? This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.clearMessageHistory()
+                        showClearHistoryDialog = false
+                    }
+                ) {
+                    Text("Clear", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearHistoryDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -61,15 +90,15 @@ fun SettingsScreen(
                 icon = Icons.Default.Bluetooth,
                 title = "Auto-start on launch",
                 subtitle = "Begin scanning and advertising when app opens",
-                checked = true,   // wire to ViewModel
-                onCheckedChange = { }
+                checked = autoStart,
+                onCheckedChange = { viewModel.setAutoStart(it) }
             )
             SettingsToggleItem(
                 icon = Icons.Default.Hub,
                 title = "Mesh relay",
                 subtitle = "Allow your device to forward messages for others",
-                checked = true,
-                onCheckedChange = { }
+                checked = meshRelay,
+                onCheckedChange = { viewModel.setMeshRelay(it) }
             )
             SettingsInfoItem(
                 icon = Icons.Default.Speed,
@@ -90,8 +119,8 @@ fun SettingsScreen(
                 icon = Icons.Default.Router,
                 title = "ESP32 relay scanning",
                 subtitle = "Scan for nearby CrowdLink relay nodes",
-                checked = false,
-                onCheckedChange = { }
+                checked = esp32Scanning,
+                onCheckedChange = { viewModel.setEsp32Scanning(it) }
             )
             SettingsInfoItem(
                 icon = Icons.Default.SettingsInputAntenna,
@@ -104,24 +133,35 @@ fun SettingsScreen(
             // ── Privacy ───────────────────────────────────────────
             SettingsSectionHeader("Privacy")
             SettingsToggleItem(
+                icon = Icons.Default.Security,
+                title = "Ghost Mode",
+                subtitle = "Hide device from all networks and disable radios",
+                checked = ghostMode,
+                onCheckedChange = { viewModel.setGhostMode(it) }
+            )
+            SettingsToggleItem(
                 icon = Icons.Default.LocationOff,
                 title = "Location sharing",
                 subtitle = "Share GPS coordinates with paired friends",
                 checked = false,
                 onCheckedChange = { }
             )
-            SettingsToggleItem(
-                icon = Icons.Default.VisibilityOff,
-                title = "Ephemeral IDs",
-                subtitle = "Rotate BLE identifier periodically",
-                checked = true,
-                onCheckedChange = { }
+            SettingsNavigationItem(
+                icon = Icons.Default.DeleteSweep,
+                title = "Clear Message History",
+                subtitle = "Delete all local chat records",
+                onClick = { showClearHistoryDialog = true }
             )
 
             HorizontalDivider()
 
             // ── About ─────────────────────────────────────────────
             SettingsSectionHeader("About")
+            SettingsInfoItem(
+                icon = Icons.Default.Groups,
+                title = "Paired Friends",
+                value = "$pairedFriendsCount"
+            )
             SettingsInfoItem(
                 icon = Icons.Default.Info,
                 title = "Version",
@@ -130,7 +170,7 @@ fun SettingsScreen(
             SettingsInfoItem(
                 icon = Icons.Default.Devices,
                 title = "Device ID",
-                value = "Tap to copy"   // wire to SharedPreferences
+                value = deviceId.take(8) + "..."
             )
         }
     }
@@ -200,4 +240,3 @@ private fun SettingsInfoItem(
         }
     )
 }
-

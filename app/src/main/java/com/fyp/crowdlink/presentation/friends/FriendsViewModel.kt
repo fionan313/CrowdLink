@@ -3,6 +3,7 @@ package com.fyp.crowdlink.presentation.friends
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fyp.crowdlink.domain.model.Friend
+import com.fyp.crowdlink.domain.repository.DeviceRepository
 import com.fyp.crowdlink.domain.repository.FriendRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -13,7 +14,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class FriendsViewModel @Inject constructor(
-    private val friendRepository: FriendRepository
+    private val friendRepository: FriendRepository,
+    private val deviceRepository: DeviceRepository
 ) : ViewModel() {
     
     val friends: StateFlow<List<Friend>> = 
@@ -26,6 +28,8 @@ class FriendsViewModel @Inject constructor(
     
     fun unpairFriend(friend: Friend) {
         viewModelScope.launch {
+            // Notify the friend over BLE so they can also remove us
+            deviceRepository.sendUnpairNotification(friend.deviceId)
             friendRepository.removeFriend(friend)
         }
     }

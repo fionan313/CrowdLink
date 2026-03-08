@@ -22,6 +22,11 @@ interface MessageRepository {
     suspend fun removeFromRelayQueue(messageId: UUID)
     suspend fun purgeExpiredRelayMessages()
     
+    /**
+     * Deletes all local message history.
+     */
+    suspend fun clearAllMessages()
+    
     // Tracks the currently active chat friend ID to suppress notifications
     val activeChatFriendId: StateFlow<String?>
     fun setActiveChatFriend(friendId: String?)

@@ -229,7 +229,7 @@ class WifiDirectManager @Inject constructor(
                 if (header == "MESH_RELAY_V1") {
                     val senderId = input.readUTF()
                     val content = input.readUTF()
-                    val messageIdStr = input.readUTF()
+                    input.readUTF()
                     
                     Log.d("WifiDirect", "Received MESH message from $senderId: $content")
                     

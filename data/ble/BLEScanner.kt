@@ -72,9 +72,6 @@ class BleScanner @Inject constructor(
 
     //  map of device address to BluetoothDevice for reconnection
     private val knownDevices = mutableMapOf<String, BluetoothDevice>()
-    
-    // map of deviceId to address
-    private val deviceIdToAddress = mutableMapOf<String, String>()
 
     //  GATT client callback
     @SuppressLint("MissingPermission")
@@ -205,10 +202,6 @@ class BleScanner @Inject constructor(
         characteristic: BluetoothGattCharacteristic
     ) {
         val queue = pendingMessages.remove(deviceAddress) ?: return
-        
-        // Loop through and send all pending messages
-        // Note: Sequential writes in GATT often need to wait for onCharacteristicWrite.
-        // For simplicity here we just send the first, but in a robust system we'd chain them.
         val first = queue.firstOrNull() ?: return
 
         characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
@@ -287,7 +280,6 @@ class BleScanner @Inject constructor(
 
                 if (deviceId != null) {
                     knownDevices[it.device.address] = it.device
-                    deviceIdToAddress[deviceId] = it.device.address
                     updateDeviceRssi(deviceId, rssi)
                 }
             }
@@ -345,8 +337,14 @@ class BleScanner @Inject constructor(
     }
 
     fun getDeviceById(deviceId: String): BluetoothDevice? {
+        // Since discoveredDevices maps deviceId to rssi etc, we need to map deviceId to address
+        // But knownDevices is address -> device.
+        // We need a deviceId -> address mapping.
+        // Let's modify scanCallback to maintain this.
         return deviceIdToAddress[deviceId]?.let { address -> knownDevices[address] }
     }
+
+    private val deviceIdToAddress = mutableMapOf<String, String>()
 
     companion object {
         private const val RSSI_SAMPLE_SIZE = 10

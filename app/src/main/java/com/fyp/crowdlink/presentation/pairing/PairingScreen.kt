@@ -29,10 +29,30 @@ fun PairingScreen(
     // Explicitly observing StateFlows from the ViewModel
     val qrCodeBitmap by viewModel.qrCodeBitmap.collectAsState()
     val pairingState by viewModel.pairingState.collectAsState()
+    val incomingRequest by viewModel.incomingPairingRequest.collectAsState()
     
     // Trigger QR generation when the screen is first launched
     LaunchedEffect(Unit) {
         viewModel.generateQRCode()
+    }
+
+    // Step 5: Show confirmation dialog
+    incomingRequest?.let { request ->
+        AlertDialog(
+            onDismissRequest = { viewModel.declinePairingRequest() },
+            title = { Text("Pairing Request") },
+            text = { Text("${request.senderDisplayName} wants to pair with you") },
+            confirmButton = {
+                TextButton(onClick = { viewModel.acceptPairingRequest(request) }) {
+                    Text("Accept")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.declinePairingRequest() }) {
+                    Text("Decline")
+                }
+            }
+        )
     }
     
     Column(
@@ -63,6 +83,11 @@ fun PairingScreen(
         
         // Handle pairing state changes (Success, Error, etc.)
         when (pairingState) {
+            is PairingState.AwaitingConfirmation -> {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Waiting for friend to accept...")
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
             is PairingState.Success -> {
                 // Navigate away or show success message when pairing is successful
                 LaunchedEffect(Unit) {

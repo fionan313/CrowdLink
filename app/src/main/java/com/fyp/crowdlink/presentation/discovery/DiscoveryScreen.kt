@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -29,12 +30,6 @@ fun DiscoveryScreen(
     val isRelayConnected by viewModel.isRelayConnected.collectAsState()
     val isDiscovering by viewModel.isDiscovering.collectAsState()
     val isAdvertising by viewModel.isAdvertising.collectAsState()
-
-    // Auto-start discovery and advertising on first launch of this screen
-    LaunchedEffect(Unit) {
-        if (!isDiscovering) viewModel.startDiscovery()
-        if (!isAdvertising) viewModel.startAdvertising()
-    }
 
     Scaffold(
         topBar = {
@@ -103,7 +98,7 @@ fun DiscoveryScreen(
                 }
             }
 
-            Divider()
+            HorizontalDivider()
 
             // Nearby friends list
             Text(
@@ -184,7 +179,7 @@ fun RelayStatusBanner(isConnected: Boolean, relayCount: Int, onClick: () -> Unit
                     )
                 }
             }
-            Icon(Icons.Default.PlayArrow, contentDescription = "Details")
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Details")
         }
     }
 }

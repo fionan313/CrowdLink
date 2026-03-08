@@ -2,6 +2,7 @@ package com.fyp.crowdlink.presentation.friends
 
 import app.cash.turbine.test
 import com.fyp.crowdlink.domain.model.Friend
+import com.fyp.crowdlink.domain.repository.DeviceRepository
 import com.fyp.crowdlink.domain.repository.FriendRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -20,13 +21,15 @@ class FriendsViewModelTest {
 
     private lateinit var viewModel: FriendsViewModel
     private lateinit var mockRepository: FriendRepository
+    private lateinit var mockDeviceRepository: DeviceRepository
 
-    private val testDispatcher = UnconfinedTestDispatcher() // CHANGED: Use UnconfinedTestDispatcher
+    private val testDispatcher = UnconfinedTestDispatcher()
 
     @Before
     fun setup() {
         Dispatchers.setMain(testDispatcher)
         mockRepository = mockk(relaxed = true)
+        mockDeviceRepository = mockk(relaxed = true)
 
         // Set up the mock BEFORE creating ViewModel
         val testFriends = listOf(
@@ -46,7 +49,7 @@ class FriendsViewModelTest {
         coEvery { mockRepository.getAllFriends() } returns flowOf(testFriends)
 
         // Create the ViewModel
-        viewModel = FriendsViewModel(mockRepository)
+        viewModel = FriendsViewModel(mockRepository, mockDeviceRepository)
     }
 
     @After
@@ -81,5 +84,6 @@ class FriendsViewModelTest {
 
         // Then
         coVerify { mockRepository.removeFriend(friend) }
+        coVerify { mockDeviceRepository.sendUnpairNotification(friend.deviceId) }
     }
 }
