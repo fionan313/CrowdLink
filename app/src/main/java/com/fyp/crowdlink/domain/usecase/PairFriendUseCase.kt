@@ -19,13 +19,14 @@ class PairFriendUseCase @Inject constructor(
      *
      * @param deviceId The unique identifier of the friend's device.
      * @param displayName The name to display for the friend.
+     * @param sharedKey The AES-256-GCM symmetric key from pairing.
      */
-    suspend operator fun invoke(deviceId: String, displayName: String) {
-        // Create a new Friend object. Public key is initially null until exchanged.
+    suspend operator fun invoke(deviceId: String, displayName: String, sharedKey: String? = null) {
+        // Create a new Friend object.
         val friend = Friend(
             deviceId = deviceId,
             displayName = displayName,
-            publicKey = null  // Will add in Week 8
+            sharedKey = sharedKey
         )
         // Persist the new friend to the database via the repository
         friendRepository.addFriend(friend)

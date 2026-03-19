@@ -4,11 +4,13 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fyp.crowdlink.data.ble.BleScanner
+import com.fyp.crowdlink.data.crypto.EncryptionManager
 import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
 import com.fyp.crowdlink.data.p2p.WifiDirectManager
 import com.fyp.crowdlink.domain.model.Message
 import com.fyp.crowdlink.domain.model.MessageStatus
 import com.fyp.crowdlink.domain.model.TransportType
+import com.fyp.crowdlink.domain.repository.FriendRepository
 import com.fyp.crowdlink.domain.repository.MessageRepository
 import com.fyp.crowdlink.domain.repository.UserProfileRepository
 import com.fyp.crowdlink.domain.usecase.GetMessagesUseCase
@@ -38,7 +40,9 @@ class MessageViewModel @Inject constructor(
     private val getMessagesUseCase: GetMessagesUseCase,
     private val userProfileRepository: UserProfileRepository,
     private val meshRoutingEngine: MeshRoutingEngine,
-    private val messageRepository: MessageRepository
+    private val messageRepository: MessageRepository,
+    private val encryptionManager: EncryptionManager,
+    private val friendRepository: FriendRepository
 ) : ViewModel() {
 
     private val _myDeviceId = MutableStateFlow<String>("")
@@ -133,7 +137,19 @@ class MessageViewModel @Inject constructor(
             sendMessageUseCase(localMessage)
 
             // 2. Hand off to MeshRoutingEngine with type prefix (0x01 for text)
-            val payload = byteArrayOf(0x01) + content.toByteArray(Charsets.UTF_8)
+            val friend = friendRepository.getFriendById(friendId)
+            val plaintext = byteArrayOf(0x01) + content.toByteArray(Charsets.UTF_8)
+
+            val payload = if (friend?.sharedKey != null) {
+                try {
+                    encryptionManager.encrypt(plaintext, friend.sharedKey)
+                } catch (e: Exception) {
+                    Log.e("MessageViewModel", "Encryption failed, sending plaintext", e)
+                    plaintext
+                }
+            } else {
+                plaintext
+            }
 
             val meshMessage = meshRoutingEngine.createOutbound(
                 senderId = myId,

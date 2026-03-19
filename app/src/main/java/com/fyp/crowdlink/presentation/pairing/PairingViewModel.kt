@@ -5,6 +5,7 @@ import android.os.Build
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.fyp.crowdlink.data.crypto.EncryptionManager
 import com.fyp.crowdlink.domain.model.Friend
 import com.fyp.crowdlink.domain.model.PairingRequest
 import com.fyp.crowdlink.domain.repository.DeviceRepository
@@ -34,7 +35,8 @@ class PairingViewModel @Inject constructor(
     private val userProfileRepository: UserProfileRepository,
     private val pairFriendUseCase: PairFriendUseCase,
     private val friendRepository: FriendRepository,
-    private val deviceRepository: DeviceRepository
+    private val deviceRepository: DeviceRepository,
+    private val encryptionManager: EncryptionManager
 ) : ViewModel() {
     
     // StateFlow for the generated QR code image
@@ -53,6 +55,9 @@ class PairingViewModel @Inject constructor(
     
     private var pendingFriendDeviceId: String? = null
     private var pendingFriendName: String? = null
+    private var pendingSharedKey: String? = null // Key received from scanning QR
+
+    private val _pendingSharedKey = MutableStateFlow<String?>(null) // Key generated for our QR
 
     init {
         loadDeviceId()
@@ -72,6 +77,7 @@ class PairingViewModel @Inject constructor(
                         friendRepository.addFriend(Friend(
                             deviceId = acceptedDeviceId,
                             displayName = pendingFriendName ?: "Unknown Friend",
+                            sharedKey = _pendingSharedKey.value,
                             pairedAt = System.currentTimeMillis()
                         ))
                         _pairingState.value = PairingState.Success
@@ -89,9 +95,13 @@ class PairingViewModel @Inject constructor(
                 val deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}"
                 val displayName = userProfile?.displayName?.ifBlank { deviceModel } ?: deviceModel
                 
+                val sharedKey = encryptionManager.generateSharedKey()
+                _pendingSharedKey.value = sharedKey
+
                 val qrData = JSONObject().apply {
                     put("deviceId", _myDeviceId.value)
                     put("displayName", displayName)
+                    put("sharedKey", sharedKey)
                     put("timestamp", System.currentTimeMillis())
                 }.toString()
                 
@@ -125,6 +135,7 @@ class PairingViewModel @Inject constructor(
             try {
                 var friendDeviceId = ""
                 var friendName = defaultName
+                var sharedKey: String? = null
 
                 try {
                     val json = JSONObject(scannedData)
@@ -134,6 +145,9 @@ class PairingViewModel @Inject constructor(
                     if (json.has("displayName")) {
                         friendName = json.getString("displayName")
                     }
+                    if (json.has("sharedKey")) {
+                        sharedKey = json.getString("sharedKey")
+                    }
                 } catch (e: Exception) {
                     friendDeviceId = scannedData
                 }
@@ -141,6 +155,7 @@ class PairingViewModel @Inject constructor(
                 if (friendDeviceId.isNotBlank()) {
                     pendingFriendDeviceId = friendDeviceId
                     pendingFriendName = friendName
+                    pendingSharedKey = sharedKey
 
                     val userProfile = userProfileRepository.getUserProfile().first()
                     val myDisplayName = userProfile?.displayName ?: "${Build.MANUFACTURER} ${Build.MODEL}"
@@ -165,6 +180,7 @@ class PairingViewModel @Inject constructor(
             friendRepository.addFriend(Friend(
                 deviceId = request.senderDeviceId,
                 displayName = request.senderDisplayName,
+                sharedKey = pendingSharedKey,
                 pairedAt = System.currentTimeMillis()
             ))
             // Send acceptance back so Device A saves Device B

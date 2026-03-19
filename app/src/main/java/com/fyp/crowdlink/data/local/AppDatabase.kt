@@ -26,7 +26,7 @@ import com.fyp.crowdlink.domain.model.UserProfile
         RelayMessageEntity::class,
         LocationEntity::class
     ],
-    version = 11,
+    version = 12,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

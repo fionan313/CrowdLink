@@ -2,6 +2,7 @@ package com.fyp.crowdlink.data.ble
 
 import android.content.SharedPreferences
 import android.util.Log
+import com.fyp.crowdlink.data.crypto.EncryptionManager
 import com.fyp.crowdlink.data.mesh.LocationMessageSerialiser
 import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
 import com.fyp.crowdlink.data.notifications.MeshNotificationManager
@@ -34,7 +35,8 @@ class DeviceRepositoryImpl @Inject constructor(
     private val sharedPreferences: SharedPreferences,
     private val meshRoutingEngine: MeshRoutingEngine,
     private val meshNotificationManager: MeshNotificationManager,
-    private val locationSerialiser: LocationMessageSerialiser
+    private val locationSerialiser: LocationMessageSerialiser,
+    private val encryptionManager: EncryptionManager
 ) : DeviceRepository {
 
     private val scope = CoroutineScope(Dispatchers.IO)
@@ -64,7 +66,14 @@ class DeviceRepositoryImpl @Inject constructor(
                     when (payload[0]) {
                         0x01.toByte() -> handleIncomingTextMessage(senderIdString, meshMessage)
                         0x03.toByte() -> handleIncomingLocationUpdate(senderIdString, payload)
-                        else -> Log.w("DeviceRepo", "Unknown message type: ${payload[0]}")
+                        else -> {
+                            // Try to decrypt if it doesn't match known plaintext prefixes
+                            // or if it's potentially encrypted data.
+                            // For simplicity, we assume text and location are always prefixed
+                            // inside the plaintext, but the whole payload is encrypted.
+                            // If it's not 0x01 or 0x03, it might be an encrypted payload starting with tink header.
+                            handleIncomingEncryptedMessage(senderIdString, meshMessage)
+                        }
                     }
                 }
                 
@@ -133,10 +142,42 @@ class DeviceRepositoryImpl @Inject constructor(
         }.launchIn(scope)
     }
 
-    private suspend fun handleIncomingTextMessage(senderId: String, meshMessage: com.fyp.crowdlink.domain.model.MeshMessage) {
-        val content = meshMessage.payload.toString(Charsets.UTF_8).substring(1) // Skip type byte
+    private suspend fun handleIncomingEncryptedMessage(senderId: String, meshMessage: com.fyp.crowdlink.domain.model.MeshMessage) {
         val friend = friendRepository.getFriendById(senderId)
-        
+        val decryptedPayload = if (friend?.sharedKey != null) {
+            try {
+                encryptionManager.decrypt(meshMessage.payload, friend.sharedKey)
+            } catch (e: Exception) {
+                Log.e("DeviceRepo", "Decryption failed from $senderId - dropping message", e)
+                return
+            }
+        } else {
+            // If no shared key, it might be plaintext but didn't match prefixes (unexpected)
+            meshMessage.payload
+        }
+
+        if (decryptedPayload.isNotEmpty()) {
+            when (decryptedPayload[0]) {
+                0x01.toByte() -> {
+                    val content = decryptedPayload.toString(Charsets.UTF_8).substring(1)
+                    processTextMessage(senderId, meshMessage, content, friend)
+                }
+                0x03.toByte() -> {
+                    processLocationUpdate(senderId, decryptedPayload)
+                }
+                else -> Log.w("DeviceRepo", "Unknown decrypted message type: ${decryptedPayload[0]}")
+            }
+        }
+    }
+
+    private suspend fun handleIncomingTextMessage(senderId: String, meshMessage: com.fyp.crowdlink.domain.model.MeshMessage) {
+        // This is called if payload[0] == 0x01 (plaintext fallback or unencrypted friend)
+        val content = meshMessage.payload.toString(Charsets.UTF_8).substring(1)
+        val friend = friendRepository.getFriendById(senderId)
+        processTextMessage(senderId, meshMessage, content, friend)
+    }
+
+    private suspend fun processTextMessage(senderId: String, meshMessage: com.fyp.crowdlink.domain.model.MeshMessage, content: String, friend: Friend?) {
         val incomingMessage = Message(
             messageId = meshMessage.messageId.toString(),
             senderId = senderId,
@@ -159,6 +200,11 @@ class DeviceRepositoryImpl @Inject constructor(
     }
 
     private suspend fun handleIncomingLocationUpdate(senderId: String, payload: ByteArray) {
+        // Plaintext location update
+        processLocationUpdate(senderId, payload)
+    }
+
+    private suspend fun processLocationUpdate(senderId: String, payload: ByteArray) {
         val location = locationSerialiser.deserialize(payload, senderId)
         if (location != null) {
             locationRepository.cacheFriendLocation(location)

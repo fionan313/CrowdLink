@@ -96,6 +96,9 @@ dependencies {
     // Permissions
     implementation(libs.accompanist.permissions)
 
+    // Cryptography
+    implementation(libs.tink.android)
+
     // Unit Testing
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
