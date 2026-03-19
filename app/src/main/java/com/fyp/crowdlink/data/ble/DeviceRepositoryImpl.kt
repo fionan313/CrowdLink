@@ -114,7 +114,7 @@ class DeviceRepositoryImpl @Inject constructor(
                     friendId = senderId
                 )
             }
-        }
+        } as ((senderId: String, rawPayload: ByteArray) -> Unit)?
 
         // Sync real-time BLE discovery back to the database
         bleScanner.discoveredDevices
