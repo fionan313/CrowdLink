@@ -1,7 +1,6 @@
 package com.fyp.crowdlink.presentation
 
 import android.Manifest
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -13,10 +12,15 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import com.fyp.crowdlink.presentation.discovery.DiscoveryViewModel
+import com.fyp.crowdlink.presentation.onboarding.OnboardingScreen
 import com.fyp.crowdlink.ui.theme.CrowdLinkTheme
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -52,10 +56,24 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    MainScreen(
-                        pendingChatFriendId = navigateToChatFriendId.value,
-                        onChatNavigated = { navigateToChatFriendId.value = null }
-                    )
+                    val sharedPrefs = getSharedPreferences("crowdlink_prefs", MODE_PRIVATE)
+                    var onboardingComplete by remember {
+                        mutableStateOf(sharedPrefs.getBoolean("onboarding_complete", false))
+                    }
+
+                    if (!onboardingComplete) {
+                        OnboardingScreen(
+                            onComplete = {
+                                sharedPrefs.edit { putBoolean("onboarding_complete", true) }
+                                onboardingComplete = true
+                            }
+                        )
+                    } else {
+                        MainScreen(
+                            pendingChatFriendId = navigateToChatFriendId.value,
+                            onChatNavigated = { navigateToChatFriendId.value = null }
+                        )
+                    }
                 }
             }
         }

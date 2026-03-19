@@ -1,6 +1,10 @@
 package com.fyp.crowdlink.data.mesh
 
+import android.content.SharedPreferences
 import com.fyp.crowdlink.domain.model.MeshMessage
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -10,17 +14,21 @@ class MeshRoutingEngineTest {
 
     private lateinit var cache: SeenMessageCache
     private lateinit var engine: MeshRoutingEngine
+    private val sharedPreferences: SharedPreferences = mockk(relaxed = true)
 
     @Before
     fun setup() {
         cache = SeenMessageCache()
-        engine = MeshRoutingEngine(cache).apply {
+        // Default to relay enabled
+        every { sharedPreferences.getBoolean("mesh_relay", true) } returns true
+        
+        engine = MeshRoutingEngine(cache, sharedPreferences).apply {
             localDeviceId = "device-local"
         }
     }
 
     @Test
-    fun `message addressed to local device is delivered`() {
+    fun message_addressed_to_local_device_is_delivered() = runTest {
         var delivered: MeshMessage? = null
         engine.onMessageForMe = { delivered = it }
 
@@ -36,7 +44,7 @@ class MeshRoutingEngineTest {
     }
 
     @Test
-    fun `duplicate message is dropped`() {
+    fun duplicate_message_is_dropped() = runTest {
         var relayCount = 0
         engine.onRelay = { relayCount++ }
 
@@ -56,7 +64,7 @@ class MeshRoutingEngineTest {
     }
 
     @Test
-    fun `message with ttl zero is dropped`() {
+    fun message_with_ttl_zero_is_dropped() = runTest {
         var relayed: MeshMessage? = null
         engine.onRelay = { relayed = it }
 
@@ -72,7 +80,7 @@ class MeshRoutingEngineTest {
     }
 
     @Test
-    fun `ttl decrements on relay`() {
+    fun ttl_decrements_on_relay() = runTest {
         val relayed = mutableListOf<MeshMessage>()
         // Force relay by setting probability — override for test
         engine.onRelay = { relayed.add(it) }
@@ -97,7 +105,7 @@ class MeshRoutingEngineTest {
     }
 
     @Test
-    fun `seen cache prevents reprocessing`() {
+    fun seen_cache_prevents_reprocessing() = runTest {
         var deliveryCount = 0
         engine.onMessageForMe = { deliveryCount++ }
 
@@ -111,5 +119,27 @@ class MeshRoutingEngineTest {
         engine.processIncoming(msg)
 
         assertEquals(1, deliveryCount)
+    }
+
+    @Test
+    fun relay_is_dropped_when_mesh_relay_setting_is_disabled() = runTest {
+        every { sharedPreferences.getBoolean("mesh_relay", true) } returns false
+        
+        var relayCount = 0
+        engine.onRelay = { relayCount++ }
+
+        val msg = MeshMessage(
+            senderId = "device-a",
+            recipientId = "device-b",
+            payload = "test".toByteArray(),
+            ttl = 5
+        )
+
+        repeat(20) {
+            val fresh = msg.copy(messageId = UUID.randomUUID())
+            engine.processIncoming(fresh)
+        }
+
+        assertEquals(0, relayCount)
     }
 }

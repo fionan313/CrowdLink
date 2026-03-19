@@ -24,6 +24,13 @@
 
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true"/>
     <uses-feature android:name="android.hardware.wifi.direct" android:required="true"/>
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />

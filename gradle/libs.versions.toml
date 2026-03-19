@@ -26,10 +26,12 @@ cameraX = "1.4.0"
 accompanistPermissions = "0.36.0"
 ksp = "2.1.0-1.0.29"
 roomKtx = "2.8.4"
+tinkAndroid = "1.10.0"
 turbine = "1.2.1"
 zxingAndroidEmbedded = "4.3.0"
 identityJvm = "202411.1"
 generativeai = "0.9.0"
+annotationJvm = "1.9.1"
 
 
 [libraries]
@@ -60,8 +62,10 @@ androidx-room-runtime = { group = "androidx.room", name = "room-runtime", versio
 androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 
-mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
+mockk-core = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
+mockk-android = { group = "io.mockk", name = "mockk-android", version.ref = "mockk" }
 timber = { module = "com.jakewharton.timber:timber", version.ref = "timber" }
+tink-android-v1100 = { module = "com.google.crypto.tink:tink-android", version.ref = "tinkAndroid" }
 turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
 
 # Hilt
@@ -91,6 +95,7 @@ room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "roomKtx"
 zxing-android-embedded = { module = "com.journeyapps:zxing-android-embedded", version.ref = "zxingAndroidEmbedded" }
 identity-jvm = { group = "com.android.identity", name = "identity-jvm", version.ref = "identityJvm" }
 generativeai = { group = "com.google.ai.client.generativeai", name = "generativeai", version.ref = "generativeai" }
+androidx-annotation-jvm = { group = "androidx.annotation", name = "annotation-jvm", version.ref = "annotationJvm" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
