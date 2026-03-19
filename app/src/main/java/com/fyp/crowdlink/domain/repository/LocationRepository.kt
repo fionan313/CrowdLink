@@ -28,4 +28,9 @@ interface LocationRepository {
      * Returns a Flow of a specific friend's location by their device ID.
      */
     fun getFriendLocation(deviceId: String): Flow<DeviceLocation?>
+
+    /**
+     * Clears all cached friend locations from the database.
+     */
+    suspend fun clearAllFriendLocations()
 }

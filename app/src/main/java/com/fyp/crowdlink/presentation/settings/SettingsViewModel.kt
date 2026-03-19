@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fyp.crowdlink.domain.model.UserProfile
 import com.fyp.crowdlink.domain.repository.FriendRepository
+import com.fyp.crowdlink.domain.repository.LocationRepository
 import com.fyp.crowdlink.domain.repository.MessageRepository
 import com.fyp.crowdlink.domain.repository.UserProfileRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -22,7 +23,8 @@ class SettingsViewModel @Inject constructor(
     private val userProfileRepository: UserProfileRepository,
     private val friendRepository: FriendRepository,
     private val messageRepository: MessageRepository,
-    private val sharedPreferences: SharedPreferences
+    private val sharedPreferences: SharedPreferences,
+    private val locationRepository: LocationRepository
 ) : ViewModel() {
     
     private val _userProfile = MutableStateFlow<UserProfile?>(null)
@@ -42,6 +44,9 @@ class SettingsViewModel @Inject constructor(
 
     private val _ghostMode = MutableStateFlow(sharedPreferences.getBoolean("ghost_mode", false))
     val ghostMode: StateFlow<Boolean> = _ghostMode.asStateFlow()
+
+    private val _locationSharing = MutableStateFlow(sharedPreferences.getBoolean("location_sharing", true))
+    val locationSharing: StateFlow<Boolean> = _locationSharing.asStateFlow()
 
     val pairedFriendsCount: StateFlow<Int> = friendRepository.getAllFriends()
         .map { it.size }
@@ -115,6 +120,16 @@ class SettingsViewModel @Inject constructor(
         if (enabled) {
             // Note: DiscoveryViewModel or the Mesh service should observe this pref
             // and stop discovery/advertising accordingly.
+        }
+    }
+
+    fun setLocationSharing(enabled: Boolean) {
+        sharedPreferences.edit().putBoolean("location_sharing", enabled).apply()
+        _locationSharing.value = enabled
+        if (!enabled) {
+            viewModelScope.launch {
+                locationRepository.clearAllFriendLocations()
+            }
         }
     }
 

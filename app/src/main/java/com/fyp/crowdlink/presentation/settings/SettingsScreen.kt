@@ -26,6 +26,7 @@ fun SettingsScreen(
     val meshRelay by viewModel.meshRelay.collectAsState()
     val esp32Scanning by viewModel.esp32Scanning.collectAsState()
     val ghostMode by viewModel.ghostMode.collectAsState()
+    val locationSharing by viewModel.locationSharing.collectAsState() // Observe state
     val pairedFriendsCount by viewModel.pairedFriendsCount.collectAsState()
     val deviceId = viewModel.deviceId
 
@@ -143,8 +144,8 @@ fun SettingsScreen(
                 icon = Icons.Default.LocationOff,
                 title = "Location sharing",
                 subtitle = "Share GPS coordinates with paired friends",
-                checked = false,
-                onCheckedChange = { }
+                checked = locationSharing, // Use observed state
+                onCheckedChange = { viewModel.setLocationSharing(it) } // Connect to setter
             )
             SettingsNavigationItem(
                 icon = Icons.Default.DeleteSweep,
@@ -157,17 +158,17 @@ fun SettingsScreen(
 
             // ── About ─────────────────────────────────────────────
             SettingsSectionHeader("About")
-            SettingsInfoItem(
+            SettingsInfoHeader(
                 icon = Icons.Default.Groups,
                 title = "Paired Friends",
                 value = "$pairedFriendsCount"
             )
-            SettingsInfoItem(
+            SettingsInfoHeader(
                 icon = Icons.Default.Info,
                 title = "Version",
                 value = "0.7.0"
             )
-            SettingsInfoItem(
+            SettingsInfoHeader(
                 icon = Icons.Default.Devices,
                 title = "Device ID",
                 value = deviceId.take(8) + "..."
@@ -224,6 +225,25 @@ private fun SettingsToggleItem(
 
 @Composable
 private fun SettingsInfoItem(
+    icon: ImageVector,
+    title: String,
+    value: String
+) {
+    ListItem(
+        headlineContent = { Text(title) },
+        leadingContent = { Icon(icon, contentDescription = null) },
+        trailingContent = {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    )
+}
+
+@Composable
+private fun SettingsInfoHeader(
     icon: ImageVector,
     title: String,
     value: String
