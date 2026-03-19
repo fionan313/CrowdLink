@@ -37,11 +37,8 @@ class DeviceRepositoryImpl @Inject constructor(
     private val meshRoutingEngine: MeshRoutingEngine,
     private val meshNotificationManager: MeshNotificationManager,
     private val locationSerialiser: LocationMessageSerialiser,
-<<<<<<< crypto
     private val encryptionManager: EncryptionManager
-=======
     private val userProfileRepository: UserProfileRepository
->>>>>>> main
 ) : DeviceRepository {
 
     private val scope = CoroutineScope(Dispatchers.IO)
