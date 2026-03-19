@@ -65,7 +65,7 @@ androidx-room-compiler = { group = "androidx.room", name = "room-compiler", vers
 mockk-core = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
 mockk-android = { group = "io.mockk", name = "mockk-android", version.ref = "mockk" }
 timber = { module = "com.jakewharton.timber:timber", version.ref = "timber" }
-tink-android-v1100 = { module = "com.google.crypto.tink:tink-android", version.ref = "tinkAndroid" }
+tink-android = { module = "com.google.crypto.tink:tink-android", version.ref = "tinkAndroid" }
 turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
 
 # Hilt

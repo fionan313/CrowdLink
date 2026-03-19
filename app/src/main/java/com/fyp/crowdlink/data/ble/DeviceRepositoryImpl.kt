@@ -37,7 +37,7 @@ class DeviceRepositoryImpl @Inject constructor(
     private val meshRoutingEngine: MeshRoutingEngine,
     private val meshNotificationManager: MeshNotificationManager,
     private val locationSerialiser: LocationMessageSerialiser,
-    private val encryptionManager: EncryptionManager
+    private val encryptionManager: EncryptionManager,
     private val userProfileRepository: UserProfileRepository
 ) : DeviceRepository {
 
@@ -63,7 +63,7 @@ class DeviceRepositoryImpl @Inject constructor(
             scope.launch {
                 val senderIdString = meshMessage.senderId.toString()
                 val payload = meshMessage.payload
-                
+
                 if (payload.isNotEmpty()) {
                     when (payload[0]) {
                         0x01.toByte() -> handleIncomingTextMessage(senderIdString, meshMessage)
