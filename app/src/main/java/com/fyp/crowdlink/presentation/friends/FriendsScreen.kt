@@ -66,13 +66,16 @@ fun FriendsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Friends") }
+                title = { Text("Friends") },
+                actions = {
+                    IconButton(onClick = onNavigateToPairing) {
+                        Icon(Icons.Default.PersonAdd, contentDescription = "Add Friend")
+                    }
+                    IconButton(onClick = onNavigateToSettings) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                    }
+                }
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = onNavigateToPairing) {
-                Icon(Icons.Default.Add, "Add Friend")
-            }
         }
     ) { paddingValues ->
         Column(
@@ -102,7 +105,7 @@ fun FriendsScreen(
                             style = MaterialTheme.typography.titleMedium
                         )
                         Text(
-                            text = "Tap + to pair with a friend",
+                            text = "Tap the add icon to pair with a friend",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

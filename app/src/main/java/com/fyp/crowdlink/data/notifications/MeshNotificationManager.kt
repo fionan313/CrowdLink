@@ -1,6 +1,7 @@
 package com.fyp.crowdlink.data.notifications
 
 import android.Manifest
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -8,6 +9,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -24,23 +29,42 @@ class MeshNotificationManager @Inject constructor(
     companion object {
         const val CHANNEL_ID = "crowdlink_messages"
         const val CHANNEL_NAME = "CrowdLink Messages"
+        const val SOS_CHANNEL_ID = "crowdlink_sos"
         const val SOS_NOTIFICATION_ID = 9001
     }
 
+    private val notificationManager = context.getSystemService(NotificationManager::class.java)
+
     init {
-        createChannel()
+        createNotificationChannels()
     }
 
-    private fun createChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            CHANNEL_NAME,
-            NotificationManager.IMPORTANCE_HIGH
-        ).apply {
-            description = "Incoming messages from friends via mesh"
+    private fun createNotificationChannels() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // Regular messages channel
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                CHANNEL_NAME,
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Incoming messages from friends via mesh"
+            }
+            notificationManager.createNotificationChannel(channel)
+
+            // SOS Alert channel — high importance, bypass DND where possible
+            val sosChannel = NotificationChannel(
+                SOS_CHANNEL_ID,
+                "SOS Alerts",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Emergency alerts from paired friends"
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 500, 200, 500, 200, 500)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                setBypassDnd(true)   // requests DND bypass — user can still override in settings
+            }
+            notificationManager.createNotificationChannel(sosChannel)
         }
-        val manager = context.getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(channel)
     }
 
     fun showMessageNotification(senderName: String, content: String, friendId: String) {
@@ -98,22 +122,56 @@ class MeshNotificationManager @Inject constructor(
             "Location unavailable"
         }
 
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+        // Fire vibration directly — does not rely on notification system
+        // so it works even if notification is suppressed by manufacturer
+        triggerSosVibration()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            if (!notificationManager.canUseFullScreenIntent()) {
+                Log.w("MeshNotificationManager", 
+                    "USE_FULL_SCREEN_INTENT not granted — SOS will not show as full-screen on this device")
+            }
+        }
+
+        val fullScreenIntent = buildSosFullScreenIntent(friendId)
+
+        val notification = NotificationCompat.Builder(context, SOS_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
-            .setContentTitle("🆘 SOS Alert from $senderName")
+            .setContentTitle("🆘 SOS from $senderName")
             .setContentText(locationText)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(
-                "$senderName has sent an emergency alert.\n$locationText"
-            ))
+            .setStyle(
+                NotificationCompat.BigTextStyle().bigText(
+                    "$senderName has sent an emergency alert.\n$locationText"
+                )
+            )
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setVibrate(longArrayOf(0, 500, 200, 500, 200, 500))
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(true)
-            .setFullScreenIntent(buildSosFullScreenIntent(friendId), true)
+            .setFullScreenIntent(fullScreenIntent, true)
             .build()
 
-        NotificationManagerCompat.from(context)
-            .notify(SOS_NOTIFICATION_ID, notification)
+        notificationManager.notify(SOS_NOTIFICATION_ID, notification)
+    }
+
+    private fun triggerSosVibration() {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vibratorManager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+
+        val pattern = longArrayOf(0, 500, 200, 500, 200, 500)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(pattern, -1)
+        }
     }
 
     private fun buildSosFullScreenIntent(friendId: String): PendingIntent {
@@ -122,7 +180,9 @@ class MeshNotificationManager @Inject constructor(
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         return PendingIntent.getActivity(
-            context, 0, intent,
+            context,
+            SOS_NOTIFICATION_ID,
+            intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
     }

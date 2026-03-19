@@ -85,7 +85,15 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleNotificationDeepLink(intent: Intent) {
+        // existing chat deep link handling
         intent.getStringExtra("navigate_to_chat")?.let { friendId ->
+            navigateToChatFriendId.value = friendId
+        }
+
+        // SOS alert deep link — navigate to friends screen
+        // so the user can see who sent the alert and respond
+        intent.getStringExtra("sos_alert_friend_id")?.let { friendId ->
+            // For now, navigate to the friends tab/chat
             navigateToChatFriendId.value = friendId
         }
     }
