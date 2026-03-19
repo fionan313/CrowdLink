@@ -67,6 +67,10 @@ class LocationRepositoryImpl @Inject constructor(
         return locationDao.getLocationForDevice(deviceId).map { it?.toDomain() }
     }
 
+    override suspend fun clearAllFriendLocations() {
+        locationDao.deleteAllLocations()
+    }
+
     private fun Location.toDomain(deviceId: String): DeviceLocation {
         return DeviceLocation(
             deviceId = deviceId,

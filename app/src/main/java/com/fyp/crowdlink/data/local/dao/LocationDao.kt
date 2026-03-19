@@ -25,4 +25,10 @@ interface LocationDao {
      */
     @Query("SELECT * FROM locations WHERE deviceId = :deviceId")
     fun getLocationForDevice(deviceId: String): Flow<LocationEntity?>
+
+    /**
+     * Deletes all cached locations.
+     */
+    @Query("DELETE FROM locations")
+    suspend fun deleteAllLocations()
 }
