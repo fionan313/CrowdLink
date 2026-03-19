@@ -56,7 +56,22 @@ class DiscoveryViewModel @Inject constructor(
     val discoveredRelays: StateFlow<List<RelayNode>> = relayNodeScanner.discoveredRelays
     val isRelayConnected: StateFlow<Boolean> = relayNodeConnection.isConnected
 
+    private val _forceShowRelays = MutableStateFlow(sharedPreferences.getBoolean("force_show_relays", false))
+    val forceShowRelays: StateFlow<Boolean> = _forceShowRelays.asStateFlow()
+
+    private val preferenceChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+        if (key == "force_show_relays") {
+            _forceShowRelays.value = prefs.getBoolean(key, false)
+        }
+    }
+
     init {
+        sharedPreferences.registerOnSharedPreferenceChangeListener(preferenceChangeListener)
+        
+        // Start discovery and advertising by default
+        startDiscovery()
+        startAdvertising()
+
         // Auto-connect to relay logic
         viewModelScope.launch {
             discoveredRelays.collect { relays ->
@@ -96,6 +111,7 @@ class DiscoveryViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        sharedPreferences.unregisterOnSharedPreferenceChangeListener(preferenceChangeListener)
         // We keep discovery running even when navigating away, 
         // but if the ViewModel is truly destroyed (app exit/back from start), we stop.
         try {

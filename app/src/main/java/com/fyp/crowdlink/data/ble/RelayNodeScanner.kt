@@ -3,6 +3,7 @@ package com.fyp.crowdlink.data.ble
 import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
+import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
@@ -31,7 +32,8 @@ class RelayNodeScanner @Inject constructor(
 
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     private val adapter = bluetoothManager.adapter
-    private val scanner = adapter?.bluetoothLeScanner
+    private val scanner get() = adapter?.bluetoothLeScanner
+    private var activeScanner: BluetoothLeScanner? = null
 
     private val _discoveredRelays = MutableStateFlow<List<RelayNode>>(emptyList())
     val discoveredRelays: StateFlow<List<RelayNode>> = _discoveredRelays.asStateFlow()
@@ -77,10 +79,12 @@ class RelayNodeScanner @Inject constructor(
 
     @SuppressLint("MissingPermission")
     fun startScanning() {
-        if (scanner == null) {
-            Log.e(TAG, "BluetoothLeScanner is null")
+        val s = scanner
+        if (s == null) {
+            Log.e(TAG, "BluetoothLeScanner is null — permissions granted?")
             return
         }
+        activeScanner = s
 
         val filters = listOf(
             ScanFilter.Builder()
@@ -92,13 +96,14 @@ class RelayNodeScanner @Inject constructor(
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
 
-        scanner.startScan(filters, settings, scanCallback)
+        s.startScan(filters, settings, scanCallback)
         Log.d(TAG, "Started scanning for relays")
     }
 
     @SuppressLint("MissingPermission")
     fun stopScanning() {
-        scanner?.stopScan(scanCallback)
+        activeScanner?.stopScan(scanCallback)
+        activeScanner = null
         Log.d(TAG, "Stopped scanning for relays")
     }
 }

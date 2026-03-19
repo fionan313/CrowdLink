@@ -31,12 +31,7 @@ fun FriendsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Friends") },
-                actions = {
-                    IconButton(onClick = onNavigateToSettings) {
-                        Icon(Icons.Default.Settings, "Settings")
-                    }
-                }
+                title = { Text("Friends") }
             )
         },
         floatingActionButton = {

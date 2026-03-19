@@ -37,16 +37,12 @@ fun DiscoveryScreen(
     val discoveredRelays by viewModel.discoveredRelays.collectAsState()
     val isRelayConnected by viewModel.isRelayConnected.collectAsState()
     val isMeshActive by viewModel.isMeshActive.collectAsState()
+    val forceShowRelays by viewModel.forceShowRelays.collectAsState()
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Nearby") },
-                actions = {
-                    IconButton(onClick = onNavigateToFriends) {
-                        Icon(Icons.Default.Person, "Friends")
-                    }
-                }
+                title = { Text("Nearby") }
             )
         }
     ) { paddingValues ->
@@ -67,9 +63,9 @@ fun DiscoveryScreen(
                 }
             }
 
-            // Only show the relay banner if at least one relay has been found
+            // Only show the relay banner if at least one relay has been found OR debug mode is on
             val relayCount = discoveredRelays.size
-            if (relayCount > 0) {
+            if (relayCount > 0 || forceShowRelays) {
                 RelayStatusBanner(
                     isConnected = isRelayConnected,
                     relayCount = relayCount,
