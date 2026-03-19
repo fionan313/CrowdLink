@@ -67,11 +67,7 @@ class DeviceRepositoryImpl @Inject constructor(
                         0x01.toByte() -> handleIncomingTextMessage(senderIdString, meshMessage)
                         0x03.toByte() -> handleIncomingLocationUpdate(senderIdString, payload)
                         else -> {
-                            // Try to decrypt if it doesn't match known plaintext prefixes
-                            // or if it's potentially encrypted data.
-                            // For simplicity, we assume text and location are always prefixed
-                            // inside the plaintext, but the whole payload is encrypted.
-                            // If it's not 0x01 or 0x03, it might be an encrypted payload starting with tink header.
+                            // If it's not 0x01 or 0x03, it's likely an encrypted payload.
                             handleIncomingEncryptedMessage(senderIdString, meshMessage)
                         }
                     }

@@ -98,15 +98,17 @@ class PairingViewModel @Inject constructor(
                 val sharedKey = encryptionManager.generateSharedKey()
                 _pendingSharedKey.value = sharedKey
 
+                // Shorten JSON keys to reduce QR payload density
                 val qrData = JSONObject().apply {
-                    put("deviceId", _myDeviceId.value)
-                    put("displayName", displayName)
-                    put("sharedKey", sharedKey)
-                    put("timestamp", System.currentTimeMillis())
+                    put("d", _myDeviceId.value)    // deviceId
+                    put("n", displayName)         // displayName
+                    put("k", sharedKey)            // sharedKey
+                    put("t", System.currentTimeMillis())
                 }.toString()
                 
                 val writer = QRCodeWriter()
-                val bitMatrix = writer.encode(qrData, BarcodeFormat.QR_CODE, 512, 512)
+                // Increased bitmap size to 800x800 for easier scanning
+                val bitMatrix = writer.encode(qrData, BarcodeFormat.QR_CODE, 800, 800)
                 val width = bitMatrix.width
                 val height = bitMatrix.height
                 val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
@@ -139,15 +141,10 @@ class PairingViewModel @Inject constructor(
 
                 try {
                     val json = JSONObject(scannedData)
-                    if (json.has("deviceId")) {
-                        friendDeviceId = json.getString("deviceId")
-                    }
-                    if (json.has("displayName")) {
-                        friendName = json.getString("displayName")
-                    }
-                    if (json.has("sharedKey")) {
-                        sharedKey = json.getString("sharedKey")
-                    }
+                    // Support both shortened and legacy keys
+                    friendDeviceId = json.optString("d", json.optString("deviceId", ""))
+                    friendName = json.optString("n", json.optString("displayName", defaultName))
+                    sharedKey = if (json.has("k")) json.getString("k") else if (json.has("sharedKey")) json.getString("sharedKey") else null
                 } catch (e: Exception) {
                     friendDeviceId = scannedData
                 }

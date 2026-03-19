@@ -20,7 +20,6 @@ room = "2.6.1"
 navigationCompose = "2.8.4"
 coroutines = "1.9.0"
 timber = "5.0.1"
-tink = "1.15.0"
 playServicesLocation = "21.3.0"
 mlkitBarcodeScanning = "17.3.0"
 cameraX = "1.4.0"
@@ -76,7 +75,6 @@ kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "ko
 
 # Cryptography
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinxCoroutinesTest" }
-tink-android = { group = "com.google.crypto.tink", name = "tink-android", version.ref = "tink" }
 
 # Location
 play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }

@@ -1,56 +1,61 @@
 package com.fyp.crowdlink.data.crypto
 
 import android.util.Base64
-import com.google.crypto.tink.Aead
-import com.google.crypto.tink.CleartextKeysetHandle
-import com.google.crypto.tink.JsonKeysetReader
-import com.google.crypto.tink.JsonKeysetWriter
-import com.google.crypto.tink.KeysetHandle
-import com.google.crypto.tink.aead.AeadConfig
-import com.google.crypto.tink.aead.AeadKeyTemplates
-import java.io.ByteArrayOutputStream
+import java.security.SecureRandom
+import javax.crypto.Cipher
+import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.SecretKeySpec
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class EncryptionManager @Inject constructor() {
 
-    init {
-        AeadConfig.register()
-    }
+    private val secureRandom = SecureRandom()
+    private val ALGORITHM = "AES/GCM/NoPadding"
+    private val TAG_LENGTH = 128
+    private val IV_LENGTH = 12
 
     /**
-     * Generates a new AES-256-GCM keyset and returns it serialised
-     * as a Base64 string for storage in the Friend entity.
+     * Generates a raw 32-byte AES key and returns it Base64 encoded.
+     * This keeps the QR code payload small compared to full Tink keysets.
      */
     fun generateSharedKey(): String {
-        val keysetHandle = KeysetHandle.generateNew(AeadKeyTemplates.AES256_GCM)
-        val outputStream = ByteArrayOutputStream()
-        CleartextKeysetHandle.write(keysetHandle, JsonKeysetWriter.withOutputStream(outputStream))
-        return Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
+        val keyBytes = ByteArray(32)
+        secureRandom.nextBytes(keyBytes)
+        return Base64.encodeToString(keyBytes, Base64.NO_WRAP)
     }
 
     /**
-     * Encrypts a payload using the shared key for a specific friend.
-     * Returns the ciphertext as a ByteArray.
-     * Throws if the key is null or malformed.
+     * Encrypts a payload using AES-256-GCM.
+     * Prepends a 12-byte IV to the ciphertext.
      */
     fun encrypt(plaintext: ByteArray, sharedKeyBase64: String): ByteArray {
-        return loadAead(sharedKeyBase64).encrypt(plaintext, null)
+        val keyBytes = Base64.decode(sharedKeyBase64, Base64.NO_WRAP)
+        val secretKey = SecretKeySpec(keyBytes, "AES")
+        
+        val iv = ByteArray(IV_LENGTH).also { secureRandom.nextBytes(it) }
+        val cipher = Cipher.getInstance(ALGORITHM)
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey, GCMParameterSpec(TAG_LENGTH, iv))
+        
+        val ciphertext = cipher.doFinal(plaintext)
+        return iv + ciphertext
     }
 
     /**
-     * Decrypts an incoming payload using the shared key.
-     * Returns the plaintext ByteArray.
-     * Throws GeneralSecurityException if decryption fails — caller should handle this.
+     * Decrypts a payload using AES-256-GCM.
+     * Expects the first 12 bytes to be the IV.
      */
     fun decrypt(ciphertext: ByteArray, sharedKeyBase64: String): ByteArray {
-        return loadAead(sharedKeyBase64).decrypt(ciphertext, null)
-    }
-
-    private fun loadAead(sharedKeyBase64: String): Aead {
-        val keysetBytes = Base64.decode(sharedKeyBase64, Base64.NO_WRAP)
-        val keysetHandle = CleartextKeysetHandle.read(JsonKeysetReader.withBytes(keysetBytes))
-        return keysetHandle.getPrimitive(Aead::class.java)
+        val keyBytes = Base64.decode(sharedKeyBase64, Base64.NO_WRAP)
+        val secretKey = SecretKeySpec(keyBytes, "AES")
+        
+        val iv = ciphertext.copyOfRange(0, IV_LENGTH)
+        val data = ciphertext.copyOfRange(IV_LENGTH, ciphertext.size)
+        
+        val cipher = Cipher.getInstance(ALGORITHM)
+        cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(TAG_LENGTH, iv))
+        
+        return cipher.doFinal(data)
     }
 }
