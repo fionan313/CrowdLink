@@ -7,12 +7,14 @@ import android.hardware.SensorManager
 import android.location.Location
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.fyp.crowdlink.data.ble.BleScanner
 import com.fyp.crowdlink.domain.model.DeviceLocation
 import com.fyp.crowdlink.domain.repository.FriendRepository
 import com.fyp.crowdlink.domain.repository.LocationRepository
 import com.fyp.crowdlink.domain.usecase.EstimateDistanceUseCase
 import com.fyp.crowdlink.domain.usecase.ShareLocationUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -22,6 +24,7 @@ class CompassViewModel @Inject constructor(
     private val locationRepository: LocationRepository,
     private val friendRepository: FriendRepository,
     private val sensorManager: SensorManager,
+    private val bleScanner: BleScanner,
     private val estimateDistanceUseCase: EstimateDistanceUseCase,
     private val shareLocationUseCase: ShareLocationUseCase
 ) : ViewModel(), SensorEventListener {
@@ -98,11 +101,22 @@ class CompassViewModel @Inject constructor(
                 _isGpsAvailable.value = false
             }
         }.launchIn(viewModelScope)
+
+        // Watch RSSI for the current friend from BLE scanner
+        bleScanner.discoveredDevices
+            .onEach { devices ->
+                val device = devices.firstOrNull { it.deviceId == currentFriendId }
+                _rssiDistance.value = device?.estimatedDistance
+            }
+            .launchIn(viewModelScope)
     }
+
+    private var locationCollectionJob: Job? = null
 
     fun setFriendId(friendId: String) {
         currentFriendId = friendId
-        viewModelScope.launch {
+        locationCollectionJob?.cancel()
+        locationCollectionJob = viewModelScope.launch {
             locationRepository.getFriendLocation(friendId).collect {
                 _friendLocation.value = it
             }

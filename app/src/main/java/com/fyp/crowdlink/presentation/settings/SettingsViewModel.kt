@@ -43,6 +43,9 @@ class SettingsViewModel @Inject constructor(
     private val _ghostMode = MutableStateFlow(sharedPreferences.getBoolean("ghost_mode", false))
     val ghostMode: StateFlow<Boolean> = _ghostMode.asStateFlow()
 
+    private val _forceShowRelays = MutableStateFlow(sharedPreferences.getBoolean("force_show_relays", false))
+    val forceShowRelays: StateFlow<Boolean> = _forceShowRelays.asStateFlow()
+
     val pairedFriendsCount: StateFlow<Int> = friendRepository.getAllFriends()
         .map { it.size }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
@@ -116,6 +119,11 @@ class SettingsViewModel @Inject constructor(
             // Note: DiscoveryViewModel or the Mesh service should observe this pref
             // and stop discovery/advertising accordingly.
         }
+    }
+
+    fun setForceShowRelays(enabled: Boolean) {
+        sharedPreferences.edit().putBoolean("force_show_relays", enabled).apply()
+        _forceShowRelays.value = enabled
     }
 
     fun clearMessageHistory() {

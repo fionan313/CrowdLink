@@ -26,6 +26,7 @@ fun SettingsScreen(
     val meshRelay by viewModel.meshRelay.collectAsState()
     val esp32Scanning by viewModel.esp32Scanning.collectAsState()
     val ghostMode by viewModel.ghostMode.collectAsState()
+    val forceShowRelays by viewModel.forceShowRelays.collectAsState()
     val pairedFriendsCount by viewModel.pairedFriendsCount.collectAsState()
     val deviceId = viewModel.deviceId
 
@@ -171,6 +172,18 @@ fun SettingsScreen(
                 icon = Icons.Default.Devices,
                 title = "Device ID",
                 value = deviceId.take(8) + "..."
+            )
+
+            HorizontalDivider()
+
+            // ── Debug ─────────────────────────────────────────────
+            SettingsSectionHeader("Debug")
+            SettingsToggleItem(
+                icon = Icons.Default.BugReport,
+                title = "Force show relay banner",
+                subtitle = "Always show the relay node banner on Nearby screen",
+                checked = forceShowRelays,
+                onCheckedChange = { viewModel.setForceShowRelays(it) }
             )
         }
     }

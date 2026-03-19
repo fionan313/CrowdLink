@@ -82,10 +82,10 @@ fun CompassScreen(
                 val rssiDistance by viewModel.rssiDistance.collectAsState()
 
                 if (isGpsAvailable && bearing != null) {
-                    // Logic for shortest path rotation
+                    // --- GPS MODE ---
                     var currentRotation by remember { mutableStateOf(0f) }
                     val targetRotation = (bearing!! - heading + 360) % 360
-                    
+
                     LaunchedEffect(targetRotation) {
                         currentRotation = shortestRotation(currentRotation, targetRotation)
                     }
@@ -112,9 +112,30 @@ fun CompassScreen(
                         fontSize = 48.sp,
                         fontWeight = FontWeight.Bold
                     )
+
+                    // Secondary RSSI confidence indicator — shown beneath GPS distance when both available
+                    rssiDistance?.let {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Signal distance: ~${it.toInt()}m",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
                 } else {
-                    // Indoor / Low Accuracy Mode
+                    // --- RSSI FALLBACK MODE ---
                     IndoorModeIndicator(rssiDistance)
+
+                    // If we have a stale GPS distance, show it with a clear warning
+                    if (distance != null) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Last GPS fix: ~${distance!!.toInt()}m (may be outdated)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             } else {
                 LocationPermissionRationale {
