@@ -157,7 +157,12 @@ class MeshNotificationManager @Inject constructor(
             }
         }
 
-        val fullScreenIntent = buildSosFullScreenIntent(friendId)
+        val fullScreenIntent = buildSosFullScreenIntent(
+            friendId = friendId,
+            senderName = senderName,
+            latitude = latitude,
+            longitude = longitude
+        )
 
         val notification = NotificationCompat.Builder(context, SOS_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
@@ -257,9 +262,18 @@ class MeshNotificationManager @Inject constructor(
         }, 1500)
     }
 
-    private fun buildSosFullScreenIntent(friendId: String): PendingIntent {
+    private fun buildSosFullScreenIntent(
+        friendId: String,
+        senderName: String,
+        latitude: Double?,
+        longitude: Double?
+    ): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {
             putExtra("sos_alert_friend_id", friendId)
+            putExtra("sos_alert_sender_name", senderName)
+            putExtra("sos_alert_received_at", System.currentTimeMillis())
+            latitude?.let { putExtra("sos_alert_latitude", it) }
+            longitude?.let { putExtra("sos_alert_longitude", it) }
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         return PendingIntent.getActivity(
