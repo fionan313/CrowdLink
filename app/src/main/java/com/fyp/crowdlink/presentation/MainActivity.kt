@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
+import com.fyp.crowdlink.domain.model.SosAlertData
 import com.fyp.crowdlink.presentation.discovery.DiscoveryViewModel
 import com.fyp.crowdlink.presentation.onboarding.OnboardingScreen
 import com.fyp.crowdlink.ui.theme.CrowdLinkTheme
@@ -29,6 +30,7 @@ class MainActivity : ComponentActivity() {
 
     private val discoveryViewModel: DiscoveryViewModel by viewModels()
     private val navigateToChatFriendId = mutableStateOf<String?>(null)
+    private val pendingSosAlert = mutableStateOf<SosAlertData?>(null)
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -71,7 +73,9 @@ class MainActivity : ComponentActivity() {
                     } else {
                         MainScreen(
                             pendingChatFriendId = navigateToChatFriendId.value,
-                            onChatNavigated = { navigateToChatFriendId.value = null }
+                            onChatNavigated = { navigateToChatFriendId.value = null },
+                            pendingSosAlert = pendingSosAlert.value,
+                            onSosAlertNavigated = { pendingSosAlert.value = null }
                         )
                     }
                 }
@@ -85,8 +89,22 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleNotificationDeepLink(intent: Intent) {
+        // existing chat deep link handling
         intent.getStringExtra("navigate_to_chat")?.let { friendId ->
             navigateToChatFriendId.value = friendId
+        }
+
+        // SOS alert deep link
+        intent.getStringExtra("sos_alert_friend_id")?.let { friendId ->
+            pendingSosAlert.value = SosAlertData(
+                friendId = friendId,
+                senderName = intent.getStringExtra("sos_alert_sender_name") ?: "Unknown",
+                latitude = if (intent.hasExtra("sos_alert_latitude"))
+                    intent.getDoubleExtra("sos_alert_latitude", 0.0) else null,
+                longitude = if (intent.hasExtra("sos_alert_longitude"))
+                    intent.getDoubleExtra("sos_alert_longitude", 0.0) else null,
+                receivedAt = intent.getLongExtra("sos_alert_received_at", System.currentTimeMillis())
+            )
         }
     }
 

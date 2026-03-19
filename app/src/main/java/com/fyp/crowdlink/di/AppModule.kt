@@ -133,7 +133,8 @@ object AppModule {
         sharedPreferences: SharedPreferences,
         meshRoutingEngine: MeshRoutingEngine,
         meshNotificationManager: MeshNotificationManager,
-        locationSerialiser: LocationMessageSerialiser
+        locationSerialiser: LocationMessageSerialiser,
+        userProfileRepository: UserProfileRepository
     ): DeviceRepository {
         return DeviceRepositoryImpl(
             bleScanner,
@@ -144,7 +145,8 @@ object AppModule {
             sharedPreferences,
             meshRoutingEngine,
             meshNotificationManager,
-            locationSerialiser
+            locationSerialiser,
+            userProfileRepository
         )
     }
 

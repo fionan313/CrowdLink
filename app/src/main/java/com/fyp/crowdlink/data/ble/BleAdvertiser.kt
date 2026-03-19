@@ -50,6 +50,7 @@ class BleAdvertiser @Inject constructor(
     var onPairingRequestReceived: ((PairingRequest) -> Unit)? = null
     var onPairingAcceptedReceived: ((String) -> Unit)? = null
     var onUnpairRequestReceived: ((String) -> Unit)? = null
+    var onSosAlertReceived: ((senderId: String, senderName: String, latitude: Double?, longitude: Double?) -> Unit)? = null
 
     // GATT server callback handles incoming mesh packets
     @SuppressLint("MissingPermission")
@@ -82,6 +83,7 @@ class BleAdvertiser @Inject constructor(
                         PAIRING_REQUEST_PREFIX -> handlePairingRequest(value)
                         PAIRING_ACCEPTED_PREFIX -> handlePairingAccepted(value)
                         UNPAIR_REQUEST_PREFIX -> handleUnpairRequest(value)
+                        SOS_ALERT_PREFIX -> handleSosAlert(value)
                         else -> handleMeshMessage(value)
                     }
                 }
@@ -136,6 +138,20 @@ class BleAdvertiser @Inject constructor(
             Log.d("BLE_ADVERTISER", "Unpair request received from $senderId")
         } catch (e: Exception) {
             Log.e("BLE_ADVERTISER", "Failed to parse unpair request", e)
+        }
+    }
+
+    private fun handleSosAlert(value: ByteArray) {
+        try {
+            val json = JSONObject(value.decodeToString(startIndex = 1))
+            val senderId = json.getString("senderId")
+            val senderName = json.getString("senderName")
+            val latitude = if (json.has("lat")) json.getDouble("lat") else null
+            val longitude = if (json.has("lon")) json.getDouble("lon") else null
+            onSosAlertReceived?.invoke(senderId, senderName, latitude, longitude)
+            Log.d("BLE_ADVERTISER", "SOS alert received from $senderName")
+        } catch (e: Exception) {
+            Log.e("BLE_ADVERTISER", "Failed to parse SOS alert", e)
         }
     }
 
@@ -275,5 +291,6 @@ class BleAdvertiser @Inject constructor(
         const val PAIRING_REQUEST_PREFIX: Byte = 0x01
         const val PAIRING_ACCEPTED_PREFIX: Byte = 0x02
         const val UNPAIR_REQUEST_PREFIX: Byte = 0x04
+        const val SOS_ALERT_PREFIX: Byte = 0x05
     }
 }

@@ -24,6 +24,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.fyp.crowdlink.domain.model.SosAlertData
 import com.fyp.crowdlink.presentation.chat.ChatScreen
 import com.fyp.crowdlink.presentation.compass.CompassScreen
 import com.fyp.crowdlink.presentation.discovery.DiscoveryScreen
@@ -34,6 +35,7 @@ import com.fyp.crowdlink.presentation.pairing.QRScannerScreen
 import com.fyp.crowdlink.presentation.relay.RelayDiscoveryScreen
 import com.fyp.crowdlink.presentation.settings.ProfileScreen
 import com.fyp.crowdlink.presentation.settings.SettingsScreen
+import com.fyp.crowdlink.presentation.sos.SosAlertScreen
 
 enum class Destination(
     val route: String,
@@ -151,13 +153,56 @@ fun AppNavHost(
                 }
             )
         }
+        composable(
+            route = "sos_alert/{friendId}/{senderName}/{latitude}/{longitude}/{receivedAt}",
+            arguments = listOf(
+                navArgument("friendId") { type = NavType.StringType },
+                navArgument("senderName") { type = NavType.StringType },
+                navArgument("latitude") { type = NavType.FloatType },
+                navArgument("longitude") { type = NavType.FloatType },
+                navArgument("receivedAt") { type = NavType.LongType }
+            )
+        ) { backStackEntry ->
+            val friendId = backStackEntry.arguments?.getString("friendId") ?: ""
+            val senderName = backStackEntry.arguments?.getString("senderName") ?: "Unknown"
+            val latitude = backStackEntry.arguments?.getFloat("latitude")?.toDouble()
+                ?.takeIf { it != 0.0 }
+            val longitude = backStackEntry.arguments?.getFloat("longitude")?.toDouble()
+                ?.takeIf { it != 0.0 }
+            val receivedAt = backStackEntry.arguments?.getLong("receivedAt") ?: 0L
+
+            SosAlertScreen(
+                friendId = friendId,
+                senderName = senderName,
+                latitude = latitude,
+                longitude = longitude,
+                receivedAt = receivedAt,
+                onNavigateToChat = {
+                    navController.navigate("chat/$friendId/$senderName") {
+                        popUpTo("sos_alert/$friendId/$senderName/${latitude ?: 0.0}/${longitude ?: 0.0}/$receivedAt") {
+                            inclusive = true
+                        }
+                    }
+                },
+                onNavigateToCompass = {
+                    navController.navigate("compass/$friendId/$senderName") {
+                        popUpTo("sos_alert/$friendId/$senderName/${latitude ?: 0.0}/${longitude ?: 0.0}/$receivedAt") {
+                            inclusive = true
+                        }
+                    }
+                },
+                onDismiss = { navController.popBackStack() }
+            )
+        }
     }
 }
 
 @Composable
 fun MainScreen(
     pendingChatFriendId: String? = null,
-    onChatNavigated: () -> Unit = {}
+    onChatNavigated: () -> Unit = {},
+    pendingSosAlert: SosAlertData? = null,
+    onSosAlertNavigated: () -> Unit = {}
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -175,6 +220,17 @@ fun MainScreen(
                 restoreState = true
             }
             onChatNavigated()
+        }
+    }
+
+    LaunchedEffect(pendingSosAlert) {
+        pendingSosAlert?.let { alert ->
+            navController.navigate(
+                "sos_alert/${alert.friendId}/${alert.senderName}/${alert.latitude ?: 0.0}/${alert.longitude ?: 0.0}/${alert.receivedAt}"
+            ) {
+                launchSingleTop = true
+            }
+            onSosAlertNavigated()
         }
     }
 

@@ -1,6 +1,8 @@
 package com.fyp.crowdlink.presentation.friends
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -10,78 +12,163 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.fyp.crowdlink.domain.model.Friend
+import com.fyp.crowdlink.presentation.sos.SosViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun FriendsScreen(
     onNavigateToPairing: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToChat: (String, String) -> Unit,
     onNavigateToCompass: (String, String) -> Unit,
-    viewModel: FriendsViewModel = hiltViewModel()
+    viewModel: FriendsViewModel = hiltViewModel(),
+    sosViewModel: SosViewModel = hiltViewModel()
 ) {
     val friends by viewModel.friends.collectAsState()
     var friendToDelete by remember { mutableStateOf<Friend?>(null) }
     
+    val isSending by sosViewModel.isSending.collectAsState()
+    val sosSent by sosViewModel.sosSent.collectAsState()
+    var showSosConfirmDialog by remember { mutableStateOf(false) }
+
+    // Confirmation dialog
+    if (showSosConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showSosConfirmDialog = false },
+            title = { Text("Send SOS Alert?") },
+            text = {
+                Text("This will immediately alert all your paired friends with your last known location. Only use this in a genuine emergency.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showSosConfirmDialog = false
+                        sosViewModel.sendSos()
+                    }
+                ) {
+                    Text("Send SOS", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSosConfirmDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Friends") }
+                title = { Text("Friends") },
+                actions = {
+                    IconButton(onClick = onNavigateToPairing) {
+                        Icon(Icons.Default.PersonAdd, contentDescription = "Add Friend")
+                    }
+                    IconButton(onClick = onNavigateToSettings) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                    }
+                }
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = onNavigateToPairing) {
-                Icon(Icons.Default.Add, "Add Friend")
-            }
         }
     ) { paddingValues ->
-        if (friends.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            if (friends.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "No friends paired yet",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Text(
-                        text = "Tap + to pair with a friend",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "No friends paired yet",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = "Tap the add icon to pair with a friend",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(friends, key = { it.deviceId }) { friend ->
+                        FriendListItem(
+                            friend = friend,
+                            onDelete = { friendToDelete = friend },
+                            onClick = { onNavigateToChat(friend.deviceId, friend.displayName) },
+                            onFindClick = { onNavigateToCompass(friend.deviceId, friend.displayName) }
+                        )
+                    }
                 }
             }
-        } else {
-            LazyColumn(
+
+            // SOS Button - requires long press to prevent accidental triggers
+            Surface(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .combinedClickable(
+                        onClick = { /* Do nothing, requires long press */ },
+                        onLongClick = { 
+                            if (!sosSent && !isSending) {
+                                showSosConfirmDialog = true 
+                            }
+                        }
+                    ),
+                shape = MaterialTheme.shapes.medium,
+                color = if (sosSent) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.error,
+                tonalElevation = 4.dp
             ) {
-                items(friends, key = { it.deviceId }) { friend ->
-                    FriendListItem(
-                        friend = friend,
-                        onDelete = { friendToDelete = friend },
-                        onClick = { onNavigateToChat(friend.deviceId, friend.displayName) },
-                        onFindClick = { onNavigateToCompass(friend.deviceId, friend.displayName) }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp, horizontal = 24.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        if (sosSent) Icons.Default.CheckCircle else Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = if (sosSent) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onError
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = when {
+                            isSending -> "Sending Alert..."
+                            sosSent -> "SOS Sent Successfully"
+                            else -> "SOS — Hold to Send"
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (sosSent) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onError
                     )
                 }
             }
