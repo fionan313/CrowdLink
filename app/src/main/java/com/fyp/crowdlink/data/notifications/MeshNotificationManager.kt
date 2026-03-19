@@ -24,6 +24,7 @@ class MeshNotificationManager @Inject constructor(
     companion object {
         const val CHANNEL_ID = "crowdlink_messages"
         const val CHANNEL_NAME = "CrowdLink Messages"
+        const val SOS_NOTIFICATION_ID = 9001
     }
 
     init {
@@ -73,5 +74,56 @@ class MeshNotificationManager @Inject constructor(
 
         NotificationManagerCompat.from(context)
             .notify(friendId.hashCode(), notification)
+    }
+
+    fun showSosNotification(
+        senderName: String,
+        latitude: Double?,
+        longitude: Double?,
+        friendId: String
+    ) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                return
+            }
+        }
+
+        val locationText = if (latitude != null && longitude != null) {
+            "Last known location: ${"%.4f".format(latitude)}, ${"%.4f".format(longitude)}"
+        } else {
+            "Location unavailable"
+        }
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setContentTitle("🆘 SOS Alert from $senderName")
+            .setContentText(locationText)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(
+                "$senderName has sent an emergency alert.\n$locationText"
+            ))
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setVibrate(longArrayOf(0, 500, 200, 500, 200, 500))
+            .setAutoCancel(true)
+            .setFullScreenIntent(buildSosFullScreenIntent(friendId), true)
+            .build()
+
+        NotificationManagerCompat.from(context)
+            .notify(SOS_NOTIFICATION_ID, notification)
+    }
+
+    private fun buildSosFullScreenIntent(friendId: String): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            putExtra("sos_alert_friend_id", friendId)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        return PendingIntent.getActivity(
+            context, 0, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
 }

@@ -348,6 +348,13 @@ class BleScanner @Inject constructor(
         return deviceIdToAddress[deviceId]?.let { address -> knownDevices[address] }
     }
 
+    /**
+     * Returns all Bluetooth devices that have been seen during scans.
+     */
+    fun getDiscoveredBluetoothDevices(): Collection<BluetoothDevice> {
+        return knownDevices.values
+    }
+
     companion object {
         private const val RSSI_SAMPLE_SIZE = 10
     }
