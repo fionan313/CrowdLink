@@ -24,6 +24,12 @@
 
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Required for SOS vibration -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Required for full-screen intent on API 34+ -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
     <uses-permission
         android:name="android.permission.BLUETOOTH"
         android:maxSdkVersion="30" />

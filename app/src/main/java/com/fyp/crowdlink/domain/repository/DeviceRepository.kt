@@ -48,4 +48,10 @@ interface DeviceRepository {
      * Clears the current incoming pairing request.
      */
     fun clearIncomingPairingRequest()
+
+    /**
+     * Broadcasts an SOS alert to all currently paired friends via the mesh.
+     * Includes last known GPS coordinates if available.
+     */
+    suspend fun sendSosAlert()
 }
