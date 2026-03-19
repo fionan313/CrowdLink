@@ -12,7 +12,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.fyp.crowdlink.domain.model.RelayNode
 
@@ -98,18 +100,60 @@ fun RelayDiscoveryScreen(
             Text("Discovered Relays", style = MaterialTheme.typography.titleSmall)
             Spacer(modifier = Modifier.height(8.dp))
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(relays) { relay ->
-                    RelayItem(
-                        relay = relay,
-                        onClick = { viewModel.connectToRelay(relay.deviceId) }
-                    )
+            if (relays.isEmpty()) {
+                RelayEmptyState()
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(relays) { relay ->
+                        RelayItem(
+                            relay = relay,
+                            onClick = { viewModel.connectToRelay(relay.deviceId) }
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+fun RelayEmptyState() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 64.dp, start = 32.dp, end = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Default.Router,
+            contentDescription = null,
+            modifier = Modifier.size(72.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+        )
+        Text(
+            text = "No relay nodes nearby",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+        Text(
+            text = "Relay nodes are devices that extend the range of the CrowdLink mesh network. They forward messages between phones that are too far apart to connect directly.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            textAlign = TextAlign.Center,
+            lineHeight = 20.sp
+        )
+        Text(
+            text = "If you are at an event with CrowdLink relay nodes set up, they will appear here automatically.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            textAlign = TextAlign.Center,
+            lineHeight = 20.sp
+        )
     }
 }
 
@@ -124,7 +168,7 @@ fun RelayItem(relay: RelayNode, onClick: () -> Unit) {
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Default.Build, contentDescription = null) // Router is missing too
+            Icon(Icons.Default.Router, contentDescription = null)
             Spacer(modifier = Modifier.width(16.dp))
             Column {
                 Text(relay.name, fontWeight = FontWeight.Bold)
