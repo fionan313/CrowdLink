@@ -45,8 +45,13 @@ class SettingsViewModel @Inject constructor(
     private val _ghostMode = MutableStateFlow(sharedPreferences.getBoolean("ghost_mode", false))
     val ghostMode: StateFlow<Boolean> = _ghostMode.asStateFlow()
 
+
     private val _locationSharing = MutableStateFlow(sharedPreferences.getBoolean("location_sharing", true))
     val locationSharing: StateFlow<Boolean> = _locationSharing.asStateFlow()
+
+    private val _forceShowRelays = MutableStateFlow(sharedPreferences.getBoolean("force_show_relays", false))
+    val forceShowRelays: StateFlow<Boolean> = _forceShowRelays.asStateFlow()
+
 
     val pairedFriendsCount: StateFlow<Int> = friendRepository.getAllFriends()
         .map { it.size }
@@ -123,6 +128,7 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+
     fun setLocationSharing(enabled: Boolean) {
         sharedPreferences.edit().putBoolean("location_sharing", enabled).apply()
         _locationSharing.value = enabled
@@ -131,6 +137,11 @@ class SettingsViewModel @Inject constructor(
                 locationRepository.clearAllFriendLocations()
             }
         }
+
+    fun setForceShowRelays(enabled: Boolean) {
+        sharedPreferences.edit().putBoolean("force_show_relays", enabled).apply()
+        _forceShowRelays.value = enabled
+
     }
 
     fun clearMessageHistory() {

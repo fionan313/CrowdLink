@@ -30,7 +30,7 @@ class MessageRepositoryIntegrationTest {
             AppDatabase::class.java
         ).allowMainThreadQueries().build()
         
-        repository = MessageRepositoryImpl(database.messageDao())
+        repository = MessageRepositoryImpl(database.messageDao(), database.relayMessageDao())
     }
     
     @After

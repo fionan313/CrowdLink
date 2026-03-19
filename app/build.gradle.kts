@@ -75,6 +75,7 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     implementation(libs.identity.jvm)
     implementation(libs.generativeai)
+    implementation(libs.androidx.annotation.jvm)
     ksp(libs.androidx.room.compiler) // Annotation processor for Room
 
     // QR Code generation & scanning (ZXing)
@@ -93,21 +94,25 @@ dependencies {
     implementation(libs.play.services.location)
     implementation(libs.kotlinx.coroutines.play.services)
 
+    // Cryptography
+    implementation(libs.tink.android)
+
     // Permissions
     implementation(libs.accompanist.permissions)
 
     // Unit Testing
     testImplementation(libs.junit)
-    testImplementation(libs.mockk)
+    testImplementation(libs.mockk.core)
     testImplementation(libs.turbine)
     testImplementation(libs.kotlinx.coroutines.test)
 
     // Android Instrumentation Tests
-    testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.mockk.android)
+    androidTestImplementation(libs.kotlinx.coroutines.test)
     
     // Debugging Tools
     debugImplementation(libs.androidx.compose.ui.tooling)

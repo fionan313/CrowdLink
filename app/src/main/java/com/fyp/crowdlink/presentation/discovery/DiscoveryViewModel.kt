@@ -1,9 +1,7 @@
 package com.fyp.crowdlink.presentation.discovery
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.content.SharedPreferences
-import androidx.annotation.RequiresPermission
 import androidx.core.content.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -14,8 +12,11 @@ import com.fyp.crowdlink.domain.model.NearbyFriend
 import com.fyp.crowdlink.domain.model.RelayNode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
@@ -43,6 +44,10 @@ class DiscoveryViewModel @Inject constructor(
     private val _isAdvertising = MutableStateFlow(false)
     val isAdvertising: StateFlow<Boolean> = _isAdvertising.asStateFlow()
 
+    val isMeshActive: StateFlow<Boolean> = combine(_isDiscovering, _isAdvertising) { scanning, advertising ->
+        scanning && advertising
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     // Expose nearby friends with distance
     val nearbyFriends: StateFlow<List<NearbyFriend>> =
         deviceRepository.nearbyFriends
@@ -51,7 +56,22 @@ class DiscoveryViewModel @Inject constructor(
     val discoveredRelays: StateFlow<List<RelayNode>> = relayNodeScanner.discoveredRelays
     val isRelayConnected: StateFlow<Boolean> = relayNodeConnection.isConnected
 
+    private val _forceShowRelays = MutableStateFlow(sharedPreferences.getBoolean("force_show_relays", false))
+    val forceShowRelays: StateFlow<Boolean> = _forceShowRelays.asStateFlow()
+
+    private val preferenceChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+        if (key == "force_show_relays") {
+            _forceShowRelays.value = prefs.getBoolean(key, false)
+        }
+    }
+
     init {
+        sharedPreferences.registerOnSharedPreferenceChangeListener(preferenceChangeListener)
+        
+        // Start discovery and advertising by default
+        startDiscovery()
+        startAdvertising()
+
         // Auto-connect to relay logic
         viewModelScope.launch {
             discoveredRelays.collect { relays ->
@@ -91,6 +111,7 @@ class DiscoveryViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        sharedPreferences.unregisterOnSharedPreferenceChangeListener(preferenceChangeListener)
         // We keep discovery running even when navigating away, 
         // but if the ViewModel is truly destroyed (app exit/back from start), we stop.
         try {
