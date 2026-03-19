@@ -19,13 +19,20 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+sealed class SaveStatus {
+    object Idle : SaveStatus()
+    object Saving : SaveStatus()
+    object Success : SaveStatus()
+    data class Error(val message: String) : SaveStatus()
+}
+
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val userProfileRepository: UserProfileRepository,
     private val friendRepository: FriendRepository,
     private val messageRepository: MessageRepository,
     private val sharedPreferences: SharedPreferences,
-    private val locationRepository: LocationRepository
+    private val locationRepository: LocationRepository,
     private val meshNotificationManager: MeshNotificationManager
 ) : ViewModel() {
     
@@ -47,13 +54,11 @@ class SettingsViewModel @Inject constructor(
     private val _ghostMode = MutableStateFlow(sharedPreferences.getBoolean("ghost_mode", false))
     val ghostMode: StateFlow<Boolean> = _ghostMode.asStateFlow()
 
-
     private val _locationSharing = MutableStateFlow(sharedPreferences.getBoolean("location_sharing", true))
     val locationSharing: StateFlow<Boolean> = _locationSharing.asStateFlow()
 
     private val _forceShowRelays = MutableStateFlow(sharedPreferences.getBoolean("force_show_relays", false))
     val forceShowRelays: StateFlow<Boolean> = _forceShowRelays.asStateFlow()
-
 
     val pairedFriendsCount: StateFlow<Int> = friendRepository.getAllFriends()
         .map { it.size }
@@ -123,13 +128,7 @@ class SettingsViewModel @Inject constructor(
     fun setGhostMode(enabled: Boolean) {
         sharedPreferences.edit().putBoolean("ghost_mode", enabled).apply()
         _ghostMode.value = enabled
-        // If ghost mode is enabled, we should probably disable advertising/discovery
-        if (enabled) {
-            // Note: DiscoveryViewModel or the Mesh service should observe this pref
-            // and stop discovery/advertising accordingly.
-        }
     }
-
 
     fun setLocationSharing(enabled: Boolean) {
         sharedPreferences.edit().putBoolean("location_sharing", enabled).apply()
@@ -139,11 +138,11 @@ class SettingsViewModel @Inject constructor(
                 locationRepository.clearAllFriendLocations()
             }
         }
+    }
 
     fun setForceShowRelays(enabled: Boolean) {
         sharedPreferences.edit().putBoolean("force_show_relays", enabled).apply()
         _forceShowRelays.value = enabled
-
     }
 
     fun clearMessageHistory() {
@@ -160,11 +159,4 @@ class SettingsViewModel @Inject constructor(
             friendId = "debug-id"
         )
     }
-}
-
-sealed class SaveStatus {
-    object Idle : SaveStatus()
-    object Saving : SaveStatus()
-    object Success : SaveStatus()
-    data class Error(val message: String) : SaveStatus()
 }
