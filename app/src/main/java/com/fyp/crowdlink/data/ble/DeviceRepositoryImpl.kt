@@ -17,6 +17,7 @@ import com.fyp.crowdlink.domain.repository.DeviceRepository
 import com.fyp.crowdlink.domain.repository.FriendRepository
 import com.fyp.crowdlink.domain.repository.LocationRepository
 import com.fyp.crowdlink.domain.repository.MessageRepository
+import com.fyp.crowdlink.domain.repository.UserProfileRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -36,7 +37,11 @@ class DeviceRepositoryImpl @Inject constructor(
     private val meshRoutingEngine: MeshRoutingEngine,
     private val meshNotificationManager: MeshNotificationManager,
     private val locationSerialiser: LocationMessageSerialiser,
+<<<<<<< crypto
     private val encryptionManager: EncryptionManager
+=======
+    private val userProfileRepository: UserProfileRepository
+>>>>>>> main
 ) : DeviceRepository {
 
     private val scope = CoroutineScope(Dispatchers.IO)
@@ -100,6 +105,17 @@ class DeviceRepositoryImpl @Inject constructor(
             scope.launch {
                 friendRepository.removeFriendById(senderId)
                 Log.d("DeviceRepo", "Removed $senderId from friends list via unpair notification")
+            }
+        }
+
+        bleAdvertiser.onSosAlertReceived = { senderId, senderName, latitude, longitude ->
+            scope.launch {
+                meshNotificationManager.showSosNotification(
+                    senderName = senderName,
+                    latitude = latitude,
+                    longitude = longitude,
+                    friendId = senderId
+                )
             }
         }
 
@@ -268,5 +284,31 @@ class DeviceRepositoryImpl @Inject constructor(
 
     override fun clearIncomingPairingRequest() {
         _incomingPairingRequest.value = null
+    }
+
+    override suspend fun sendSosAlert() {
+        val friends = friendRepository.getAllFriends().first()
+        if (friends.isEmpty()) return
+
+        val myLocation = locationRepository.getLastKnownLocation()
+        val myDisplayName = userProfileRepository.getUserProfile().first()?.displayName ?: "Unknown"
+
+        val json = JSONObject().apply {
+            put("senderId", meshRoutingEngine.localDeviceId)
+            put("senderName", myDisplayName)
+            myLocation?.let {
+                put("lat", it.latitude)
+                put("lon", it.longitude)
+            }
+        }.toString().toByteArray(Charsets.UTF_8)
+
+        val payload = byteArrayOf(BleAdvertiser.SOS_ALERT_PREFIX) + json
+
+        // Send to every known device in range
+        bleScanner.getDiscoveredBluetoothDevices().forEach { device ->
+            bleScanner.sendData(payload, device)
+        }
+
+        Log.d("DeviceRepo", "SOS broadcast sent to ${friends.size} potential recipients")
     }
 }

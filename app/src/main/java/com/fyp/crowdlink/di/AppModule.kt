@@ -135,7 +135,11 @@ object AppModule {
         meshRoutingEngine: MeshRoutingEngine,
         meshNotificationManager: MeshNotificationManager,
         locationSerialiser: LocationMessageSerialiser,
+<<<<<<< crypto
         encryptionManager: EncryptionManager
+=======
+        userProfileRepository: UserProfileRepository
+>>>>>>> main
     ): DeviceRepository {
         return DeviceRepositoryImpl(
             bleScanner,
@@ -147,7 +151,11 @@ object AppModule {
             meshRoutingEngine,
             meshNotificationManager,
             locationSerialiser,
+<<<<<<< crypto
             encryptionManager
+=======
+            userProfileRepository
+>>>>>>> main
         )
     }
 
