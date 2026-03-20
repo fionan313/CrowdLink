@@ -96,17 +96,11 @@ fun SosAlertScreen(
                 )
 
                 Text(
-                    text = senderName,
+                    text = "$senderName needs help",
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
                     textAlign = TextAlign.Center
-                )
-
-                Text(
-                    text = "needs help",
-                    fontSize = 18.sp,
-                    color = Color.White.copy(alpha = 0.85f)
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
