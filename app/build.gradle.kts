@@ -119,4 +119,7 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     implementation(libs.timber)
+    
+    // MapLibre
+    implementation(libs.maplibre.android)
 }

@@ -151,6 +151,12 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun clearMapCache() {
+        viewModelScope.launch {
+            locationRepository.clearMapCache()
+        }
+    }
+
     fun testSosAlert() {
         meshNotificationManager.showSosNotification(
             senderName = "Test Friend",
