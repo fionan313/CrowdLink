@@ -348,6 +348,10 @@ class BleScanner @Inject constructor(
         return deviceIdToAddress[deviceId]?.let { address -> knownDevices[address] }
     }
 
+    fun getDeviceIdByAddress(address: String): String? {
+        return deviceIdToAddress.entries.firstOrNull { it.value == address }?.key
+    }
+
     /**
      * Returns all Bluetooth devices that have been seen during scans.
      */
