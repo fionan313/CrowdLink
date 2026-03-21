@@ -3,6 +3,7 @@ package com.fyp.crowdlink.presentation.chat
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.fyp.crowdlink.data.ble.BleAdvertiser
 import com.fyp.crowdlink.data.ble.BleScanner
 import com.fyp.crowdlink.data.crypto.EncryptionManager
 import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
@@ -142,9 +143,10 @@ class MessageViewModel @Inject constructor(
 
             val payload = if (friend?.sharedKey != null) {
                 try {
-                    encryptionManager.encrypt(plaintext, friend.sharedKey)
+                    val ciphertext = encryptionManager.encrypt(plaintext, friend.sharedKey)
+                    byteArrayOf(BleAdvertiser.ENCRYPTED_PAYLOAD_PREFIX) + ciphertext
                 } catch (e: Exception) {
-                    Log.e("MessageViewModel", "Encryption failed, sending plaintext", e)
+                    Log.e("MessageViewModel", "Encryption failed — sending plaintext", e)
                     plaintext
                 }
             } else {

@@ -142,8 +142,7 @@ class BleAdvertiser @Inject constructor(
     }
 
     private fun handleSosAlert(device: BluetoothDevice, value: ByteArray) {
-        // Since the payload is now likely encrypted, we can't parse senderId from JSON yet.
-        // We pass the device address as the senderId for now, and DeviceRepositoryImpl will resolve it.
+        // Pass device address — DeviceRepositoryImpl resolves to CrowdLink device ID
         onSosAlertReceived?.invoke(device.address, value)
         Log.d("BLE_ADVERTISER", "SOS alert received (raw) from ${device.address}")
     }
@@ -285,5 +284,6 @@ class BleAdvertiser @Inject constructor(
         const val PAIRING_ACCEPTED_PREFIX: Byte = 0x02
         const val UNPAIR_REQUEST_PREFIX: Byte = 0x04
         const val SOS_ALERT_PREFIX: Byte = 0x05
+        const val ENCRYPTED_PAYLOAD_PREFIX: Byte = 0xFF.toByte()
     }
 }

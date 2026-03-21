@@ -1,61 +1,93 @@
 package com.fyp.crowdlink.data.crypto
 
 import android.util.Base64
+import android.util.Log
+import com.google.crypto.tink.Aead
+import com.google.crypto.tink.CleartextKeysetHandle
+import com.google.crypto.tink.KeysetHandle
+import com.google.crypto.tink.aead.AeadConfig
+import com.google.crypto.tink.aead.AeadKeyTemplates
+import com.google.crypto.tink.proto.AesGcmKey
+import com.google.crypto.tink.proto.KeyData
+import com.google.crypto.tink.proto.KeyStatusType
+import com.google.crypto.tink.proto.Keyset
+import com.google.crypto.tink.proto.OutputPrefixType
+import com.google.crypto.tink.shaded.protobuf.ByteString
+import com.google.crypto.tink.BinaryKeysetReader
 import java.security.SecureRandom
-import javax.crypto.Cipher
-import javax.crypto.spec.GCMParameterSpec
-import javax.crypto.spec.SecretKeySpec
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class EncryptionManager @Inject constructor() {
 
-    private val secureRandom = SecureRandom()
-    private val ALGORITHM = "AES/GCM/NoPadding"
-    private val TAG_LENGTH = 128
-    private val IV_LENGTH = 12
+    init {
+        AeadConfig.register()
+    }
 
     /**
      * Generates a raw 32-byte AES key and returns it Base64 encoded.
-     * This keeps the QR code payload small compared to full Tink keysets.
+     * Kept as raw bytes rather than a full Tink keyset so the QR code
+     * payload stays small — 44 characters rather than ~400.
      */
     fun generateSharedKey(): String {
         val keyBytes = ByteArray(32)
-        secureRandom.nextBytes(keyBytes)
+        SecureRandom().nextBytes(keyBytes)
         return Base64.encodeToString(keyBytes, Base64.NO_WRAP)
     }
 
     /**
-     * Encrypts a payload using AES-256-GCM.
-     * Prepends a 12-byte IV to the ciphertext.
+     * Encrypts plaintext using AES-256-GCM via Tink.
+     * Tink handles nonce generation internally — nonce reuse is
+     * structurally impossible.
      */
     fun encrypt(plaintext: ByteArray, sharedKeyBase64: String): ByteArray {
-        val keyBytes = Base64.decode(sharedKeyBase64, Base64.NO_WRAP)
-        val secretKey = SecretKeySpec(keyBytes, "AES")
-        
-        val iv = ByteArray(IV_LENGTH).also { secureRandom.nextBytes(it) }
-        val cipher = Cipher.getInstance(ALGORITHM)
-        cipher.init(Cipher.ENCRYPT_MODE, secretKey, GCMParameterSpec(TAG_LENGTH, iv))
-        
-        val ciphertext = cipher.doFinal(plaintext)
-        return iv + ciphertext
+        return buildAead(sharedKeyBase64).encrypt(plaintext, null)
     }
 
     /**
-     * Decrypts a payload using AES-256-GCM.
-     * Expects the first 12 bytes to be the IV.
+     * Decrypts ciphertext using AES-256-GCM via Tink.
+     * Throws GeneralSecurityException if decryption fails — caller
+     * must handle this and drop the payload rather than crashing.
      */
     fun decrypt(ciphertext: ByteArray, sharedKeyBase64: String): ByteArray {
+        return buildAead(sharedKeyBase64).decrypt(ciphertext, null)
+    }
+
+    /**
+     * Imports a raw 32-byte Base64-encoded key into a Tink KeysetHandle
+     * and returns an Aead primitive ready for use.
+     */
+    private fun buildAead(sharedKeyBase64: String): Aead {
         val keyBytes = Base64.decode(sharedKeyBase64, Base64.NO_WRAP)
-        val secretKey = SecretKeySpec(keyBytes, "AES")
-        
-        val iv = ciphertext.copyOfRange(0, IV_LENGTH)
-        val data = ciphertext.copyOfRange(IV_LENGTH, ciphertext.size)
-        
-        val cipher = Cipher.getInstance(ALGORITHM)
-        cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(TAG_LENGTH, iv))
-        
-        return cipher.doFinal(data)
+
+        val aesGcmKey = AesGcmKey.newBuilder()
+            .setKeyValue(ByteString.copyFrom(keyBytes))
+            .setVersion(0)
+            .build()
+
+        val keyData = KeyData.newBuilder()
+            .setTypeUrl("type.googleapis.com/google.crypto.tink.AesGcmKey")
+            .setValue(aesGcmKey.toByteString())
+            .setKeyMaterialType(KeyData.KeyMaterialType.SYMMETRIC)
+            .build()
+
+        val keyset = Keyset.newBuilder()
+            .addKey(
+                Keyset.Key.newBuilder()
+                    .setKeyData(keyData)
+                    .setStatus(KeyStatusType.ENABLED)
+                    .setKeyId(1)
+                    .setOutputPrefixType(OutputPrefixType.RAW)
+                    .build()
+            )
+            .setPrimaryKeyId(1)
+            .build()
+
+        val keysetHandle = CleartextKeysetHandle.read(
+            BinaryKeysetReader.withBytes(keyset.toByteArray())
+        )
+
+        return keysetHandle.getPrimitive(Aead::class.java)
     }
 }

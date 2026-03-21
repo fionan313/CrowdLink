@@ -1,5 +1,7 @@
 package com.fyp.crowdlink.domain.usecase
 
+import android.util.Log
+import com.fyp.crowdlink.data.ble.BleAdvertiser
 import com.fyp.crowdlink.data.crypto.EncryptionManager
 import com.fyp.crowdlink.data.mesh.LocationMessageSerialiser
 import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
@@ -37,21 +39,22 @@ class ShareLocationUseCase @Inject constructor(
         val serialisedLocation = locationSerialiser.serialize(myLocation)
 
         val friend = friendRepository.getFriendById(friendDeviceId)
-        val encryptedPayload = if (friend?.sharedKey != null) {
+        val payload = if (friend?.sharedKey != null) {
             try {
-                encryptionManager.encrypt(serialisedLocation, friend.sharedKey)
+                val ciphertext = encryptionManager.encrypt(serialisedLocation, friend.sharedKey)
+                byteArrayOf(BleAdvertiser.ENCRYPTED_PAYLOAD_PREFIX) + ciphertext
             } catch (e: Exception) {
+                Log.e("ShareLocationUseCase", "Encryption failed — sending plaintext location", e)
                 serialisedLocation
             }
         } else {
             serialisedLocation
         }
-        
 
         val meshMessage = meshRoutingEngine.createOutbound(
             senderId = meshRoutingEngine.localDeviceId,
             recipientId = friendDeviceId,
-            payload = encryptedPayload
+            payload = payload
         )
 
         messageRepository.addToRelayQueue(meshMessage)
