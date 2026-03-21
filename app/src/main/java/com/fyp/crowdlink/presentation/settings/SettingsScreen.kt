@@ -187,6 +187,12 @@ fun SettingsScreen(
                 checked = forceShowRelays,
                 onCheckedChange = { viewModel.setForceShowRelays(it) }
             )
+            SettingsNavigationItem(
+                icon = Icons.Default.RestartAlt,
+                title = "Reset Onboarding",
+                subtitle = "Show onboarding screen on next launch",
+                onClick = { viewModel.resetOnboarding() }
+            )
         }
     }
 }

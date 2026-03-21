@@ -251,7 +251,7 @@ class MeshNotificationManager @Inject constructor(
 
         val message = "Emergency alert from $senderName. $senderName needs help. $locationPart"
 
-        // Delay by 1.5 seconds so alarm plays first
+        // Delay by 3 seconds so alarm plays first
         Handler(Looper.getMainLooper()).postDelayed({
             tts?.speak(
                 message,
@@ -259,7 +259,7 @@ class MeshNotificationManager @Inject constructor(
                 null,
                 "SOS_ALERT"
             )
-        }, 1500)
+        }, 3000)
     }
 
     private fun buildSosFullScreenIntent(

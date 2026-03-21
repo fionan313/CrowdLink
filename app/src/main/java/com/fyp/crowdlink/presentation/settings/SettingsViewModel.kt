@@ -159,4 +159,8 @@ class SettingsViewModel @Inject constructor(
             friendId = "debug-id"
         )
     }
+
+    fun resetOnboarding() {
+        sharedPreferences.edit().putBoolean("onboarding_complete", false).apply()
+    }
 }

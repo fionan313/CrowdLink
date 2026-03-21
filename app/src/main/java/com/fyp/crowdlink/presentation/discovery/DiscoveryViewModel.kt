@@ -112,14 +112,11 @@ class DiscoveryViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         sharedPreferences.unregisterOnSharedPreferenceChangeListener(preferenceChangeListener)
-        // We keep discovery running even when navigating away, 
-        // but if the ViewModel is truly destroyed (app exit/back from start), we stop.
-        try {
-            stopDiscovery()
-            stopAdvertising()
-        } catch (e: SecurityException) {
-            // Permission revoked, ignore
-        }
+        // Do not stop discovery or advertising here.
+        // BleScanner and BleAdvertiser are singletons that should remain
+        // active while the app is in the foreground. Scanning is only
+        // stopped explicitly when the user taps the MeshStatusPill to pause,
+        // or when the app moves to the background via a foreground service.
     }
 
     companion object {
