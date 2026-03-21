@@ -67,6 +67,12 @@ class MapViewModel @Inject constructor(
         _selectedFriendId.value = friendId
     }
 
+    fun selectFriendOnLoad(friendId: String?) {
+        if (friendId != null) {
+            _selectedFriendId.value = friendId
+        }
+    }
+
     fun startTileCaching() {
         _isCachingTiles.value = true
         // Tile caching is handled in MapScreen via the MapLibre offline manager

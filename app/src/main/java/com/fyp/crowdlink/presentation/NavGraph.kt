@@ -66,6 +66,7 @@ fun AppNavHost(
                 onNavigateToFriends = { navController.navigate(Destination.FRIENDS.route) },
                 onNavigateToCompass = { id, name -> navController.navigate("compass/$id/$name") },
                 onNavigateToChat = { id, name -> navController.navigate("chat/$id/$name") },
+                onNavigateToMap = { id, name -> navController.navigate("map?friendId=$id&friendName=$name") },
                 onNavigateToRelay = { navController.navigate("relay_discovery") }
             )
         }
@@ -81,8 +82,24 @@ fun AppNavHost(
                 }
             )
         }
-        composable(Destination.MAP.route) {
+        composable(
+            route = "map?friendId={friendId}&friendName={friendName}",
+            arguments = listOf(
+                navArgument("friendId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("friendName") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+            val friendId = backStackEntry.arguments?.getString("friendId")
             MapScreen(
+                initialFriendId = friendId,
                 onNavigateToCompass = { id, name -> navController.navigate("compass/$id/$name") },
                 onNavigateToChat = { id, name -> navController.navigate("chat/$id/$name") }
             )
@@ -253,12 +270,14 @@ fun MainScreen(
     Scaffold(
         bottomBar = {
             // Only show bottom bar on top-level destinations
-            val showBottomBar = destinations.any { it.route == currentRoute }
+            val showBottomBar = destinations.any { 
+                currentRoute?.startsWith(it.route) == true 
+            }
             if (showBottomBar) {
                 NavigationBar(windowInsets = NavigationBarDefaults.windowInsets) {
                     destinations.forEach { destination ->
                         NavigationBarItem(
-                            selected = currentRoute == destination.route,
+                            selected = currentRoute?.startsWith(destination.route) == true,
                             onClick = {
                                 navController.navigate(destination.route) {
                                     popUpTo(navController.graph.startDestinationId) {

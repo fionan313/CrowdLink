@@ -30,6 +30,7 @@ fun DiscoveryScreen(
     onNavigateToFriends: () -> Unit,
     onNavigateToCompass: (String, String) -> Unit,
     onNavigateToChat: (String, String) -> Unit,
+    onNavigateToMap: (String, String) -> Unit,
     onNavigateToRelay: () -> Unit,
     viewModel: DiscoveryViewModel = hiltViewModel()
 ) {
@@ -117,7 +118,8 @@ fun DiscoveryScreen(
                         NearbyFriendCard(
                             friend = friend,
                             onFindClick = { onNavigateToCompass(friend.deviceId, friend.displayName) },
-                            onMessageClick = { onNavigateToChat(friend.deviceId, friend.displayName) }
+                            onMessageClick = { onNavigateToChat(friend.deviceId, friend.displayName) },
+                            onMapClick = { onNavigateToMap(friend.deviceId, friend.displayName) }
                         )
                     }
                 }
@@ -215,7 +217,8 @@ fun RelayStatusBanner(isConnected: Boolean, relayCount: Int, onClick: () -> Unit
 fun NearbyFriendCard(
     friend: NearbyFriend,
     onFindClick: () -> Unit,
-    onMessageClick: () -> Unit
+    onMessageClick: () -> Unit,
+    onMapClick: () -> Unit
 ) {
     val proximityLabel = when {
         friend.estimatedDistance < 5 -> "Very close"
@@ -279,6 +282,14 @@ fun NearbyFriendCard(
             }
 
             // Action buttons
+            IconButton(onClick = onMapClick) {
+                Icon(
+                    Icons.Default.Map,
+                    contentDescription = "Map",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+
             IconButton(onClick = onFindClick) {
                 Icon(
                     Icons.Default.Explore,

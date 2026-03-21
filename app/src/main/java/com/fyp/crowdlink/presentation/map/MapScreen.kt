@@ -62,6 +62,7 @@ private const val RASTER_STYLE_JSON = """
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MapScreen(
+    initialFriendId: String? = null,
     onNavigateToCompass: (String, String) -> Unit,
     onNavigateToChat: (String, String) -> Unit,
     viewModel: MapViewModel = hiltViewModel()
@@ -75,6 +76,11 @@ fun MapScreen(
     val selectedPin = friendPins.firstOrNull { it.friend.deviceId == selectedFriendId }
 
     var mapboxMap by remember { mutableStateOf<MapLibreMap?>(null) }
+
+    // Handle initial friend selection from deep link
+    LaunchedEffect(initialFriendId) {
+        viewModel.selectFriendOnLoad(initialFriendId)
+    }
 
     // Initialise MapLibre — must be called before MapView is created
     // MapLibre requires a token string but accepts empty string for OSM
@@ -110,8 +116,14 @@ fun MapScreen(
                                 }
                             )
 
-                            // Centre on user location if available
-                            myLocation?.let { loc ->
+                            // Centre on user location or selected friend
+                            val targetLocation = if (initialFriendId != null) {
+                                friendPins.firstOrNull { it.friend.deviceId == initialFriendId }?.location
+                            } else {
+                                myLocation
+                            }
+
+                            targetLocation?.let { loc ->
                                 map.animateCamera(
                                     CameraUpdateFactory.newCameraPosition(
                                         CameraPosition.Builder()
