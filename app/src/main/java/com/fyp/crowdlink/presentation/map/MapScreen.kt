@@ -38,7 +38,26 @@ import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.Point
+import timber.log.Timber
 
+private const val RASTER_STYLE_JSON = """
+{
+  "version": 8,
+  "sources": {
+    "osm": {
+      "type": "raster",
+      "tiles": ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      "tileSize": 256,
+      "attribution": "© OpenStreetMap contributors"
+    }
+  },
+  "layers": [{
+    "id": "osm",
+    "type": "raster",
+    "source": "osm"
+  }]
+}
+"""
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,7 +91,7 @@ fun MapScreen(
                     getMapAsync { map ->
                         mapboxMap = map
                         map.setStyle(
-                            Style.Builder().fromUri("https://demotiles.maplibre.org/style.json")
+                            Style.Builder().fromJson(RASTER_STYLE_JSON)
                         ) { style ->
                             // Add a GeoJsonSource for friend pins
                             style.addSource(GeoJsonSource("friend-pins-source"))
@@ -289,7 +308,7 @@ private fun cacheTilesForArea(
         .build()
 
     val definition = OfflineTilePyramidRegionDefinition(
-        "https://demotiles.maplibre.org/style.json",
+        RASTER_STYLE_JSON,
         bounds,
         15.0,   // min zoom
         18.0,   // max zoom
@@ -305,30 +324,43 @@ private fun cacheTilesForArea(
 
     onStart()
 
-    offlineManager.createOfflineRegion(
-        definition,
-        metadata,
-        object : OfflineManager.CreateOfflineRegionCallback {
-            override fun onCreate(offlineRegion: OfflineRegion) {
-                offlineRegion.setDownloadState(OfflineRegion.STATE_ACTIVE)
-                offlineRegion.setObserver(object : OfflineRegion.OfflineRegionObserver {
-                    override fun onStatusChanged(status: OfflineRegionStatus) {
-                        if (status.isComplete) {
-                            offlineRegion.setDownloadState(OfflineRegion.STATE_INACTIVE)
-                            onComplete()
-                        }
-                    }
-                    override fun onError(error: OfflineRegionError) {
+    try {
+        offlineManager.createOfflineRegion(
+            definition,
+            metadata,
+            object : OfflineManager.CreateOfflineRegionCallback {
+                override fun onCreate(offlineRegion: OfflineRegion) {
+                    try {
+                        offlineRegion.setDownloadState(OfflineRegion.STATE_ACTIVE)
+                        offlineRegion.setObserver(object : OfflineRegion.OfflineRegionObserver {
+                            override fun onStatusChanged(status: OfflineRegionStatus) {
+                                if (status.isComplete) {
+                                    offlineRegion.setDownloadState(OfflineRegion.STATE_INACTIVE)
+                                    onComplete()
+                                }
+                            }
+                            override fun onError(error: OfflineRegionError) {
+                                Timber.e("Tile cache error: ${error.message}")
+                                onComplete()
+                            }
+                            override fun mapboxTileCountLimitExceeded(limit: Long) {
+                                Timber.w("Tile count limit exceeded: $limit")
+                                onComplete()
+                            }
+                        })
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to start download")
                         onComplete()
                     }
-                    override fun mapboxTileCountLimitExceeded(limit: Long) {
-                        onComplete()
-                    }
-                })
+                }
+                override fun onError(error: String) {
+                    Timber.e("Failed to create offline region: $error")
+                    onComplete()
+                }
             }
-            override fun onError(error: String) {
-                onComplete()
-            }
-        }
-    )
+        )
+    } catch (e: Exception) {
+        Timber.e(e, "Offline manager exception")
+        onComplete()
+    }
 }
