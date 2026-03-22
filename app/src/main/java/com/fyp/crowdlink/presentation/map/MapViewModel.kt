@@ -1,5 +1,9 @@
 package com.fyp.crowdlink.presentation.map
 
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fyp.crowdlink.domain.model.DeviceLocation
@@ -8,7 +12,6 @@ import com.fyp.crowdlink.domain.repository.FriendRepository
 import com.fyp.crowdlink.domain.repository.LocationRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
@@ -24,8 +27,9 @@ data class FriendMapPin(
 @HiltViewModel
 class MapViewModel @Inject constructor(
     private val locationRepository: LocationRepository,
-    private val friendRepository: FriendRepository
-) : ViewModel() {
+    private val friendRepository: FriendRepository,
+    private val sensorManager: SensorManager
+) : ViewModel(), SensorEventListener {
 
     private val _myLocation = MutableStateFlow<DeviceLocation?>(null)
     val myLocation: StateFlow<DeviceLocation?> = _myLocation.asStateFlow()
@@ -38,6 +42,13 @@ class MapViewModel @Inject constructor(
 
     private val _isCachingTiles = MutableStateFlow(false)
     val isCachingTiles: StateFlow<Boolean> = _isCachingTiles.asStateFlow()
+
+    private val _myHeading = MutableStateFlow(0f)
+    val myHeading: StateFlow<Float> = _myHeading.asStateFlow()
+
+    private var gravity: FloatArray? = null
+    private var geomagnetic: FloatArray? = null
+    private val alpha = 0.15f
 
     init {
         // Collect own GPS location
@@ -63,7 +74,42 @@ class MapViewModel @Inject constructor(
                 }
             }
             .launchIn(viewModelScope)
+
+        val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        val magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
+        sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI)
+        sensorManager.registerListener(this, magnetometer, SensorManager.SENSOR_DELAY_UI)
     }
+
+    override fun onSensorChanged(event: SensorEvent) {
+        if (event.sensor.type == Sensor.TYPE_ACCELEROMETER) {
+            gravity = lowPass(event.values.clone(), gravity)
+        }
+        if (event.sensor.type == Sensor.TYPE_MAGNETIC_FIELD) {
+            geomagnetic = lowPass(event.values.clone(), geomagnetic)
+        }
+        val g = gravity ?: return
+        val m = geomagnetic ?: return
+
+        val r = FloatArray(9)
+        val i = FloatArray(9)
+        if (SensorManager.getRotationMatrix(r, i, g, m)) {
+            val orientation = FloatArray(3)
+            SensorManager.getOrientation(r, orientation)
+            val azimuth = Math.toDegrees(orientation[0].toDouble()).toFloat()
+            _myHeading.value = (azimuth + 360) % 360
+        }
+    }
+
+    private fun lowPass(input: FloatArray, output: FloatArray?): FloatArray {
+        if (output == null) return input
+        for (i in input.indices) {
+            output[i] = output[i] + alpha * (input[i] - output[i])
+        }
+        return output
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     fun selectFriend(friendId: String?) {
         _selectedFriendId.value = friendId
@@ -77,7 +123,7 @@ class MapViewModel @Inject constructor(
 
     fun centreOnMyLocation(): LatLng? {
         return myLocation.value?.let { 
-            LatLng(it.latitude, it.longitude)
+            LatLng(it.latitude, it.longitude) 
         }
     }
 
@@ -89,5 +135,10 @@ class MapViewModel @Inject constructor(
 
     fun onTileCachingComplete() {
         _isCachingTiles.value = false
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        sensorManager.unregisterListener(this)
     }
 }

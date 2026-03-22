@@ -1,5 +1,9 @@
 package com.fyp.crowdlink.presentation.map
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.util.Log
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -15,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.fyp.crowdlink.R
 import com.google.gson.JsonObject
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -73,6 +78,7 @@ fun MapScreen(
     val friendPins by viewModel.friendPins.collectAsState()
     val selectedFriendId by viewModel.selectedFriendId.collectAsState()
     val isCachingTiles by viewModel.isCachingTiles.collectAsState()
+    val myHeading by viewModel.myHeading.collectAsState()
 
     val selectedPin = friendPins.firstOrNull { it.friend.deviceId == selectedFriendId }
 
@@ -106,17 +112,54 @@ fun MapScreen(
                             map.setStyle(
                                 Style.Builder().fromJson(RASTER_STYLE_JSON)
                             ) { style ->
+                                // Load the arrow drawable and add it to the style
+                                val arrowDrawable = AppCompatResources.getDrawable(ctx, R.drawable.ic_location_arrow)
+                                if (arrowDrawable != null) {
+                                    val arrowBitmap = Bitmap.createBitmap(
+                                        arrowDrawable.intrinsicWidth,
+                                        arrowDrawable.intrinsicHeight,
+                                        Bitmap.Config.ARGB_8888
+                                    )
+                                    val canvas = Canvas(arrowBitmap)
+                                    arrowDrawable.setBounds(0, 0, canvas.width, canvas.height)
+                                    arrowDrawable.draw(canvas)
+                                    style.addImage("location-arrow", arrowBitmap)
+                                } else {
+                                    Log.e("MapScreen", "Failed to load location arrow drawable")
+                                }
+
                                 // Add a GeoJsonSource for friend pins
                                 style.addSource(GeoJsonSource("friend-pins-source"))
 
-                                // Add a symbol layer to render the pins
+                                // Friend pins layer
                                 style.addLayer(
                                     SymbolLayer("friend-pins-layer", "friend-pins-source").apply {
+                                        setFilter(Expression.neq(Expression.get("type"), Expression.literal("me")))
                                         setProperties(
                                             PropertyFactory.textField(Expression.get("name")),
                                             PropertyFactory.textSize(14f),
                                             PropertyFactory.textColor("#FF5722"),
                                             PropertyFactory.textAnchor(Property.TEXT_ANCHOR_TOP),
+                                            PropertyFactory.iconAllowOverlap(true),
+                                            PropertyFactory.textAllowOverlap(true)
+                                        )
+                                    }
+                                )
+
+                                // My location layer — separate layer with rotating arrow icon
+                                style.addLayer(
+                                    SymbolLayer("my-location-layer", "friend-pins-source").apply {
+                                        setFilter(Expression.eq(Expression.get("type"), Expression.literal("me")))
+                                        setProperties(
+                                            PropertyFactory.iconImage("location-arrow"),
+                                            PropertyFactory.iconRotate(Expression.get("bearing")),
+                                            PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
+                                            PropertyFactory.iconSize(1.5f),
+                                            PropertyFactory.textField(Expression.get("name")),
+                                            PropertyFactory.textSize(12f),
+                                            PropertyFactory.textColor("#4285F4"),
+                                            PropertyFactory.textAnchor(Property.TEXT_ANCHOR_TOP),
+                                            PropertyFactory.textOffset(arrayOf(0f, 1.5f)),
                                             PropertyFactory.iconAllowOverlap(true),
                                             PropertyFactory.textAllowOverlap(true)
                                         )
@@ -169,17 +212,22 @@ fun MapScreen(
             )
 
             // Update pins whenever friendPins changes
-            LaunchedEffect(friendPins, mapboxMap, myLocation) {
+            LaunchedEffect(friendPins, mapboxMap, myLocation, myHeading) {
                 val style = mapboxMap?.style ?: return@LaunchedEffect
                 val source = style.getSourceAs<GeoJsonSource>("friend-pins-source") ?: return@LaunchedEffect
 
                 val features = mutableListOf<Feature>()
 
+                // My location pin with heading
                 myLocation?.let { loc ->
                     features.add(
                         Feature.fromGeometry(
                             Point.fromLngLat(loc.longitude, loc.latitude),
-                            JsonObject().apply { addProperty("name", "You") }
+                            JsonObject().apply {
+                                addProperty("name", "You")
+                                addProperty("type", "me")
+                                addProperty("bearing", myHeading)
+                            }
                         )
                     )
                 }
@@ -190,6 +238,7 @@ fun MapScreen(
                             Point.fromLngLat(pin.location.longitude, pin.location.latitude),
                             JsonObject().apply {
                                 addProperty("name", pin.friend.displayName)
+                                addProperty("type", "friend")
                                 addProperty("friendId", pin.friend.deviceId)
                             }
                         )

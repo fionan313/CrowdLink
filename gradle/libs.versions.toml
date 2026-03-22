@@ -34,6 +34,7 @@ identityJvm = "202411.1"
 generativeai = "0.9.0"
 annotationJvm = "1.9.1"
 maplibre = "13.0.1"
+appcompat = "1.7.1"
 
 
 [libraries]
@@ -101,6 +102,7 @@ generativeai = { group = "com.google.ai.client.generativeai", name = "generative
 androidx-annotation-jvm = { group = "androidx.annotation", name = "annotation-jvm", version.ref = "annotationJvm" }
 
 maplibre-android = { module = "org.maplibre.gl:android-sdk", version.ref = "maplibre" }
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
