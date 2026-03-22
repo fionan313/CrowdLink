@@ -151,6 +151,12 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun clearMapCache() {
+        viewModelScope.launch {
+            locationRepository.clearMapCache()
+        }
+    }
+
     fun testSosAlert() {
         meshNotificationManager.showSosNotification(
             senderName = "Test Friend",
@@ -162,5 +168,22 @@ class SettingsViewModel @Inject constructor(
 
     fun resetOnboarding() {
         sharedPreferences.edit().putBoolean("onboarding_complete", false).apply()
+    }
+
+    fun unpairAllFriends() {
+        viewModelScope.launch {
+            friendRepository.unpairAllFriends()
+        }
+    }
+
+    fun resetAppData() {
+        viewModelScope.launch {
+            messageRepository.clearAllMessages()
+            locationRepository.clearAllFriendLocations()
+            locationRepository.clearMapCache()
+            friendRepository.unpairAllFriends()
+            userProfileRepository.clearUserProfile()
+            sharedPreferences.edit().clear().apply()
+        }
     }
 }

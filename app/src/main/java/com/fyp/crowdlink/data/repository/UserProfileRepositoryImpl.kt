@@ -59,6 +59,10 @@ class UserProfileRepositoryImpl @Inject constructor(
         userProfileDao.deleteUserProfile()
     }
 
+    override suspend fun clearUserProfile() {
+        userProfileDao.deleteUserProfile()
+    }
+
     override fun getPersistentDeviceId(): String {
         val key = "device_id"
         return sharedPreferences.getString(key, null) ?: run {

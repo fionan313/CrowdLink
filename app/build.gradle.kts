@@ -61,6 +61,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.appcompat)
     
     // Jetpack Compose (UI)
     implementation(platform(libs.androidx.compose.bom))
@@ -119,4 +120,7 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     implementation(libs.timber)
+    
+    // MapLibre
+    implementation(libs.maplibre.android)
 }

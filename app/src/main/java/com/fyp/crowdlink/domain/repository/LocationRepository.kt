@@ -33,4 +33,9 @@ interface LocationRepository {
      * Clears all cached friend locations from the database.
      */
     suspend fun clearAllFriendLocations()
+
+    /**
+     * Clears all locally cached offline map tiles.
+     */
+    suspend fun clearMapCache()
 }

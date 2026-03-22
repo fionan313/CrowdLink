@@ -3,6 +3,7 @@ package com.fyp.crowdlink.presentation
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -17,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -29,6 +31,7 @@ import com.fyp.crowdlink.presentation.chat.ChatScreen
 import com.fyp.crowdlink.presentation.compass.CompassScreen
 import com.fyp.crowdlink.presentation.discovery.DiscoveryScreen
 import com.fyp.crowdlink.presentation.friends.FriendsScreen
+import com.fyp.crowdlink.presentation.map.MapScreen
 import com.fyp.crowdlink.presentation.pairing.PairingScreen
 import com.fyp.crowdlink.presentation.pairing.PairingViewModel
 import com.fyp.crowdlink.presentation.pairing.QRScannerScreen
@@ -45,6 +48,7 @@ enum class Destination(
 ) {
     DISCOVERY("discovery", "Discovery", Icons.Default.Radar, "Discovery"),
     FRIENDS("friends", "Friends", Icons.Default.Groups, "Friends"),
+    MAP("map", "Map", Icons.Default.Map, "Map"),
     SETTINGS("settings", "Settings", Icons.Default.Settings, "Settings")
 }
 
@@ -63,6 +67,7 @@ fun AppNavHost(
                 onNavigateToFriends = { navController.navigate(Destination.FRIENDS.route) },
                 onNavigateToCompass = { id, name -> navController.navigate("compass/$id/$name") },
                 onNavigateToChat = { id, name -> navController.navigate("chat/$id/$name") },
+                onNavigateToMap = { id, name -> navController.navigate("map?friendId=$id&friendName=$name") },
                 onNavigateToRelay = { navController.navigate("relay_discovery") }
             )
         }
@@ -76,6 +81,28 @@ fun AppNavHost(
                 onNavigateToCompass = { id, name ->
                     navController.navigate("compass/$id/$name")
                 }
+            )
+        }
+        composable(
+            route = "map?friendId={friendId}&friendName={friendName}",
+            arguments = listOf(
+                navArgument("friendId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("friendName") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+            val friendId = backStackEntry.arguments?.getString("friendId")
+            MapScreen(
+                initialFriendId = friendId,
+                onNavigateToCompass = { id, name -> navController.navigate("compass/$id/$name") },
+                onNavigateToChat = { id, name -> navController.navigate("chat/$id/$name") }
             )
         }
         composable(
@@ -237,21 +264,24 @@ fun MainScreen(
     val destinations = listOf(
         Destination.DISCOVERY,
         Destination.FRIENDS,
+        Destination.MAP,
         Destination.SETTINGS
     )
 
     Scaffold(
         bottomBar = {
             // Only show bottom bar on top-level destinations
-            val showBottomBar = destinations.any { it.route == currentRoute }
+            val showBottomBar = destinations.any { 
+                currentRoute?.startsWith(it.route) == true 
+            }
             if (showBottomBar) {
                 NavigationBar(windowInsets = NavigationBarDefaults.windowInsets) {
                     destinations.forEach { destination ->
                         NavigationBarItem(
-                            selected = currentRoute == destination.route,
+                            selected = currentRoute?.startsWith(destination.route) == true,
                             onClick = {
                                 navController.navigate(destination.route) {
-                                    popUpTo(navController.graph.startDestinationId) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
                                         saveState = true
                                     }
                                     launchSingleTop = true
