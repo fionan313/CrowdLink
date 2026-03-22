@@ -47,6 +47,11 @@ interface UserProfileRepository {
     suspend fun deleteUserProfile()
 
     /**
+     * Clears all fields in the user profile.
+     */
+    suspend fun clearUserProfile()
+
+    /**
      * Retrieves a unique, persistent ID for this device.
      */
     fun getPersistentDeviceId(): String

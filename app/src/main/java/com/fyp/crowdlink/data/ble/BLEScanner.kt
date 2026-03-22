@@ -258,7 +258,9 @@ class BleScanner @Inject constructor(
             bluetoothLeScanner?.stopScan(scanCallback)
             isScanning = false
             deviceCache.clear()
-            _discoveredDevices.value = emptyList()
+            // Intentionally not clearing _discoveredDevices here.
+            // The list remains visible while scanning is paused so the user
+            // does not lose sight of nearby devices when navigating away and back.
             Log.d("BLE_SCANNER", "Scan stopped")
         } catch (e: SecurityException) {
             Log.e("BLE_SCANNER", "Permission denied when stopping", e)

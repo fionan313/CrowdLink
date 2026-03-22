@@ -32,6 +32,8 @@ zxingAndroidEmbedded = "4.3.0"
 identityJvm = "202411.1"
 generativeai = "0.9.0"
 annotationJvm = "1.9.1"
+maplibre = "13.0.1"
+appcompat = "1.7.1"
 
 
 [libraries]
@@ -96,6 +98,9 @@ zxing-android-embedded = { module = "com.journeyapps:zxing-android-embedded", ve
 identity-jvm = { group = "com.android.identity", name = "identity-jvm", version.ref = "identityJvm" }
 generativeai = { group = "com.google.ai.client.generativeai", name = "generativeai", version.ref = "generativeai" }
 androidx-annotation-jvm = { group = "androidx.annotation", name = "annotation-jvm", version.ref = "annotationJvm" }
+
+maplibre-android = { module = "org.maplibre.gl:android-sdk", version.ref = "maplibre" }
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

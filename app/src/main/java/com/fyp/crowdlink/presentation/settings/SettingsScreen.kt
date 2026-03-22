@@ -26,13 +26,16 @@ fun SettingsScreen(
     val meshRelay by viewModel.meshRelay.collectAsState()
     val esp32Scanning by viewModel.esp32Scanning.collectAsState()
     val ghostMode by viewModel.ghostMode.collectAsState()
-    val locationSharing by viewModel.locationSharing.collectAsState() // Observe state
+    val locationSharing by viewModel.locationSharing.collectAsState()
     val forceShowRelays by viewModel.forceShowRelays.collectAsState()
 
     val pairedFriendsCount by viewModel.pairedFriendsCount.collectAsState()
     val deviceId = viewModel.deviceId
 
     var showClearHistoryDialog by remember { mutableStateOf(false) }
+    var showClearMapDialog by remember { mutableStateOf(false) }
+    var showUnpairAllDialog by remember { mutableStateOf(false) }
+    var showResetAppDialog by remember { mutableStateOf(false) }
 
     if (showClearHistoryDialog) {
         AlertDialog(
@@ -51,6 +54,69 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showClearHistoryDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showClearMapDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearMapDialog = false },
+            title = { Text("Clear Map Cache") },
+            text = { Text("This will delete all downloaded map tiles. They will be re-downloaded the next time you open the map with an internet connection.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.clearMapCache()
+                    showClearMapDialog = false
+                }) {
+                    Text("Clear", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearMapDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showUnpairAllDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnpairAllDialog = false },
+            title = { Text("Unpair All Friends") },
+            text = { Text("Are you sure you want to remove all paired friends? You will need to re-pair with them using their QR codes.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.unpairAllFriends()
+                    showUnpairAllDialog = false
+                }) {
+                    Text("Unpair All", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnpairAllDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showResetAppDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetAppDialog = false },
+            title = { Text("Reset App Data") },
+            text = { Text("WARNING: This will delete EVERYTHING including your profile, messages, friends, and settings. The app will return to its initial state.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.resetAppData()
+                    showResetAppDialog = false
+                }) {
+                    Text("RESET EVERYTHING", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetAppDialog = false }) {
                     Text("Cancel")
                 }
             }
@@ -146,14 +212,20 @@ fun SettingsScreen(
                 icon = Icons.Default.LocationOff,
                 title = "Location sharing",
                 subtitle = "Share GPS coordinates with paired friends",
-                checked = locationSharing, // Use observed state
-                onCheckedChange = { viewModel.setLocationSharing(it) } // Connect to setter
+                checked = locationSharing,
+                onCheckedChange = { viewModel.setLocationSharing(it) }
             )
             SettingsNavigationItem(
                 icon = Icons.Default.DeleteSweep,
                 title = "Clear Message History",
                 subtitle = "Delete all local chat records",
                 onClick = { showClearHistoryDialog = true }
+            )
+            SettingsNavigationItem(
+                icon = Icons.Default.Map,
+                title = "Clear Map Cache",
+                subtitle = "Delete downloaded offline map tiles",
+                onClick = { showClearMapDialog = true }
             )
 
             HorizontalDivider()
@@ -186,6 +258,24 @@ fun SettingsScreen(
                 subtitle = "Always show the relay node banner on Nearby screen",
                 checked = forceShowRelays,
                 onCheckedChange = { viewModel.setForceShowRelays(it) }
+            )
+            SettingsNavigationItem(
+                icon = Icons.Default.RestartAlt,
+                title = "Reset Onboarding",
+                subtitle = "Show onboarding screen on next launch",
+                onClick = { viewModel.resetOnboarding() }
+            )
+            SettingsNavigationItem(
+                icon = Icons.Default.PersonRemove,
+                title = "Unpair All Friends",
+                subtitle = "Delete all paired friend records",
+                onClick = { showUnpairAllDialog = true }
+            )
+            SettingsNavigationItem(
+                icon = Icons.Default.Dangerous,
+                title = "Reset App Data",
+                subtitle = "Wipe all local data and settings",
+                onClick = { showResetAppDialog = true }
             )
         }
     }

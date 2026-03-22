@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -69,6 +70,13 @@ class LocationRepositoryImpl @Inject constructor(
 
     override suspend fun clearAllFriendLocations() {
         locationDao.deleteAllLocations()
+    }
+
+    override suspend fun clearMapCache() {
+        val cacheDir = File(context.filesDir, "map_tiles")
+        if (cacheDir.exists()) {
+            cacheDir.deleteRecursively()
+        }
     }
 
     private fun Location.toDomain(deviceId: String): DeviceLocation {

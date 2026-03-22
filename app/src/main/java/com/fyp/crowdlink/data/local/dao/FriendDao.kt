@@ -66,6 +66,12 @@ interface FriendDao {
      */
     @Query("DELETE FROM friends WHERE deviceId = :deviceId")
     suspend fun deleteFriendById(deviceId: String)
+
+    /**
+     * Deletes all friends from the database.
+     */
+    @Query("DELETE FROM friends")
+    suspend fun deleteAll()
     
     /**
      * Checks if a friend exists in the database.

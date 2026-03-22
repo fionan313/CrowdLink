@@ -2,6 +2,7 @@ package com.fyp.crowdlink.presentation.discovery
 
 import android.annotation.SuppressLint
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.core.content.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -10,12 +11,16 @@ import com.fyp.crowdlink.data.ble.RelayNodeConnection
 import com.fyp.crowdlink.data.ble.RelayNodeScanner
 import com.fyp.crowdlink.domain.model.NearbyFriend
 import com.fyp.crowdlink.domain.model.RelayNode
+import com.fyp.crowdlink.domain.repository.FriendRepository
+import com.fyp.crowdlink.domain.usecase.ShareLocationUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -26,7 +31,9 @@ class DiscoveryViewModel @Inject constructor(
     private val deviceRepository: DeviceRepositoryImpl,
     private val relayNodeScanner: RelayNodeScanner,
     private val relayNodeConnection: RelayNodeConnection,
-    private val sharedPreferences: SharedPreferences
+    private val sharedPreferences: SharedPreferences,
+    private val shareLocationUseCase: ShareLocationUseCase,
+    private val friendRepository: FriendRepository
 ) : ViewModel() {
 
     // Generate or retrieve persistent device ID
@@ -72,6 +79,24 @@ class DiscoveryViewModel @Inject constructor(
         startDiscovery()
         startAdvertising()
 
+        viewModelScope.launch {
+            while (true) {
+                delay(60_000L)
+                val locationEnabled = sharedPreferences.getBoolean("location_sharing", true)
+                if (locationEnabled) {
+                    try {
+                        val friends = friendRepository.getAllFriends().first()
+                        friends.forEach { friend ->
+                            shareLocationUseCase(friend.deviceId)
+                        }
+                        Log.d("DiscoveryViewModel", "Background location broadcast sent to ${friends.size} friends")
+                    } catch (e: Exception) {
+                        Log.e("DiscoveryViewModel", "Background location broadcast failed", e)
+                    }
+                }
+            }
+        }
+
         // Auto-connect to relay logic
         viewModelScope.launch {
             discoveredRelays.collect { relays ->
@@ -112,14 +137,11 @@ class DiscoveryViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         sharedPreferences.unregisterOnSharedPreferenceChangeListener(preferenceChangeListener)
-        // We keep discovery running even when navigating away, 
-        // but if the ViewModel is truly destroyed (app exit/back from start), we stop.
-        try {
-            stopDiscovery()
-            stopAdvertising()
-        } catch (e: SecurityException) {
-            // Permission revoked, ignore
-        }
+        // Do not stop discovery or advertising here.
+        // BleScanner and BleAdvertiser are singletons that should remain
+        // active while the app is in the foreground. Scanning is only
+        // stopped explicitly when the user taps the MeshStatusPill to pause,
+        // or when the app moves to the background via a foreground service.
     }
 
     companion object {
