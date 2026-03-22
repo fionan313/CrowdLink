@@ -34,6 +34,8 @@ fun SettingsScreen(
 
     var showClearHistoryDialog by remember { mutableStateOf(false) }
     var showClearMapDialog by remember { mutableStateOf(false) }
+    var showUnpairAllDialog by remember { mutableStateOf(false) }
+    var showResetAppDialog by remember { mutableStateOf(false) }
 
     if (showClearHistoryDialog) {
         AlertDialog(
@@ -73,6 +75,48 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showClearMapDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showUnpairAllDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnpairAllDialog = false },
+            title = { Text("Unpair All Friends") },
+            text = { Text("Are you sure you want to remove all paired friends? You will need to re-pair with them using their QR codes.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.unpairAllFriends()
+                    showUnpairAllDialog = false
+                }) {
+                    Text("Unpair All", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnpairAllDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showResetAppDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetAppDialog = false },
+            title = { Text("Reset App Data") },
+            text = { Text("WARNING: This will delete EVERYTHING including your profile, messages, friends, and settings. The app will return to its initial state.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.resetAppData()
+                    showResetAppDialog = false
+                }) {
+                    Text("RESET EVERYTHING", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetAppDialog = false }) {
                     Text("Cancel")
                 }
             }
@@ -220,6 +264,18 @@ fun SettingsScreen(
                 title = "Reset Onboarding",
                 subtitle = "Show onboarding screen on next launch",
                 onClick = { viewModel.resetOnboarding() }
+            )
+            SettingsNavigationItem(
+                icon = Icons.Default.PersonRemove,
+                title = "Unpair All Friends",
+                subtitle = "Delete all paired friend records",
+                onClick = { showUnpairAllDialog = true }
+            )
+            SettingsNavigationItem(
+                icon = Icons.Default.Dangerous,
+                title = "Reset App Data",
+                subtitle = "Wipe all local data and settings",
+                onClick = { showResetAppDialog = true }
             )
         }
     }

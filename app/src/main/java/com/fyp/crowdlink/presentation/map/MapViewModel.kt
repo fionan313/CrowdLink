@@ -8,10 +8,12 @@ import com.fyp.crowdlink.domain.repository.FriendRepository
 import com.fyp.crowdlink.domain.repository.LocationRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import org.maplibre.android.geometry.LatLng
 import javax.inject.Inject
 
 data class FriendMapPin(
@@ -70,6 +72,12 @@ class MapViewModel @Inject constructor(
     fun selectFriendOnLoad(friendId: String?) {
         if (friendId != null) {
             _selectedFriendId.value = friendId
+        }
+    }
+
+    fun centreOnMyLocation(): LatLng? {
+        return myLocation.value?.let { 
+            LatLng(it.latitude, it.longitude)
         }
     }
 

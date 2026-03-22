@@ -47,6 +47,11 @@ interface FriendRepository {
      * @param deviceId The unique identifier of the friend to remove.
      */
     suspend fun removeFriendById(deviceId: String)
+
+    /**
+     * Removes all friends from the repository.
+     */
+    suspend fun unpairAllFriends()
     
     /**
      * Checks if a friend with the given device ID is already paired.

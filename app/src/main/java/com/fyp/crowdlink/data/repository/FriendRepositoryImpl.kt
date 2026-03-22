@@ -51,6 +51,10 @@ class FriendRepositoryImpl @Inject constructor(
     override suspend fun removeFriendById(deviceId: String) {
         friendDao.deleteFriendById(deviceId)
     }
+
+    override suspend fun unpairAllFriends() {
+        friendDao.deleteAll()
+    }
     
     /**
      * Checks if a friend with the given device ID exists in the database.
