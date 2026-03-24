@@ -103,12 +103,16 @@ class DeviceRepositoryImpl @Inject constructor(
 
         bleAdvertiser.onSosAlertReceived = { senderId, senderName, latitude, longitude ->
             scope.launch {
-                meshNotificationManager.showSosNotification(
-                    senderName = senderName,
-                    latitude = latitude,
-                    longitude = longitude,
-                    friendId = senderId
-                )
+                if (friendRepository.isFriendPaired(senderId)) {
+                    meshNotificationManager.showSosNotification(
+                        senderName = senderName,
+                        latitude = latitude,
+                        longitude = longitude,
+                        friendId = senderId
+                    )
+                } else {
+                    Timber.tag("DeviceRepo").w("Ignored SOS from unpaired device: $senderId")
+                }
             }
         }
 
@@ -152,6 +156,11 @@ class DeviceRepositoryImpl @Inject constructor(
         meshMessage: com.fyp.crowdlink.domain.model.MeshMessage,
         transportType: TransportType
     ) {
+        if (!friendRepository.isFriendPaired(senderId)) {
+            Timber.tag("DeviceRepo").w("Ignored message from unpaired device: $senderId")
+            return
+        }
+
         val content = meshMessage.payload.toString(Charsets.UTF_8).substring(1) // Skip type byte
         val friend = friendRepository.getFriendById(senderId)
         
@@ -180,6 +189,11 @@ class DeviceRepositoryImpl @Inject constructor(
     }
 
     private suspend fun handleIncomingLocationUpdate(senderId: String, payload: ByteArray) {
+        if (!friendRepository.isFriendPaired(senderId)) {
+            Timber.tag("DeviceRepo").w("Ignored location update from unpaired device: $senderId")
+            return
+        }
+
         val location = locationSerialiser.deserialize(payload, senderId)
         if (location != null) {
             locationRepository.cacheFriendLocation(location)
