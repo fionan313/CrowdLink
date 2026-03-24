@@ -63,31 +63,29 @@ class MeshNotificationManager @Inject constructor(
     }
 
     private fun createNotificationChannels() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // Regular messages channel
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Incoming messages from friends via mesh"
-            }
-            notificationManager.createNotificationChannel(channel)
-
-            // SOS Alert channel — high importance, bypass DND where possible
-            val sosChannel = NotificationChannel(
-                SOS_CHANNEL_ID,
-                "SOS Alerts",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Emergency alerts from paired friends"
-                enableVibration(true)
-                vibrationPattern = longArrayOf(0, 500, 200, 500, 200, 500)
-                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-                setBypassDnd(true)   // requests DND bypass — user can still override in settings
-            }
-            notificationManager.createNotificationChannel(sosChannel)
+        // Regular messages channel
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            CHANNEL_NAME,
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "Incoming messages from friends via mesh"
         }
+        notificationManager.createNotificationChannel(channel)
+
+        // SOS Alert channel — high importance, bypass DND where possible
+        val sosChannel = NotificationChannel(
+            SOS_CHANNEL_ID,
+            "SOS Alerts",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "Emergency alerts from paired friends"
+            enableVibration(true)
+            vibrationPattern = longArrayOf(0, 500, 200, 500, 200, 500)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            setBypassDnd(true)   // requests DND bypass — user can still override in settings
+        }
+        notificationManager.createNotificationChannel(sosChannel)
     }
 
     fun showMessageNotification(senderName: String, content: String, friendId: String) {
@@ -197,12 +195,7 @@ class MeshNotificationManager @Inject constructor(
 
         val pattern = longArrayOf(0, 500, 200, 500, 200, 500)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
-        } else {
-            @Suppress("DEPRECATION")
-            vibrator.vibrate(pattern, -1)
-        }
+        vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
     }
 
     private fun triggerSosAlarm() {
