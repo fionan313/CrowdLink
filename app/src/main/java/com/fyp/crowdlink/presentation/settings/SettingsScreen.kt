@@ -27,6 +27,7 @@ fun SettingsScreen(
     val ghostMode by viewModel.ghostMode.collectAsState()
     val locationSharing by viewModel.locationSharing.collectAsState()
     val forceShowRelays by viewModel.forceShowRelays.collectAsState()
+    val wifiDirectMode by viewModel.wifiDirectMode.collectAsState()
 
     val pairedFriendsCount by viewModel.pairedFriendsCount.collectAsState()
     val deviceId = viewModel.deviceId
@@ -251,6 +252,13 @@ fun SettingsScreen(
 
             // ── Debug ─────────────────────────────────────────────
             SettingsSectionHeader("Debug")
+            SettingsToggleItem(
+                icon = Icons.Default.Wifi,
+                title = "Force WiFi Direct for Text",
+                subtitle = "Bypass BLE mesh and send text via WiFi Direct socket",
+                checked = wifiDirectMode,
+                onCheckedChange = { viewModel.setWifiDirectMode(it) }
+            )
             SettingsToggleItem(
                 icon = Icons.Default.BugReport,
                 title = "Force show relay banner",

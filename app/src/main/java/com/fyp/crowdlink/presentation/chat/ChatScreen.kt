@@ -1,7 +1,5 @@
 package com.fyp.crowdlink.presentation.chat
 
-import android.net.wifi.p2p.WifiP2pDevice
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -26,7 +24,8 @@ import com.fyp.crowdlink.domain.model.MessageStatus
  * ChatScreen
  *
  * This screen allows the user to exchange messages with a paired friend.
- * It uses the Mesh Network as the primary transport, with background fallbacks.
+ * It uses the Mesh Network as the primary transport. WiFi Direct connections
+ * are established automatically in the background for high-bandwidth reliability.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,14 +37,12 @@ fun ChatScreen(
 ) {
     val messages by viewModel.getMessages(friendId).collectAsState()
     val discoveryStatus by viewModel.discoveryStatus.collectAsState()
-    val peers by viewModel.peers.collectAsState()
     val isMeshActive by viewModel.isMeshActive.collectAsState()
     var textState by remember { mutableStateOf("") }
-    var showPeerList by remember { mutableStateOf(false) }
 
-    // Lifecycle management for background discovery
-    DisposableEffect(Unit) {
-        viewModel.onResume()
+    // Lifecycle management for background discovery and auto-connection
+    DisposableEffect(friendId) {
+        viewModel.onResume(friendId)
         viewModel.discover()
         onDispose {
             viewModel.onPause()
@@ -71,14 +68,9 @@ fun ChatScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { showPeerList = !showPeerList }) {
-                        Icon(
-                            if (showPeerList) Icons.Default.Close else Icons.Default.Share,
-                            contentDescription = "Connection Options"
-                        )
-                    }
+                    // WiFi Direct peer list is now hidden as it connects automatically
                     IconButton(onClick = { viewModel.discover() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh Discovery")
                     }
                 }
             )
@@ -149,66 +141,6 @@ fun ChatScreen(
                     }
                 }
             }
-
-            // Peer List Overlay (Wi-Fi Direct connections for "High Speed" transport)
-            if (showPeerList) {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            "High-Speed Peer Connection",
-                            style = MaterialTheme.typography.titleLarge
-                        )
-                        Text(
-                            "Connect directly for faster image and file transfers.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        Spacer(modifier = Modifier.height(24.dp))
-
-                        Button(onClick = { viewModel.discover() }) {
-                            Text("Refresh Peer List")
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Text("Nearby Devices:", style = MaterialTheme.typography.labelLarge)
-
-                        LazyColumn(modifier = Modifier.weight(1f)) {
-                            if (peers.isEmpty()) {
-                                item {
-                                    Text(
-                                        "No devices found. Ensure WiFi is on.",
-                                        modifier = Modifier.padding(32.dp)
-                                    )
-                                }
-                            } else {
-                                items(peers) { device ->
-                                    PeerItem(device = device) {
-                                        viewModel.connect(device.deviceAddress)
-                                        showPeerList = false
-                                    }
-                                }
-                            }
-                        }
-                        
-                        Button(
-                            onClick = { showPeerList = false },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Back to Chat")
-                        }
-                    }
-                }
-            }
         }
     }
 }
@@ -239,46 +171,6 @@ fun ChatEmptyState(friendName: String) {
             textAlign = TextAlign.Center,
             lineHeight = 20.sp
         )
-    }
-}
-
-@Composable
-fun PeerItem(device: WifiP2pDevice, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .clickable { onClick() }
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(text = device.deviceName, style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    text = device.deviceAddress,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Spacer(modifier = Modifier.weight(1f))
-            Text(
-                text = getDeviceStatus(device.status),
-                style = MaterialTheme.typography.labelSmall
-            )
-        }
-    }
-}
-
-fun getDeviceStatus(status: Int): String {
-    return when (status) {
-        WifiP2pDevice.AVAILABLE -> "Available"
-        WifiP2pDevice.INVITED -> "Invited"
-        WifiP2pDevice.CONNECTED -> "Connected"
-        WifiP2pDevice.FAILED -> "Failed"
-        WifiP2pDevice.UNAVAILABLE -> "Unavailable"
-        else -> "Unknown"
     }
 }
 

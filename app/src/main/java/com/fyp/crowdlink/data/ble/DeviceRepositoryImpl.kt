@@ -57,14 +57,14 @@ class DeviceRepositoryImpl @Inject constructor(
             .getString("device_id", "") ?: ""
         
         // Wire MeshRoutingEngine callbacks
-        meshRoutingEngine.onMessageForMe = { meshMessage ->
+        meshRoutingEngine.onMessageForMe = { meshMessage, transportType ->
             scope.launch {
                 val senderIdString = meshMessage.senderId
                 val payload = meshMessage.payload
                 
                 if (payload.isNotEmpty()) {
                     when (payload[0]) {
-                        0x01.toByte() -> handleIncomingTextMessage(senderIdString, meshMessage)
+                        0x01.toByte() -> handleIncomingTextMessage(senderIdString, meshMessage, transportType)
                         0x03.toByte() -> handleIncomingLocationUpdate(senderIdString, payload)
                         else -> Timber.tag("DeviceRepo").w("Unknown message type: ${payload[0]}")
                     }
@@ -147,7 +147,11 @@ class DeviceRepositoryImpl @Inject constructor(
         }.launchIn(scope)
     }
 
-    private suspend fun handleIncomingTextMessage(senderId: String, meshMessage: com.fyp.crowdlink.domain.model.MeshMessage) {
+    private suspend fun handleIncomingTextMessage(
+        senderId: String, 
+        meshMessage: com.fyp.crowdlink.domain.model.MeshMessage,
+        transportType: TransportType
+    ) {
         val content = meshMessage.payload.toString(Charsets.UTF_8).substring(1) // Skip type byte
         val friend = friendRepository.getFriendById(senderId)
         
@@ -160,7 +164,7 @@ class DeviceRepositoryImpl @Inject constructor(
             isSentByMe = false,
             deliveryStatus = MessageStatus.DELIVERED,
             hopCount = meshMessage.hopCount,
-            transportType = TransportType.MESH
+            transportType = transportType
         )
         
         messageRepository.sendMessage(incomingMessage)

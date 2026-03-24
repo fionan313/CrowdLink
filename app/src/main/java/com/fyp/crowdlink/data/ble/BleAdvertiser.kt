@@ -18,6 +18,7 @@ import android.os.ParcelUuid
 import com.fyp.crowdlink.data.mesh.MeshMessageSerialiser
 import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
 import com.fyp.crowdlink.domain.model.PairingRequest
+import com.fyp.crowdlink.domain.model.TransportType
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -163,7 +164,8 @@ class BleAdvertiser @Inject constructor(
         val message = serializer.deserialize(value)
         if (message != null) {
             scope.launch {
-                meshRoutingEngine.processIncoming(message)
+                // Explicitly report this as coming over BLE
+                meshRoutingEngine.processIncoming(message, TransportType.BLE)
             }
             Timber.tag("BLE_ADVERTISER").d("Handed to routing engine: ${message.messageId}")
         } else {

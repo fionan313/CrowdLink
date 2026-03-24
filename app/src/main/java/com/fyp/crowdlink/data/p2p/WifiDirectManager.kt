@@ -9,6 +9,10 @@ import android.net.wifi.p2p.WifiP2pConfig
 import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pInfo
 import android.net.wifi.p2p.WifiP2pManager
+import android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceInfo
+import android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceRequest
+import com.fyp.crowdlink.data.mesh.MeshMessageSerialiser
+import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
 import com.fyp.crowdlink.domain.model.Message
 import com.fyp.crowdlink.domain.model.TransportType
 import com.fyp.crowdlink.domain.repository.MessageRepository
@@ -33,7 +37,9 @@ import javax.inject.Singleton
 @Singleton
 class WifiDirectManager @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val messageRepository: MessageRepository
+    private val messageRepository: MessageRepository,
+    private val meshRoutingEngine: MeshRoutingEngine,
+    private val serializer: MeshMessageSerialiser
 ) {
     private val manager: WifiP2pManager? = context.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
     private val channel: WifiP2pManager.Channel? = manager?.initialize(context, context.mainLooper, null)
@@ -41,15 +47,17 @@ class WifiDirectManager @Inject constructor(
     private val _peers = MutableStateFlow<List<WifiP2pDevice>>(emptyList())
     val peers = _peers.asStateFlow()
 
+    // Maps discovered deviceId to its WifiP2pDevice
+    private val _discoveredFriends = MutableStateFlow<Map<String, WifiP2pDevice>>(emptyMap())
+    val discoveredFriends = _discoveredFriends.asStateFlow()
+
     private val _connectionInfo = MutableStateFlow<WifiP2pInfo?>(null)
     val connectionInfo = _connectionInfo.asStateFlow()
 
-    // Store the IP address of the connected peer
     private val _peerIp = MutableStateFlow<String?>(null)
     val peerIp = _peerIp.asStateFlow()
 
     private var serverJob: Job? = null
-    private var relayObserverJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
 
     private val intentFilter = IntentFilter().apply {
@@ -57,10 +65,6 @@ class WifiDirectManager @Inject constructor(
         addAction(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION)
         addAction(WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION)
         addAction(WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION)
-    }
-
-    init {
-        startRelayQueueObserver()
     }
 
     private val receiver = object : BroadcastReceiver() {
@@ -77,8 +81,6 @@ class WifiDirectManager @Inject constructor(
                         _connectionInfo.value = info
                         if (info.groupFormed) {
                             startServer(info)
-                            // If I am the client, I know the GO's IP. I should send a handshake
-                            // so the GO knows my IP.
                             if (!info.isGroupOwner) {
                                 _peerIp.value = info.groupOwnerAddress.hostAddress
                                 sendHandshake(info.groupOwnerAddress.hostAddress)
@@ -94,48 +96,68 @@ class WifiDirectManager @Inject constructor(
     }
 
     /**
-     * Observes the relay queue and attempts to deliver messages via Wi-Fi Direct
-     * if a peer is currently connected.
+     * Set up local service to advertise our device ID over WiFi Direct.
      */
-    private fun startRelayQueueObserver() {
-        relayObserverJob?.cancel()
-        relayObserverJob = scope.launch {
-            messageRepository.getRelayQueue().collect { queue ->
-                val targetIp = _peerIp.value
-                if (targetIp != null && queue.isNotEmpty()) {
-                    Timber.tag("WifiDirect")
-                        .d("Relay queue update: ${queue.size} messages waiting, peer connected at $targetIp")
-                    queue.forEach { meshMessage ->
-                        // Attempt delivery via Wi-Fi Direct fallback
-                        val success = attemptWifiDirectDelivery(targetIp, meshMessage)
-                        if (success) {
-                            Timber.tag("WifiDirect")
-                                .d("Successfully delivered message ${meshMessage.messageId} via WiFi Direct, removing from queue")
-                            messageRepository.removeFromRelayQueue(meshMessage.messageId)
-                        }
-                    }
-                }
+    fun setupServiceDiscovery(myDeviceId: String) {
+        val record = mapOf("deviceId" to myDeviceId)
+        val serviceInfo = WifiP2pDnsSdServiceInfo.newInstance(
+            "CrowdLink_$myDeviceId", "_crowdlink._tcp", record
+        )
+
+        manager?.clearLocalServices(channel, object : WifiP2pManager.ActionListener {
+            override fun onSuccess() {
+                manager.addLocalService(channel, serviceInfo, object : WifiP2pManager.ActionListener {
+                    override fun onSuccess() { Timber.tag("WifiDirect").d("Local service added: $myDeviceId") }
+                    override fun onFailure(reason: Int) { Timber.tag("WifiDirect").e("Failed to add local service: $reason") }
+                })
             }
-        }
+            override fun onFailure(reason: Int) { Timber.tag("WifiDirect").e("Failed to clear local services: $reason") }
+        })
     }
 
     /**
-     * Helper to wrap mesh message for Wi-Fi Direct transport
+     * Start discovering other CrowdLink services nearby.
      */
-    private suspend fun attemptWifiDirectDelivery(targetAddress: String, meshMessage: com.fyp.crowdlink.domain.model.MeshMessage): Boolean {
+    @SuppressLint("MissingPermission")
+    fun discoverServices() {
+        val request = WifiP2pDnsSdServiceRequest.newInstance()
+        
+        manager?.setDnsSdResponseListeners(channel, 
+            { _, _, _ -> },
+            { _, txtRecordMap, srcDevice ->
+                val deviceId = txtRecordMap["deviceId"]
+                if (deviceId != null) {
+                    Timber.tag("WifiDirect").d("Discovered friend $deviceId at ${srcDevice.deviceAddress}")
+                    val currentMap = _discoveredFriends.value.toMutableMap()
+                    currentMap[deviceId] = srcDevice
+                    _discoveredFriends.value = currentMap
+                }
+            }
+        )
+
+        manager?.addServiceRequest(channel, request, object : WifiP2pManager.ActionListener {
+            override fun onSuccess() {
+                manager.discoverServices(channel, object : WifiP2pManager.ActionListener {
+                    override fun onSuccess() { Timber.tag("WifiDirect").d("Service discovery started") }
+                    override fun onFailure(reason: Int) { Timber.tag("WifiDirect").e("Service discovery failed: $reason") }
+                })
+            }
+            override fun onFailure(reason: Int) { Timber.tag("WifiDirect").e("Add service request failed: $reason") }
+        })
+    }
+
+    suspend fun deliverMeshMessage(targetAddress: String, meshMessage: com.fyp.crowdlink.domain.model.MeshMessage): Boolean {
         return withContext(Dispatchers.IO) {
             try {
                 val socket = Socket()
                 socket.connect(InetSocketAddress(targetAddress, 8888), 2000)
                 val output = DataOutputStream(socket.getOutputStream())
                 
-                // We send a special prefix to indicate this is a MeshMessage payload
-                output.writeUTF("MESH_RELAY_V1")
-                output.writeUTF(meshMessage.senderId)
-                // Sending the content as a string for now as the existing WifiDirectManager expects strings,
-                // but in a real mesh we might send the raw payload.
-                output.writeUTF(String(meshMessage.payload, Charsets.UTF_8))
-                output.writeUTF(meshMessage.messageId.toString())
+                val bytes = serializer.serialize(meshMessage) ?: return@withContext false
+                
+                output.writeUTF("MESH_PACKET_V2")
+                output.writeInt(bytes.size)
+                output.write(bytes)
                 
                 output.flush()
                 socket.close()
@@ -157,25 +179,13 @@ class WifiDirectManager @Inject constructor(
     }
 
     @SuppressLint("MissingPermission")
-    fun discoverPeers() {
-        manager?.discoverPeers(channel, object : WifiP2pManager.ActionListener {
-            override fun onSuccess() {
-                Timber.tag("WifiDirect").d("Discovery Started") }
-            override fun onFailure(reason: Int) {
-                Timber.tag("WifiDirect").e("Discovery Failed: $reason") }
-        })
-    }
-
-    @SuppressLint("MissingPermission")
     fun connect(device: WifiP2pDevice) {
         val config = WifiP2pConfig().apply {
             deviceAddress = device.deviceAddress
         }
         manager?.connect(channel, config, object : WifiP2pManager.ActionListener {
-            override fun onSuccess() {
-                Timber.tag("WifiDirect").d("Connect Success") }
-            override fun onFailure(reason: Int) {
-                Timber.tag("WifiDirect").e("Connect Failed: $reason") }
+            override fun onSuccess() { Timber.tag("WifiDirect").d("Connect Success") }
+            override fun onFailure(reason: Int) { Timber.tag("WifiDirect").e("Connect Failed: $reason") }
         })
     }
 
@@ -189,12 +199,6 @@ class WifiDirectManager @Inject constructor(
             }
             override fun onFailure(reason: Int) {
                 Timber.tag("WifiDirect").e("Failed to remove group: $reason")
-                manager?.cancelConnect(channel, object : WifiP2pManager.ActionListener {
-                    override fun onSuccess() {
-                        Timber.tag("WifiDirect").d("Connect cancelled") }
-                    override fun onFailure(reason: Int) {
-                        Timber.tag("WifiDirect").e("Failed to cancel connect: $reason") }
-                })
             }
         })
     }
@@ -212,11 +216,9 @@ class WifiDirectManager @Inject constructor(
             var serverSocket: ServerSocket? = null
             try {
                 serverSocket = ServerSocket(8888)
-                Timber.tag("WifiDirect").d("Server started on port 8888")
                 while (true) {
                     val client = serverSocket.accept()
                     val clientIp = client.inetAddress.hostAddress
-                    Timber.tag("WifiDirect").d("Accepted connection from $clientIp")
                     _peerIp.value = clientIp
                     handleIncomingConnection(client)
                 }
@@ -234,39 +236,44 @@ class WifiDirectManager @Inject constructor(
                 val input = DataInputStream(socket.getInputStream())
                 val header = input.readUTF()
                 
-                if (header == "MESH_RELAY_V1") {
-                    val senderId = input.readUTF()
-                    val content = input.readUTF()
-                    input.readUTF()
-
-                    Timber.tag("WifiDirect").d("Received MESH message from $senderId: $content")
-                    
-                    // In a real mesh refactor, we would reconstruct the MeshMessage 
-                    // and hand it to MeshRoutingEngine.processIncoming().
-                    // For now, to maintain functionality, we'll just insert as a domain message.
-                    val message = Message(
-                        senderId = senderId,
-                        receiverId = "me",
-                        content = content,
-                        isSentByMe = false,
-                        transportType = TransportType.WIFI
-                    )
-                    messageRepository.sendMessage(message)
-                    // TODO: Notify MeshRoutingEngine so it marks it as seen
-                } else {
-                    // Legacy handling
-                    val senderId = header // In legacy, first string was senderId
-                    val content = input.readUTF()
-                    
-                    if (content != "HANDSHAKE_INIT") {
+                when (header) {
+                    "MESH_PACKET_V2" -> {
+                        val size = input.readInt()
+                        val bytes = ByteArray(size)
+                        input.readFully(bytes)
+                        val meshMessage = serializer.deserialize(bytes)
+                        if (meshMessage != null) {
+                            meshRoutingEngine.processIncoming(meshMessage, TransportType.WIFI)
+                        }
+                    }
+                    "MESH_RELAY_V1" -> {
+                        val senderId = input.readUTF()
+                        val content = input.readUTF()
+                        val messageIdStr = input.readUTF()
+                        
                         val message = Message(
+                            messageId = messageIdStr,
                             senderId = senderId,
-                            receiverId = "me",
+                            receiverId = meshRoutingEngine.localDeviceId,
                             content = content,
                             isSentByMe = false,
                             transportType = TransportType.WIFI
                         )
                         messageRepository.sendMessage(message)
+                    }
+                    else -> {
+                        val senderId = header
+                        val content = input.readUTF()
+                        if (content != "HANDSHAKE_INIT") {
+                            val message = Message(
+                                senderId = senderId,
+                                receiverId = meshRoutingEngine.localDeviceId,
+                                content = content,
+                                isSentByMe = false,
+                                transportType = TransportType.WIFI
+                            )
+                            messageRepository.sendMessage(message)
+                        }
                     }
                 }
                 socket.close()
@@ -287,7 +294,6 @@ class WifiDirectManager @Inject constructor(
                 output.writeUTF("HANDSHAKE_INIT")
                 output.flush()
                 socket.close()
-                Timber.tag("WifiDirect").d("Handshake sent to $targetAddress")
             } catch (e: Exception) {
                 Timber.tag("WifiDirect").e(e, "Handshake failed")
             }

@@ -2,6 +2,7 @@ package com.fyp.crowdlink.data.mesh
 
 import android.content.SharedPreferences
 import com.fyp.crowdlink.domain.model.MeshMessage
+import com.fyp.crowdlink.domain.model.TransportType
 import timber.log.Timber
 import java.util.UUID
 import javax.inject.Inject
@@ -18,10 +19,11 @@ class MeshRoutingEngine @Inject constructor(
     var localDeviceId: String = ""
 
     // Callbacks wired up by the BLE layer or Repository
-    var onMessageForMe: (suspend (MeshMessage) -> Unit)? = null
+    // Now includes the transport type that the message arrived on
+    var onMessageForMe: (suspend (MeshMessage, TransportType) -> Unit)? = null
     var onRelay: (suspend (MeshMessage) -> Unit)? = null
 
-    suspend fun processIncoming(message: MeshMessage) {
+    suspend fun processIncoming(message: MeshMessage, transportType: TransportType = TransportType.MESH) {
         // 1. Duplicate check
         if (seenMessageCache.hasSeenMessage(message.messageId)) {
             Timber.tag(TAG).d("DROP duplicate: ${message.messageId}")
@@ -30,10 +32,10 @@ class MeshRoutingEngine @Inject constructor(
         seenMessageCache.markAsSeen(message.messageId)
 
         // 2. Is this message for me?
-        Timber.tag(TAG).d("COMPARE recipientId=${message.recipientId} localDeviceId=$localDeviceId")
+        Timber.tag(TAG).d("COMPARE recipientId=${message.recipientId} localDeviceId=$localDeviceId via $transportType")
         if (message.recipientId == localDeviceId) {
             Timber.tag(TAG).d("DELIVER to self: ${message.messageId}")
-            onMessageForMe?.invoke(message)
+            onMessageForMe?.invoke(message, transportType)
             return
         }
 
