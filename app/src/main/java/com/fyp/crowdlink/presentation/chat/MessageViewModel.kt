@@ -133,7 +133,8 @@ class MessageViewModel @Inject constructor(
             val forceWifi = sharedPreferences.getBoolean("wifi_direct_mode", false)
             val peerIp = wifiDirectManager.peerIp.value
 
-            // 1. Save to local database for UI display immediately
+            // 1. Save to local database for UI display immediately.
+            // Since this is an outgoing message (0 hops), we label it with the physical transport.
             val localMessage = Message(
                 senderId = myId,
                 receiverId = friendId,
@@ -141,7 +142,7 @@ class MessageViewModel @Inject constructor(
                 isSentByMe = true,
                 deliveryStatus = MessageStatus.PENDING,
                 hopCount = 0,
-                transportType = if (forceWifi && peerIp != null) TransportType.WIFI else TransportType.MESH
+                transportType = if (forceWifi && peerIp != null) TransportType.WIFI else TransportType.BLE
             )
             val localId = sendMessageUseCase(localMessage)
 

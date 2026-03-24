@@ -155,6 +155,9 @@ class DeviceRepositoryImpl @Inject constructor(
         val content = meshMessage.payload.toString(Charsets.UTF_8).substring(1) // Skip type byte
         val friend = friendRepository.getFriendById(senderId)
         
+        // Logical display logic: if it was relayed, show "MESH". If direct, show physical transport.
+        val displayTransport = if (meshMessage.hopCount > 0) TransportType.MESH else transportType
+
         val incomingMessage = Message(
             messageId = meshMessage.messageId.toString(),
             senderId = senderId,
@@ -164,7 +167,7 @@ class DeviceRepositoryImpl @Inject constructor(
             isSentByMe = false,
             deliveryStatus = MessageStatus.DELIVERED,
             hopCount = meshMessage.hopCount,
-            transportType = transportType
+            transportType = displayTransport
         )
         
         messageRepository.sendMessage(incomingMessage)
