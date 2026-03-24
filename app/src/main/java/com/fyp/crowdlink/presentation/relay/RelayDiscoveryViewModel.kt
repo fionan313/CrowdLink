@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import androidx.core.content.edit
 
 @HiltViewModel
 class RelayDiscoveryViewModel @Inject constructor(
@@ -60,7 +61,7 @@ class RelayDiscoveryViewModel @Inject constructor(
 
     fun setAutoConnect(enabled: Boolean) {
         _autoConnect.value = enabled
-        sharedPreferences.edit().putBoolean("auto_connect_relay", enabled).apply()
+        sharedPreferences.edit { putBoolean("auto_connect_relay", enabled) }
     }
 
     fun startScanning() {

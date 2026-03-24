@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.distinctUntilChanged
 import timber.log.Timber
+import kotlin.math.pow
 
 @Singleton
 class BleScanner @Inject constructor(
@@ -345,7 +346,7 @@ class BleScanner @Inject constructor(
     private fun estimateDistance(rssi: Int): Double {
         val txPower = -59
         return if (rssi == 0) -1.0
-        else Math.pow(10.0, (txPower - rssi) / (10.0 * 2.5))
+        else 10.0.pow((txPower - rssi) / (10.0 * 2.5))
     }
 
     fun getDeviceById(deviceId: String): BluetoothDevice? {

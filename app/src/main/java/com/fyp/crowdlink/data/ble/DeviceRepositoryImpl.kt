@@ -207,8 +207,7 @@ class DeviceRepositoryImpl @Inject constructor(
     }
 
     override fun sendPairingAccepted(targetDeviceId: String) {
-        val device = bleScanner.getDeviceById(targetDeviceId)
-        if (device == null) return
+        val device = bleScanner.getDeviceById(targetDeviceId) ?: return
 
         val payload = JSONObject().apply {
             put("senderId", meshRoutingEngine.localDeviceId)

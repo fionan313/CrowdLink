@@ -23,6 +23,8 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 import timber.log.Timber
 import javax.inject.Inject
+import androidx.core.graphics.set
+import androidx.core.graphics.createBitmap
 
 /**
  * PairingViewModel
@@ -99,15 +101,12 @@ class PairingViewModel @Inject constructor(
                 val bitMatrix = writer.encode(qrData, BarcodeFormat.QR_CODE, 512, 512)
                 val width = bitMatrix.width
                 val height = bitMatrix.height
-                val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
+                val bitmap = createBitmap(width, height, Bitmap.Config.RGB_565)
                 
                 for (x in 0 until width) {
                     for (y in 0 until height) {
-                        bitmap.setPixel(
-                            x, 
-                            y, 
+                        bitmap[x, y] =
                             if (bitMatrix[x, y]) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
-                        )
                     }
                 }
                 
