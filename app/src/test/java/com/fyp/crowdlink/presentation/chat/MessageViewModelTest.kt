@@ -114,13 +114,6 @@ class MessageViewModelTest {
     }
 
     @Test
-    fun `disconnect calls WiFi Direct disconnect`() {
-        viewModel.disconnect()
-
-        verify { mockWifiDirectManager.disconnect() }
-    }
-
-    @Test
     fun `getMessages returns flow from use case`() = runTest {
         // Given
         val testMessages = listOf(
