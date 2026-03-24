@@ -2,7 +2,6 @@ package com.fyp.crowdlink.presentation.discovery
 
 import android.annotation.SuppressLint
 import android.content.SharedPreferences
-import android.util.Log
 import androidx.core.content.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -23,6 +22,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import java.util.UUID
 import javax.inject.Inject
 
@@ -46,10 +46,8 @@ class DiscoveryViewModel @Inject constructor(
     }
 
     private val _isDiscovering = MutableStateFlow(false)
-    val isDiscovering: StateFlow<Boolean> = _isDiscovering.asStateFlow()
 
     private val _isAdvertising = MutableStateFlow(false)
-    val isAdvertising: StateFlow<Boolean> = _isAdvertising.asStateFlow()
 
     val isMeshActive: StateFlow<Boolean> = combine(_isDiscovering, _isAdvertising) { scanning, advertising ->
         scanning && advertising
@@ -89,9 +87,11 @@ class DiscoveryViewModel @Inject constructor(
                         friends.forEach { friend ->
                             shareLocationUseCase(friend.deviceId)
                         }
-                        Log.d("DiscoveryViewModel", "Background location broadcast sent to ${friends.size} friends")
+                        Timber.tag("DiscoveryViewModel")
+                            .d("Background location broadcast sent to ${friends.size} friends")
                     } catch (e: Exception) {
-                        Log.e("DiscoveryViewModel", "Background location broadcast failed", e)
+                        Timber.tag("DiscoveryViewModel")
+                            .e(e, "Background location broadcast failed")
                     }
                 }
             }
@@ -137,11 +137,6 @@ class DiscoveryViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         sharedPreferences.unregisterOnSharedPreferenceChangeListener(preferenceChangeListener)
-        // Do not stop discovery or advertising here.
-        // BleScanner and BleAdvertiser are singletons that should remain
-        // active while the app is in the foreground. Scanning is only
-        // stopped explicitly when the user taps the MeshStatusPill to pause,
-        // or when the app moves to the background via a foreground service.
     }
 
     companion object {

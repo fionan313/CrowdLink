@@ -1,7 +1,6 @@
 package com.fyp.crowdlink.data.ble
 
 import android.content.SharedPreferences
-import android.util.Log
 import com.fyp.crowdlink.data.mesh.LocationMessageSerialiser
 import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
 import com.fyp.crowdlink.data.notifications.MeshNotificationManager
@@ -22,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -59,14 +59,14 @@ class DeviceRepositoryImpl @Inject constructor(
         // Wire MeshRoutingEngine callbacks
         meshRoutingEngine.onMessageForMe = { meshMessage ->
             scope.launch {
-                val senderIdString = meshMessage.senderId.toString()
+                val senderIdString = meshMessage.senderId
                 val payload = meshMessage.payload
                 
                 if (payload.isNotEmpty()) {
                     when (payload[0]) {
                         0x01.toByte() -> handleIncomingTextMessage(senderIdString, meshMessage)
                         0x03.toByte() -> handleIncomingLocationUpdate(senderIdString, payload)
-                        else -> Log.w("DeviceRepo", "Unknown message type: ${payload[0]}")
+                        else -> Timber.tag("DeviceRepo").w("Unknown message type: ${payload[0]}")
                     }
                 }
                 
@@ -88,7 +88,7 @@ class DeviceRepositoryImpl @Inject constructor(
 
         bleAdvertiser.onPairingAcceptedReceived = { acceptedDeviceId ->
             scope.launch {
-                Log.d("DeviceRepo", "Pairing accepted received from $acceptedDeviceId")
+                Timber.tag("DeviceRepo").d("Pairing accepted received from $acceptedDeviceId")
                 _pairingAccepted.emit(acceptedDeviceId)
             }
         }
@@ -96,7 +96,8 @@ class DeviceRepositoryImpl @Inject constructor(
         bleAdvertiser.onUnpairRequestReceived = { senderId ->
             scope.launch {
                 friendRepository.removeFriendById(senderId)
-                Log.d("DeviceRepo", "Removed $senderId from friends list via unpair notification")
+                Timber.tag("DeviceRepo")
+                    .d("Removed $senderId from friends list via unpair notification")
             }
         }
 
@@ -175,7 +176,7 @@ class DeviceRepositoryImpl @Inject constructor(
         val location = locationSerialiser.deserialize(payload, senderId)
         if (location != null) {
             locationRepository.cacheFriendLocation(location)
-            Log.d("DeviceRepo", "Cached location update from $senderId")
+            Timber.tag("DeviceRepo").d("Cached location update from $senderId")
         }
     }
 
@@ -188,7 +189,8 @@ class DeviceRepositoryImpl @Inject constructor(
     override fun sendPairingRequest(targetDeviceId: String, senderDisplayName: String) {
         val device = bleScanner.getDeviceById(targetDeviceId)
         if (device == null) {
-            Log.e("DeviceRepo", "Cannot send pairing request: target device $targetDeviceId not in range")
+            Timber.tag("DeviceRepo")
+                .e("Cannot send pairing request: target device $targetDeviceId not in range")
             return
         }
 
@@ -205,8 +207,7 @@ class DeviceRepositoryImpl @Inject constructor(
     }
 
     override fun sendPairingAccepted(targetDeviceId: String) {
-        val device = bleScanner.getDeviceById(targetDeviceId)
-        if (device == null) return
+        val device = bleScanner.getDeviceById(targetDeviceId) ?: return
 
         val payload = JSONObject().apply {
             put("senderId", meshRoutingEngine.localDeviceId)
@@ -222,7 +223,7 @@ class DeviceRepositoryImpl @Inject constructor(
     override fun sendUnpairNotification(targetDeviceId: String) {
         val device = bleScanner.getDeviceById(targetDeviceId)
         if (device == null) {
-            Log.w("DeviceRepo", "Unpair target not in range — they'll clean up on next seen")
+            Timber.tag("DeviceRepo").w("Unpair target not in range — they'll clean up on next seen")
             return
         }
 
@@ -264,6 +265,6 @@ class DeviceRepositoryImpl @Inject constructor(
             bleScanner.sendData(payload, device)
         }
 
-        Log.d("DeviceRepo", "SOS broadcast sent to ${friends.size} potential recipients")
+        Timber.tag("DeviceRepo").d("SOS broadcast sent to ${friends.size} potential recipients")
     }
 }

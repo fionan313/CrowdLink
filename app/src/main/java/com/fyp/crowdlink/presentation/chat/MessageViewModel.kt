@@ -1,6 +1,5 @@
 package com.fyp.crowdlink.presentation.chat
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fyp.crowdlink.data.ble.BleScanner
@@ -21,13 +20,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 /**
  * MessageViewModel
  *
  * This ViewModel manages the UI state for the mesh-based messaging feature.
- * It uses the MeshRoutingEngine as the primary send path, with WiFi Direct
+ * It uses the MeshRoutingEngine as the primary send path, with Wi-Fi Direct
  * and ESP32 acting as background fallback transports observing the relay queue.
  */
 @HiltViewModel
@@ -41,10 +41,10 @@ class MessageViewModel @Inject constructor(
     private val messageRepository: MessageRepository
 ) : ViewModel() {
 
-    private val _myDeviceId = MutableStateFlow<String>("")
+    private val _myDeviceId = MutableStateFlow("")
     val myDeviceId: StateFlow<String> = _myDeviceId.asStateFlow()
 
-    // Expose the list of discovered WiFi Direct peers for connection setup
+    // Expose the list of discovered Wi-Fi Direct peers for connection setup
     val peers = wifiDirectManager.peers
 
     // Expose connection info for status display
@@ -94,10 +94,6 @@ class MessageViewModel @Inject constructor(
         }
     }
 
-    fun disconnect() {
-        wifiDirectManager.disconnect()
-    }
-
     fun getMessages(friendId: String): StateFlow<List<Message>> {
         return getMessagesUseCase(friendId)
             .stateIn(
@@ -111,13 +107,13 @@ class MessageViewModel @Inject constructor(
      * Sends a text message via the Mesh Routing Engine.
      * The engine adds it to the relay queue, which is then observed by:
      * 1. BleScanner (for BLE Mesh relay)
-     * 2. WifiDirectManager (for WiFi fallback)
+     * 2. WifiDirectManager (for Wi-Fi fallback)
      * 3. RelayNodeConnection (for ESP32 fallback)
      */
     fun sendText(content: String, friendId: String) {
         val myId = _myDeviceId.value
 
-        Log.d("MessageViewModel", "Adding to relay queue: $content")
+        Timber.tag("MessageViewModel").d("Adding to relay queue: $content")
 
         viewModelScope.launch {
             // 1. Save to local database for UI display immediately

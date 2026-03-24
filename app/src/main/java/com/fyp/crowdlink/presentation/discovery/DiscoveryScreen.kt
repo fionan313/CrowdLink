@@ -27,7 +27,6 @@ import com.fyp.crowdlink.domain.model.NearbyFriend
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DiscoveryScreen(
-    onNavigateToFriends: () -> Unit,
     onNavigateToCompass: (String, String) -> Unit,
     onNavigateToChat: (String, String) -> Unit,
     onNavigateToMap: (String, String) -> Unit,

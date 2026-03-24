@@ -23,14 +23,14 @@ A survey of 42 people aged 18-35 found that 85.7% had lost contact with friends 
 - Friend pairing via QR code
 - Multi-hop BLE mesh networking, messages relay between devices with TTL and probabilistic flooding
 - End-to-end message delivery confirmed across physical devices
-- WiFi Direct messaging (fallback transport)
+- Wi-Fi Direct messaging (fallback transport)
 - ESP32 relay node support for extended range
 - In-app notifications for incoming mesh messages
 - Settings screen with BLE, mesh, LoRa, and privacy sections
 - Compass/arrow view for directional friend-finding with GPS fallback
 
 ### Planned
-- Single-scan QR pairing with confirmation dialog
+- Single-scan QR pairing with confirmation dialogue
 - End-to-end encryption
 - Offline map with cached tiles
 - User evaluation study (10+ participants)
@@ -65,7 +65,7 @@ The mesh transport sits entirely in the data layer. `MeshRoutingEngine` is pure 
 
 ## Getting started
 
-You need at least two physical Android devices — BLE and WiFi Direct do not work on emulators.
+You need at least two physical Android devices — BLE and Wi-Fi Direct do not work on emulators.
 
 ```bash
 git clone https://github.com/fionan313/CrowdLink.git
@@ -75,7 +75,7 @@ cd CrowdLink
 
 Requires Android Studio Hedgehog or later, JDK 17, Android SDK API 28+.
 
-**Permissions used:** Bluetooth scan/advertise, fine location (required for BLE on Android), camera (QR scanning), WiFi Direct.
+**Permissions used:** Bluetooth scan/advertise, fine location (required for BLE on Android), camera (QR scanning), Wi-Fi Direct.
 
 ---
 
@@ -92,12 +92,12 @@ Current status: 20/21 unit tests passing, 82% coverage on core domain logic. Int
 
 ## Performance
 
-| Metric | Target | Result |
-|--------|--------|--------|
-| Discovery time | <10s | 4.5s avg |
-| Distance accuracy | ±15m | ±0.6m |
-| Battery drain | <5%/hr | 4.2%/hr |
-| Cross-device success | >90% | 100% |
+| Metric               | Target | Result   |
+|----------------------|--------|----------|
+| Discovery time       | <10s   | 4.5s avg |
+| Distance accuracy    | ±15m   | ±0.6m    |
+| Battery drain        | <5%/hr | 4.2%/hr  |
+| Cross-device success | >90%   | 100%     |
 
 Tested on Nothing Phone 2a (API 35) and Samsung Note 10+ (API 31).
 
@@ -108,25 +108,33 @@ Tested on Nothing Phone 2a (API 35) and Samsung Note 10+ (API 31).
 ```
 app/src/main/java/com/fyp/crowdlink/
 ├── data/
-│   ├── ble/          # BleAdvertiser, BLEScanner, DeviceRepositoryImpl
-│   ├── mesh/         # MeshRoutingEngine, MeshMessageSerialiser, SeenMessageCache
-│   ├── p2p/          # WifiDirectManager
-│   ├── local/        # Room database, DAOs, entities
-│   └── repository/   # FriendRepositoryImpl, MessageRepositoryImpl
+│   ├── ble/           # BleAdvertiser, BleScanner, DeviceRepositoryImpl
+│   ├── mesh/          # MeshRoutingEngine, MeshMessageSerialiser, SeenMessageCache
+│   ├── notifications/ # MeshNotificationManager
+│   ├── p2p/           # WifiDirectManager
+│   ├── local/
+│   │   ├── dao/       # Room DAOs
+│   │   └── entity/    # Room entities
+│   └── repository/    # FriendRepositoryImpl, MessageRepositoryImpl, LocationRepositoryImpl
 ├── domain/
-│   ├── model/        # Friend, Message, MeshMessage, NearbyFriend, DeviceLocation
-│   ├── repository/   # Repository interfaces
-│   └── usecase/      # EstimateDistance, SendMessage, PairFriend, ShareLocation
+│   ├── model/         # Friend, Message, MeshMessage, NearbyFriend, DeviceLocation
+│   ├── repository/    # Repository interfaces
+│   └── usecase/       # EstimateDistance, SendMessage, PairFriend, ShareLocation
 ├── presentation/
-│   ├── discovery/    # Nearby device list
-│   ├── friends/      # Paired friends list
-│   ├── pairing/      # QR scan and generate
-│   ├── chat/         # Messaging UI
-│   ├── compass/      # Directional friend-finding
-│   ├── relay/        # ESP32 relay node discovery
-│   ├── settings/     # Settings screen
+│   ├── chat/          # Messaging UI
+│   ├── compass/       # Directional friend-finding
+│   ├── discovery/     # Nearby device list
+│   ├── friends/       # Paired friends list
+│   ├── map/           # Offline map with friend pins
+│   ├── onboarding/    # First-run onboarding flow
+│   ├── pairing/       # QR scan and generate
+│   ├── relay/         # ESP32 relay node discovery
+│   ├── settings/      # Settings screen
+│   ├── sos/           # SOS alert
 │   └── MainActivity.kt
-├── di/               # Hilt AppModule
+├── ui/
+│   └── theme/         # Material theme, colours, typography
+├── di/                # Hilt AppModule
 └── CrowdLinkApplication.kt
 ```
 
@@ -142,17 +150,14 @@ app/src/main/java/com/fyp/crowdlink/
 
 ## Academic context
 
-Final Year Project — TU Dublin, BSc Computer Science (TU856), 2025/2026.
+Final Year Project — TU Dublin, B.Sc. Computer Science (TU856), 2025/2026.
 
 Student: Fionán Ó Ceallaigh (C22337521). 
 Supervisor: Bryan Duggan.
 
 This project is not open for external contributions during the assessment period. Submissions open after April 2026.
 
-AI tools (Claude, Gemini) were used for debugging assistance and code review/cleanup.
+AI tools (Claude, Gemini) were used for debugging assistance and code review/clean-up.
 
 ---
 
-## License
-
-MIT — see [LICENSE](LICENSE) for details.

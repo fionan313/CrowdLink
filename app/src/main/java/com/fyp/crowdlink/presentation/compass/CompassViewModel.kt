@@ -9,9 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fyp.crowdlink.data.ble.BleScanner
 import com.fyp.crowdlink.domain.model.DeviceLocation
-import com.fyp.crowdlink.domain.repository.FriendRepository
 import com.fyp.crowdlink.domain.repository.LocationRepository
-import com.fyp.crowdlink.domain.usecase.EstimateDistanceUseCase
 import com.fyp.crowdlink.domain.usecase.ShareLocationUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -22,21 +20,17 @@ import javax.inject.Inject
 @HiltViewModel
 class CompassViewModel @Inject constructor(
     private val locationRepository: LocationRepository,
-    private val friendRepository: FriendRepository,
     private val sensorManager: SensorManager,
     private val bleScanner: BleScanner,
-    private val estimateDistanceUseCase: EstimateDistanceUseCase,
     private val shareLocationUseCase: ShareLocationUseCase
 ) : ViewModel(), SensorEventListener {
 
     private val _myLocation = locationRepository.getMyLocation().stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), null
     )
-    val myLocation: StateFlow<DeviceLocation?> = _myLocation
 
     private var currentFriendId: String = ""
     private val _friendLocation = MutableStateFlow<DeviceLocation?>(null)
-    val friendLocation: StateFlow<DeviceLocation?> = _friendLocation.asStateFlow()
 
     private val _compassHeading = MutableStateFlow(0f)
     val compassHeading: StateFlow<Float> = _compassHeading.asStateFlow()

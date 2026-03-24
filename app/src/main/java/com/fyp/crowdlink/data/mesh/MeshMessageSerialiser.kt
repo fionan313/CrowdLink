@@ -53,7 +53,7 @@ class MeshMessageSerialiser @Inject constructor() {
             buffer.put(message.payload)
 
             buffer.array()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }
@@ -84,7 +84,7 @@ class MeshMessageSerialiser @Inject constructor() {
             val timestamp = buffer.getLong()
             val payloadLength = buffer.getShort().toInt() and 0xFFFF
 
-            if (payloadLength < 0 || payloadLength > MAX_PAYLOAD_BYTES) return null
+            if (payloadLength > MAX_PAYLOAD_BYTES) return null
 
             val payload = ByteArray(payloadLength)
             buffer.get(payload)
@@ -98,7 +98,7 @@ class MeshMessageSerialiser @Inject constructor() {
                 timestamp = timestamp,
                 hopCount = hopCount
             )
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }

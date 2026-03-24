@@ -1,11 +1,9 @@
 package com.fyp.crowdlink.data.ble
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.*
 import android.content.Context
-import android.util.Log
-import androidx.annotation.RequiresPermission
+import android.os.Build
 import com.fyp.crowdlink.domain.repository.MessageRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -15,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -48,12 +47,12 @@ class RelayNodeConnection @Inject constructor(
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
-                    Log.d(TAG, "Connected to relay node")
+                    Timber.tag(TAG).d("Connected to relay node")
                     _isConnected.value = true
                     gatt.discoverServices()
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
-                    Log.d(TAG, "Disconnected from relay node")
+                    Timber.tag(TAG).d("Disconnected from relay node")
                     _isConnected.value = false
                     cleanup()
                 }
@@ -64,9 +63,9 @@ class RelayNodeConnection @Inject constructor(
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 val service = gatt.getService(UUID.fromString(SERVICE_UUID))
                 writeCharacteristic = service?.getCharacteristic(UUID.fromString(CHARACTERISTIC_UUID))
-                Log.d(TAG, "Services discovered, ready to send messages")
+                Timber.tag(TAG).d("Services discovered, ready to send messages")
             } else {
-                Log.w(TAG, "onServicesDiscovered received: $status")
+                Timber.tag(TAG).w("onServicesDiscovered received: $status")
             }
         }
 
@@ -76,9 +75,9 @@ class RelayNodeConnection @Inject constructor(
             status: Int
         ) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
-                Log.d(TAG, "Message sent to relay successfully")
+                Timber.tag(TAG).d("Message sent to relay successfully")
             } else {
-                Log.e(TAG, "Failed to send message to relay, status: $status")
+                Timber.tag(TAG).e("Failed to send message to relay, status: $status")
             }
         }
     }
@@ -92,13 +91,15 @@ class RelayNodeConnection @Inject constructor(
         relayObserverJob = scope.launch {
             messageRepository.getRelayQueue().collect { queue ->
                 if (_isConnected.value && queue.isNotEmpty()) {
-                    Log.d(TAG, "Relay queue update: ${queue.size} messages waiting, ESP32 connected")
+                    Timber.tag(TAG)
+                        .d("Relay queue update: ${queue.size} messages waiting, ESP32 connected")
                     queue.forEach { meshMessage ->
                         // Attempt delivery via ESP32 BLE fallback
                         val payload = "${meshMessage.recipientId}:${String(meshMessage.payload, Charsets.UTF_8)}"
                         val success = sendMessage(payload)
                         if (success) {
-                            Log.d(TAG, "Successfully delivered message ${meshMessage.messageId} via ESP32, removing from queue")
+                            Timber.tag(TAG)
+                                .d("Successfully delivered message ${meshMessage.messageId} via ESP32, removing from queue")
                             messageRepository.removeFromRelayQueue(meshMessage.messageId)
                         }
                     }
@@ -112,24 +113,34 @@ class RelayNodeConnection @Inject constructor(
         val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         val device = bluetoothManager.adapter.getRemoteDevice(deviceAddress)
         if (device == null) {
-            Log.e(TAG, "Device not found. Unable to connect.")
+            Timber.tag(TAG).e("Device not found. Unable to connect.")
             return false
         }
         bluetoothGatt = device.connectGatt(context, false, gattCallback)
-        Log.d(TAG, "Attempting to connect to $deviceAddress")
+        Timber.tag(TAG).d("Attempting to connect to $deviceAddress")
         return true
     }
 
     @SuppressLint("MissingPermission")
     fun sendMessage(message: String): Boolean {
         val characteristic = writeCharacteristic ?: run {
-            Log.e(TAG, "Write characteristic is not initialized.")
+            Timber.tag(TAG).e("Write characteristic is not initialized.")
             return false
         }
 
-        characteristic.value = message.toByteArray(Charsets.UTF_8)
         characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-        return bluetoothGatt?.writeCharacteristic(characteristic) ?: false
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            bluetoothGatt?.writeCharacteristic(
+                characteristic,
+                message.toByteArray(Charsets.UTF_8),
+                BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            ) == BluetoothStatusCodes.SUCCESS
+        } else {
+            @Suppress("DEPRECATION")
+            characteristic.value = message.toByteArray(Charsets.UTF_8)
+            @Suppress("DEPRECATION")
+            bluetoothGatt?.writeCharacteristic(characteristic) ?: false
+        }
     }
 
     @SuppressLint("MissingPermission")

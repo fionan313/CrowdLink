@@ -1,6 +1,5 @@
 package com.fyp.crowdlink.presentation.pairing
 
-import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -36,7 +35,7 @@ fun PairingScreen(
         viewModel.generateQRCode()
     }
 
-    // Step 5: Show confirmation dialog
+    // Step 5: Show confirmation dialogue
     incomingRequest?.let { request ->
         AlertDialog(
             onDismissRequest = { viewModel.declinePairingRequest() },

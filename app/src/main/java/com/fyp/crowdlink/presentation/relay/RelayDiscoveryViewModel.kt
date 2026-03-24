@@ -10,13 +10,12 @@ import com.fyp.crowdlink.domain.model.RelayNode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import androidx.core.content.edit
 
 @HiltViewModel
 class RelayDiscoveryViewModel @Inject constructor(
@@ -62,7 +61,7 @@ class RelayDiscoveryViewModel @Inject constructor(
 
     fun setAutoConnect(enabled: Boolean) {
         _autoConnect.value = enabled
-        sharedPreferences.edit().putBoolean("auto_connect_relay", enabled).apply()
+        sharedPreferences.edit { putBoolean("auto_connect_relay", enabled) }
     }
 
     fun startScanning() {

@@ -1,13 +1,11 @@
 package com.fyp.crowdlink.presentation.map
 
-import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.util.Log
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material3.*
@@ -45,6 +43,8 @@ import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.Point
 import timber.log.Timber
+import kotlin.math.cos
+import androidx.core.graphics.createBitmap
 
 private const val RASTER_STYLE_JSON = """
 {
@@ -115,17 +115,17 @@ fun MapScreen(
                                 // Load the arrow drawable and add it to the style
                                 val arrowDrawable = AppCompatResources.getDrawable(ctx, R.drawable.ic_location_arrow)
                                 if (arrowDrawable != null) {
-                                    val arrowBitmap = Bitmap.createBitmap(
+                                    val arrowBitmap = createBitmap(
                                         arrowDrawable.intrinsicWidth,
-                                        arrowDrawable.intrinsicHeight,
-                                        Bitmap.Config.ARGB_8888
+                                        arrowDrawable.intrinsicHeight
                                     )
                                     val canvas = Canvas(arrowBitmap)
                                     arrowDrawable.setBounds(0, 0, canvas.width, canvas.height)
                                     arrowDrawable.draw(canvas)
                                     style.addImage("location-arrow", arrowBitmap)
                                 } else {
-                                    Log.e("MapScreen", "Failed to load location arrow drawable")
+                                    Timber.tag("MapScreen")
+                                        .e("Failed to load location arrow drawable")
                                 }
 
                                 // Add a GeoJsonSource for friend pins
@@ -346,7 +346,7 @@ fun MapScreen(
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Icon(Icons.Default.Chat, contentDescription = null)
+                                Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null)
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("Message")
                             }
@@ -374,7 +374,7 @@ private fun cacheTilesForArea(
 
     // Calculate bounding box from centre + radius
     val latDelta = radiusMeters / 111000.0
-    val lonDelta = radiusMeters / (111000.0 * Math.cos(Math.toRadians(latitude)))
+    val lonDelta = radiusMeters / (111000.0 * cos(Math.toRadians(latitude)))
 
     val bounds = LatLngBounds.Builder()
         .include(LatLng(latitude + latDelta, longitude + lonDelta))
@@ -392,7 +392,7 @@ private fun cacheTilesForArea(
     val metadata = try {
         val json = JSONObject().apply { put("name", "crowdlink_cache") }
         json.toString().toByteArray()
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         ByteArray(0)
     }
 

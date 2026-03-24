@@ -3,7 +3,6 @@ package com.fyp.crowdlink.presentation.settings
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.fyp.crowdlink.data.notifications.MeshNotificationManager
 import com.fyp.crowdlink.domain.model.UserProfile
 import com.fyp.crowdlink.domain.repository.FriendRepository
 import com.fyp.crowdlink.domain.repository.LocationRepository
@@ -18,6 +17,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import androidx.core.content.edit
 
 sealed class SaveStatus {
     object Idle : SaveStatus()
@@ -32,8 +32,7 @@ class SettingsViewModel @Inject constructor(
     private val friendRepository: FriendRepository,
     private val messageRepository: MessageRepository,
     private val sharedPreferences: SharedPreferences,
-    private val locationRepository: LocationRepository,
-    private val meshNotificationManager: MeshNotificationManager
+    private val locationRepository: LocationRepository
 ) : ViewModel() {
     
     private val _userProfile = MutableStateFlow<UserProfile?>(null)
@@ -111,27 +110,27 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setAutoStart(enabled: Boolean) {
-        sharedPreferences.edit().putBoolean("auto_start", enabled).apply()
+        sharedPreferences.edit { putBoolean("auto_start", enabled) }
         _autoStart.value = enabled
     }
 
     fun setMeshRelay(enabled: Boolean) {
-        sharedPreferences.edit().putBoolean("mesh_relay", enabled).apply()
+        sharedPreferences.edit { putBoolean("mesh_relay", enabled) }
         _meshRelay.value = enabled
     }
 
     fun setEsp32Scanning(enabled: Boolean) {
-        sharedPreferences.edit().putBoolean("esp32_scanning", enabled).apply()
+        sharedPreferences.edit { putBoolean("esp32_scanning", enabled) }
         _esp32Scanning.value = enabled
     }
 
     fun setGhostMode(enabled: Boolean) {
-        sharedPreferences.edit().putBoolean("ghost_mode", enabled).apply()
+        sharedPreferences.edit { putBoolean("ghost_mode", enabled) }
         _ghostMode.value = enabled
     }
 
     fun setLocationSharing(enabled: Boolean) {
-        sharedPreferences.edit().putBoolean("location_sharing", enabled).apply()
+        sharedPreferences.edit { putBoolean("location_sharing", enabled) }
         _locationSharing.value = enabled
         if (!enabled) {
             viewModelScope.launch {
@@ -141,7 +140,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setForceShowRelays(enabled: Boolean) {
-        sharedPreferences.edit().putBoolean("force_show_relays", enabled).apply()
+        sharedPreferences.edit { putBoolean("force_show_relays", enabled) }
         _forceShowRelays.value = enabled
     }
 
@@ -157,17 +156,8 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun testSosAlert() {
-        meshNotificationManager.showSosNotification(
-            senderName = "Test Friend",
-            latitude = 53.3498,
-            longitude = -6.2603,
-            friendId = "debug-id"
-        )
-    }
-
     fun resetOnboarding() {
-        sharedPreferences.edit().putBoolean("onboarding_complete", false).apply()
+        sharedPreferences.edit { putBoolean("onboarding_complete", false) }
     }
 
     fun unpairAllFriends() {
@@ -183,7 +173,7 @@ class SettingsViewModel @Inject constructor(
             locationRepository.clearMapCache()
             friendRepository.unpairAllFriends()
             userProfileRepository.clearUserProfile()
-            sharedPreferences.edit().clear().apply()
+            sharedPreferences.edit { clear() }
         }
     }
 }

@@ -2,7 +2,6 @@ package com.fyp.crowdlink.presentation.pairing
 
 import android.graphics.Bitmap
 import android.os.Build
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fyp.crowdlink.domain.model.Friend
@@ -22,7 +21,10 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import timber.log.Timber
 import javax.inject.Inject
+import androidx.core.graphics.set
+import androidx.core.graphics.createBitmap
 
 /**
  * PairingViewModel
@@ -42,7 +44,7 @@ class PairingViewModel @Inject constructor(
     val qrCodeBitmap: StateFlow<Bitmap?> = _qrCodeBitmap.asStateFlow()
     
     // StateFlow for the current device's ID
-    private val _myDeviceId = MutableStateFlow<String>("")
+    private val _myDeviceId = MutableStateFlow("")
     val myDeviceId: StateFlow<String> = _myDeviceId.asStateFlow()
     
     // StateFlow for tracking the pairing status
@@ -66,7 +68,7 @@ class PairingViewModel @Inject constructor(
     private fun observePairingAccepted() {
         deviceRepository.pairingAccepted
             .onEach { acceptedDeviceId ->
-                Log.d("PairingViewModel", "Pairing accepted by $acceptedDeviceId")
+                Timber.tag("PairingViewModel").d("Pairing accepted by $acceptedDeviceId")
                 if (acceptedDeviceId == pendingFriendDeviceId) {
                     viewModelScope.launch {
                         friendRepository.addFriend(Friend(
@@ -75,7 +77,7 @@ class PairingViewModel @Inject constructor(
                             pairedAt = System.currentTimeMillis()
                         ))
                         _pairingState.value = PairingState.Success
-                        Log.d("PairingViewModel", "Pairing SUCCESS for $acceptedDeviceId")
+                        Timber.tag("PairingViewModel").d("Pairing SUCCESS for $acceptedDeviceId")
                     }
                 }
             }
@@ -99,15 +101,12 @@ class PairingViewModel @Inject constructor(
                 val bitMatrix = writer.encode(qrData, BarcodeFormat.QR_CODE, 512, 512)
                 val width = bitMatrix.width
                 val height = bitMatrix.height
-                val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
+                val bitmap = createBitmap(width, height, Bitmap.Config.RGB_565)
                 
                 for (x in 0 until width) {
                     for (y in 0 until height) {
-                        bitmap.setPixel(
-                            x, 
-                            y, 
+                        bitmap[x, y] =
                             if (bitMatrix[x, y]) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
-                        )
                     }
                 }
                 
@@ -134,7 +133,7 @@ class PairingViewModel @Inject constructor(
                     if (json.has("displayName")) {
                         friendName = json.getString("displayName")
                     }
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     friendDeviceId = scannedData
                 }
 

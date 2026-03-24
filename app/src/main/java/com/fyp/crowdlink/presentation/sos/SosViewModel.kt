@@ -30,7 +30,4 @@ class SosViewModel @Inject constructor(
         }
     }
 
-    fun reset() {
-        _sosSent.value = false
-    }
 }

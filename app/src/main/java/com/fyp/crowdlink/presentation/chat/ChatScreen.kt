@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -65,7 +67,7 @@ fun ChatScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
@@ -142,13 +144,13 @@ fun ChatScreen(
                             modifier = Modifier.size(48.dp),
                             elevation = FloatingActionButtonDefaults.elevation(0.dp, 0.dp)
                         ) {
-                            Icon(Icons.Default.Send, contentDescription = "Send")
+                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
                         }
                     }
                 }
             }
 
-            // Peer List Overlay (WiFi Direct connections for "High Speed" transport)
+            // Peer List Overlay (Wi-Fi Direct connections for "High Speed" transport)
             if (showPeerList) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),

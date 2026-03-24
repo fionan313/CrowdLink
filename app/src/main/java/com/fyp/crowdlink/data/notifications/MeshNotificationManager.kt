@@ -1,6 +1,7 @@
 package com.fyp.crowdlink.data.notifications
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -19,13 +20,13 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.speech.tts.TextToSpeech
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.fyp.crowdlink.R
 import com.fyp.crowdlink.presentation.MainActivity
 import dagger.hilt.android.qualifiers.ApplicationContext
+import timber.log.Timber
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -56,37 +57,35 @@ class MeshNotificationManager @Inject constructor(
                 tts?.language = Locale.getDefault()
                 tts?.setSpeechRate(0.9f)  // slightly slower than default, clearer in noisy environments
             } else {
-                Log.w("MeshNotificationManager", "TextToSpeech initialisation failed")
+                Timber.tag("MeshNotificationManager").w("TextToSpeech initialisation failed")
             }
         }
     }
 
     private fun createNotificationChannels() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // Regular messages channel
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Incoming messages from friends via mesh"
-            }
-            notificationManager.createNotificationChannel(channel)
-
-            // SOS Alert channel — high importance, bypass DND where possible
-            val sosChannel = NotificationChannel(
-                SOS_CHANNEL_ID,
-                "SOS Alerts",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Emergency alerts from paired friends"
-                enableVibration(true)
-                vibrationPattern = longArrayOf(0, 500, 200, 500, 200, 500)
-                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-                setBypassDnd(true)   // requests DND bypass — user can still override in settings
-            }
-            notificationManager.createNotificationChannel(sosChannel)
+        // Regular messages channel
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            CHANNEL_NAME,
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "Incoming messages from friends via mesh"
         }
+        notificationManager.createNotificationChannel(channel)
+
+        // SOS Alert channel — high importance, bypass DND where possible
+        val sosChannel = NotificationChannel(
+            SOS_CHANNEL_ID,
+            "SOS Alerts",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "Emergency alerts from paired friends"
+            enableVibration(true)
+            vibrationPattern = longArrayOf(0, 500, 200, 500, 200, 500)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            setBypassDnd(true)   // requests DND bypass — user can still override in settings
+        }
+        notificationManager.createNotificationChannel(sosChannel)
     }
 
     fun showMessageNotification(senderName: String, content: String, friendId: String) {
@@ -122,6 +121,7 @@ class MeshNotificationManager @Inject constructor(
             .notify(friendId.hashCode(), notification)
     }
 
+    @SuppressLint("FullScreenIntentPolicy")
     fun showSosNotification(
         senderName: String,
         latitude: Double?,
@@ -152,8 +152,8 @@ class MeshNotificationManager @Inject constructor(
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             if (!notificationManager.canUseFullScreenIntent()) {
-                Log.w("MeshNotificationManager", 
-                    "USE_FULL_SCREEN_INTENT not granted — SOS will not show as full-screen on this device")
+                Timber.tag("MeshNotificationManager")
+                    .w("USE_FULL_SCREEN_INTENT not granted — SOS will not show as full-screen on this device")
             }
         }
 
@@ -195,12 +195,7 @@ class MeshNotificationManager @Inject constructor(
 
         val pattern = longArrayOf(0, 500, 200, 500, 200, 500)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
-        } else {
-            @Suppress("DEPRECATION")
-            vibrator.vibrate(pattern, -1)
-        }
+        vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
     }
 
     private fun triggerSosAlarm() {
@@ -233,13 +228,13 @@ class MeshNotificationManager @Inject constructor(
             }, 4000)
 
         } catch (e: Exception) {
-            Log.e("MeshNotificationManager", "Failed to play SOS alarm", e)
+            Timber.tag("MeshNotificationManager").e(e, "Failed to play SOS alarm")
         }
     }
 
     private fun speakSosAlert(senderName: String, latitude: Double?, longitude: Double?) {
         if (!ttsReady || tts == null) {
-            Log.w("MeshNotificationManager", "TTS not ready — skipping speech")
+            Timber.tag("MeshNotificationManager").w("TTS not ready — skipping speech")
             return
         }
 
@@ -284,11 +279,4 @@ class MeshNotificationManager @Inject constructor(
         )
     }
 
-    fun release() {
-        tts?.stop()
-        tts?.shutdown()
-        tts = null
-        sosRingtone?.stop()
-        sosRingtone = null
-    }
 }

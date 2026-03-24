@@ -5,7 +5,6 @@ import com.fyp.crowdlink.domain.model.Friend
 import com.fyp.crowdlink.domain.repository.FriendRepository
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
-import javax.inject.Singleton
 
 /**
  * FriendRepositoryImpl
