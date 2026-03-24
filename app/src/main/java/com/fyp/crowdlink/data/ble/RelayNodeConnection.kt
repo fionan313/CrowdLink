@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -46,12 +47,12 @@ class RelayNodeConnection @Inject constructor(
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
-                    Log.d(TAG, "Connected to relay node")
+                    Timber.tag(TAG).d("Connected to relay node")
                     _isConnected.value = true
                     gatt.discoverServices()
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
-                    Log.d(TAG, "Disconnected from relay node")
+                    Timber.tag(TAG).d("Disconnected from relay node")
                     _isConnected.value = false
                     cleanup()
                 }

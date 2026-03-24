@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import java.util.UUID
 import javax.inject.Inject
 
@@ -87,9 +88,11 @@ class DiscoveryViewModel @Inject constructor(
                         friends.forEach { friend ->
                             shareLocationUseCase(friend.deviceId)
                         }
-                        Log.d("DiscoveryViewModel", "Background location broadcast sent to ${friends.size} friends")
+                        Timber.tag("DiscoveryViewModel")
+                            .d("Background location broadcast sent to ${friends.size} friends")
                     } catch (e: Exception) {
-                        Log.e("DiscoveryViewModel", "Background location broadcast failed", e)
+                        Timber.tag("DiscoveryViewModel")
+                            .e(e, "Background location broadcast failed")
                     }
                 }
             }

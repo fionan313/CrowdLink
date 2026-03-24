@@ -27,6 +27,7 @@ import androidx.core.content.ContextCompat
 import com.fyp.crowdlink.R
 import com.fyp.crowdlink.presentation.MainActivity
 import dagger.hilt.android.qualifiers.ApplicationContext
+import timber.log.Timber
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -57,7 +58,7 @@ class MeshNotificationManager @Inject constructor(
                 tts?.language = Locale.getDefault()
                 tts?.setSpeechRate(0.9f)  // slightly slower than default, clearer in noisy environments
             } else {
-                Log.w("MeshNotificationManager", "TextToSpeech initialisation failed")
+                Timber.tag("MeshNotificationManager").w("TextToSpeech initialisation failed")
             }
         }
     }
@@ -152,8 +153,8 @@ class MeshNotificationManager @Inject constructor(
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             if (!notificationManager.canUseFullScreenIntent()) {
-                Log.w("MeshNotificationManager", 
-                    "USE_FULL_SCREEN_INTENT not granted — SOS will not show as full-screen on this device")
+                Timber.tag("MeshNotificationManager")
+                    .w("USE_FULL_SCREEN_INTENT not granted — SOS will not show as full-screen on this device")
             }
         }
 
@@ -228,13 +229,13 @@ class MeshNotificationManager @Inject constructor(
             }, 4000)
 
         } catch (e: Exception) {
-            Log.e("MeshNotificationManager", "Failed to play SOS alarm", e)
+            Timber.tag("MeshNotificationManager").e(e, "Failed to play SOS alarm")
         }
     }
 
     private fun speakSosAlert(senderName: String, latitude: Double?, longitude: Double?) {
         if (!ttsReady || tts == null) {
-            Log.w("MeshNotificationManager", "TTS not ready — skipping speech")
+            Timber.tag("MeshNotificationManager").w("TTS not ready — skipping speech")
             return
         }
 
