@@ -100,7 +100,8 @@ class RelayNodeConnection @Inject constructor(
                         val payload = "${meshMessage.recipientId}:${String(meshMessage.payload, Charsets.UTF_8)}"
                         val success = sendMessage(payload)
                         if (success) {
-                            Log.d(TAG, "Successfully delivered message ${meshMessage.messageId} via ESP32, removing from queue")
+                            Timber.tag(TAG)
+                                .d("Successfully delivered message ${meshMessage.messageId} via ESP32, removing from queue")
                             messageRepository.removeFromRelayQueue(meshMessage.messageId)
                         }
                     }
@@ -114,18 +115,18 @@ class RelayNodeConnection @Inject constructor(
         val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         val device = bluetoothManager.adapter.getRemoteDevice(deviceAddress)
         if (device == null) {
-            Log.e(TAG, "Device not found. Unable to connect.")
+            Timber.tag(TAG).e("Device not found. Unable to connect.")
             return false
         }
         bluetoothGatt = device.connectGatt(context, false, gattCallback)
-        Log.d(TAG, "Attempting to connect to $deviceAddress")
+        Timber.tag(TAG).d("Attempting to connect to $deviceAddress")
         return true
     }
 
     @SuppressLint("MissingPermission")
     fun sendMessage(message: String): Boolean {
         val characteristic = writeCharacteristic ?: run {
-            Log.e(TAG, "Write characteristic is not initialized.")
+            Timber.tag(TAG).e("Write characteristic is not initialized.")
             return false
         }
 

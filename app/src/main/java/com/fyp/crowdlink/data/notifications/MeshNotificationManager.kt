@@ -1,6 +1,7 @@
 package com.fyp.crowdlink.data.notifications
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -123,6 +124,7 @@ class MeshNotificationManager @Inject constructor(
             .notify(friendId.hashCode(), notification)
     }
 
+    @SuppressLint("FullScreenIntentPolicy")
     fun showSosNotification(
         senderName: String,
         latitude: Double?,
