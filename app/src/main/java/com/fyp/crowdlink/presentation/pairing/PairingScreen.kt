@@ -35,7 +35,7 @@ fun PairingScreen(
         viewModel.generateQRCode()
     }
 
-    // Step 5: Show confirmation dialog
+    // Step 5: Show confirmation dialogue
     incomingRequest?.let { request ->
         AlertDialog(
             onDismissRequest = { viewModel.declinePairingRequest() },

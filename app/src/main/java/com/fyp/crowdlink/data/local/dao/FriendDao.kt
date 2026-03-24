@@ -23,15 +23,6 @@ interface FriendDao {
     fun getAllFriends(): Flow<List<Friend>>
 
     /**
-     * Retrieves all friends immediately as a one-shot operation.
-     * Useful for internal checks where a Flow is not needed.
-     *
-     * @return A list of all paired friends.
-     */
-    @Query("SELECT * FROM friends ORDER BY pairedAt DESC")
-    suspend fun getPairedFriends(): List<Friend>
-    
-    /**
      * Finds a specific friend by their device ID.
      *
      * @param deviceId The unique identifier of the friend.

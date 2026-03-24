@@ -32,11 +32,9 @@ class CompassViewModel @Inject constructor(
     private val _myLocation = locationRepository.getMyLocation().stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), null
     )
-    val myLocation: StateFlow<DeviceLocation?> = _myLocation
 
     private var currentFriendId: String = ""
     private val _friendLocation = MutableStateFlow<DeviceLocation?>(null)
-    val friendLocation: StateFlow<DeviceLocation?> = _friendLocation.asStateFlow()
 
     private val _compassHeading = MutableStateFlow(0f)
     val compassHeading: StateFlow<Float> = _compassHeading.asStateFlow()

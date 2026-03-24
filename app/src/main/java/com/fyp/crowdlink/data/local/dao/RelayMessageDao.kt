@@ -19,6 +19,4 @@ interface RelayMessageDao {
     @Query("DELETE FROM relay_messages WHERE expiresAt <= :now")
     suspend fun purgeExpired(now: Long = System.currentTimeMillis())
 
-    @Query("SELECT COUNT(*) FROM relay_messages WHERE expiresAt > :now")
-    suspend fun activeCount(now: Long = System.currentTimeMillis()): Int
 }

@@ -3,7 +3,6 @@ package com.fyp.crowdlink.presentation.settings
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.fyp.crowdlink.data.notifications.MeshNotificationManager
 import com.fyp.crowdlink.domain.model.UserProfile
 import com.fyp.crowdlink.domain.repository.FriendRepository
 import com.fyp.crowdlink.domain.repository.LocationRepository
@@ -33,8 +32,7 @@ class SettingsViewModel @Inject constructor(
     private val friendRepository: FriendRepository,
     private val messageRepository: MessageRepository,
     private val sharedPreferences: SharedPreferences,
-    private val locationRepository: LocationRepository,
-    private val meshNotificationManager: MeshNotificationManager
+    private val locationRepository: LocationRepository
 ) : ViewModel() {
     
     private val _userProfile = MutableStateFlow<UserProfile?>(null)

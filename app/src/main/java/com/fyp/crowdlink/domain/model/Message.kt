@@ -31,5 +31,5 @@ enum class MessageStatus {
 }
 
 enum class TransportType {
-    BLE, WIFI, ESP32, MESH, USB
+    BLE, WIFI, ESP32, MESH
 }

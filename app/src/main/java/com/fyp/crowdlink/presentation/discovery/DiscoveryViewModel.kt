@@ -48,7 +48,6 @@ class DiscoveryViewModel @Inject constructor(
     private val _isDiscovering = MutableStateFlow(false)
 
     private val _isAdvertising = MutableStateFlow(false)
-    val isAdvertising: StateFlow<Boolean> = _isAdvertising.asStateFlow()
 
     val isMeshActive: StateFlow<Boolean> = combine(_isDiscovering, _isAdvertising) { scanning, advertising ->
         scanning && advertising
