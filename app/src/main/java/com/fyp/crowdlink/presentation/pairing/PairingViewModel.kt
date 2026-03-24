@@ -133,7 +133,7 @@ class PairingViewModel @Inject constructor(
                     if (json.has("displayName")) {
                         friendName = json.getString("displayName")
                     }
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     friendDeviceId = scannedData
                 }
 

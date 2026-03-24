@@ -53,7 +53,7 @@ class MeshMessageSerialiser @Inject constructor() {
             buffer.put(message.payload)
 
             buffer.array()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }
@@ -98,7 +98,7 @@ class MeshMessageSerialiser @Inject constructor() {
                 timestamp = timestamp,
                 hopCount = hopCount
             )
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }

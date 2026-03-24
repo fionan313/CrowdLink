@@ -25,7 +25,7 @@ class ShareLocationUseCase @Inject constructor(
             locationRepository.getMyLocation()
                 .filter { it != null && it.accuracy < 50f }
                 .first()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Flow timed out or errored — fall back to last known
             locationRepository.getLastKnownLocation()
         } ?: return  // Nothing at all — bail out silently

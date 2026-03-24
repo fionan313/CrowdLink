@@ -46,10 +46,8 @@ class DiscoveryViewModel @Inject constructor(
     }
 
     private val _isDiscovering = MutableStateFlow(false)
-    val isDiscovering: StateFlow<Boolean> = _isDiscovering.asStateFlow()
 
     private val _isAdvertising = MutableStateFlow(false)
-    val isAdvertising: StateFlow<Boolean> = _isAdvertising.asStateFlow()
 
     val isMeshActive: StateFlow<Boolean> = combine(_isDiscovering, _isAdvertising) { scanning, advertising ->
         scanning && advertising
@@ -139,11 +137,6 @@ class DiscoveryViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         sharedPreferences.unregisterOnSharedPreferenceChangeListener(preferenceChangeListener)
-        // Do not stop discovery or advertising here.
-        // BleScanner and BleAdvertiser are singletons that should remain
-        // active while the app is in the foreground. Scanning is only
-        // stopped explicitly when the user taps the MeshStatusPill to pause,
-        // or when the app moves to the background via a foreground service.
     }
 
     companion object {

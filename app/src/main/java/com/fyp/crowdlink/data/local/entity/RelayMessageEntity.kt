@@ -26,7 +26,7 @@ data class RelayMessageEntity(
     override fun hashCode(): Int = messageId.hashCode()
 
     companion object {
-        // Messages expire after 30 minutes — no point relaying stale messages
+        // Messages expire after 30 minutes
         private const val TTL_MS = 30 * 60 * 1000L
     }
 }

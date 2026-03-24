@@ -43,7 +43,7 @@ class LocationMessageSerialiser @Inject constructor() {
                 accuracy = accuracy,
                 timestamp = timestamp
             )
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }

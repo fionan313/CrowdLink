@@ -94,10 +94,6 @@ class MessageViewModel @Inject constructor(
         }
     }
 
-    fun disconnect() {
-        wifiDirectManager.disconnect()
-    }
-
     fun getMessages(friendId: String): StateFlow<List<Message>> {
         return getMessagesUseCase(friendId)
             .stateIn(

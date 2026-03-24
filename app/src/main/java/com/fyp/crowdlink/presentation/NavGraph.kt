@@ -64,7 +64,6 @@ fun AppNavHost(
     ) {
         composable(Destination.DISCOVERY.route) {
             DiscoveryScreen(
-                onNavigateToFriends = { navController.navigate(Destination.FRIENDS.route) },
                 onNavigateToCompass = { id, name -> navController.navigate("compass/$id/$name") },
                 onNavigateToChat = { id, name -> navController.navigate("chat/$id/$name") },
                 onNavigateToMap = { id, name -> navController.navigate("map?friendId=$id&friendName=$name") },

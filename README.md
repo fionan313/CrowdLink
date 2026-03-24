@@ -108,25 +108,33 @@ Tested on Nothing Phone 2a (API 35) and Samsung Note 10+ (API 31).
 ```
 app/src/main/java/com/fyp/crowdlink/
 ├── data/
-│   ├── ble/          # BleAdvertiser, BLEScanner, DeviceRepositoryImpl
-│   ├── mesh/         # MeshRoutingEngine, MeshMessageSerialiser, SeenMessageCache
-│   ├── p2p/          # WifiDirectManager
-│   ├── local/        # Room database, DAOs, entities
-│   └── repository/   # FriendRepositoryImpl, MessageRepositoryImpl
+│   ├── ble/           # BleAdvertiser, BleScanner, DeviceRepositoryImpl
+│   ├── mesh/          # MeshRoutingEngine, MeshMessageSerialiser, SeenMessageCache
+│   ├── notifications/ # MeshNotificationManager
+│   ├── p2p/           # WifiDirectManager
+│   ├── local/
+│   │   ├── dao/       # Room DAOs
+│   │   └── entity/    # Room entities
+│   └── repository/    # FriendRepositoryImpl, MessageRepositoryImpl, LocationRepositoryImpl
 ├── domain/
-│   ├── model/        # Friend, Message, MeshMessage, NearbyFriend, DeviceLocation
-│   ├── repository/   # Repository interfaces
-│   └── usecase/      # EstimateDistance, SendMessage, PairFriend, ShareLocation
+│   ├── model/         # Friend, Message, MeshMessage, NearbyFriend, DeviceLocation
+│   ├── repository/    # Repository interfaces
+│   └── usecase/       # EstimateDistance, SendMessage, PairFriend, ShareLocation
 ├── presentation/
-│   ├── discovery/    # Nearby device list
-│   ├── friends/      # Paired friends list
-│   ├── pairing/      # QR scan and generate
-│   ├── chat/         # Messaging UI
-│   ├── compass/      # Directional friend-finding
-│   ├── relay/        # ESP32 relay node discovery
-│   ├── settings/     # Settings screen
+│   ├── chat/          # Messaging UI
+│   ├── compass/       # Directional friend-finding
+│   ├── discovery/     # Nearby device list
+│   ├── friends/       # Paired friends list
+│   ├── map/           # Offline map with friend pins
+│   ├── onboarding/    # First-run onboarding flow
+│   ├── pairing/       # QR scan and generate
+│   ├── relay/         # ESP32 relay node discovery
+│   ├── settings/      # Settings screen
+│   ├── sos/           # SOS alert
 │   └── MainActivity.kt
-├── di/               # Hilt AppModule
+├── ui/
+│   └── theme/         # Material theme, colours, typography
+├── di/                # Hilt AppModule
 └── CrowdLinkApplication.kt
 ```
 
@@ -153,6 +161,3 @@ AI tools (Claude, Gemini) were used for debugging assistance and code review/cle
 
 ---
 
-## License
-
-MIT — see [LICENCE](LICENCE) for details.

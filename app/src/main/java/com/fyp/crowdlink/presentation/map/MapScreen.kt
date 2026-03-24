@@ -1,12 +1,11 @@
 package com.fyp.crowdlink.presentation.map
 
-import android.graphics.Bitmap
 import android.graphics.Canvas
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material3.*
@@ -347,7 +346,7 @@ fun MapScreen(
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Icon(Icons.Default.Chat, contentDescription = null)
+                                Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null)
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("Message")
                             }
@@ -393,7 +392,7 @@ private fun cacheTilesForArea(
     val metadata = try {
         val json = JSONObject().apply { put("name", "crowdlink_cache") }
         json.toString().toByteArray()
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         ByteArray(0)
     }
 

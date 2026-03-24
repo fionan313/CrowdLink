@@ -3,6 +3,7 @@ package com.fyp.crowdlink.data.ble
 import android.annotation.SuppressLint
 import android.bluetooth.*
 import android.content.Context
+import android.os.Build
 import com.fyp.crowdlink.domain.repository.MessageRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -127,9 +128,19 @@ class RelayNodeConnection @Inject constructor(
             return false
         }
 
-        characteristic.value = message.toByteArray(Charsets.UTF_8)
         characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-        return bluetoothGatt?.writeCharacteristic(characteristic) ?: false
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            bluetoothGatt?.writeCharacteristic(
+                characteristic,
+                message.toByteArray(Charsets.UTF_8),
+                BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            ) == BluetoothStatusCodes.SUCCESS
+        } else {
+            @Suppress("DEPRECATION")
+            characteristic.value = message.toByteArray(Charsets.UTF_8)
+            @Suppress("DEPRECATION")
+            bluetoothGatt?.writeCharacteristic(characteristic) ?: false
+        }
     }
 
     @SuppressLint("MissingPermission")

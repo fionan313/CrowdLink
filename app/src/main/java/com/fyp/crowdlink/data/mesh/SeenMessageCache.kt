@@ -26,8 +26,6 @@ class SeenMessageCache @Inject constructor() {
         cache.add(messageId)
     }
 
-    fun clear() = cache.clear()
-
     companion object {
         private const val MAX_SIZE = 200
     }
