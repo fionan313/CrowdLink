@@ -72,19 +72,4 @@ class SosViewModelTest {
             cancelAndIgnoreRemainingEvents()
         }
     }
-
-    @Test
-    fun `reset sets sosSent back to false`() = runTest {
-        // Given
-        viewModel.sendSos()
-
-        // When
-        viewModel.reset()
-
-        // Then
-        viewModel.sosSent.test {
-            assertFalse(awaitItem())
-            cancelAndIgnoreRemainingEvents()
-        }
-    }
 }

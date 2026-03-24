@@ -2,7 +2,6 @@ package com.fyp.crowdlink.presentation.settings
 
 import android.content.SharedPreferences
 import app.cash.turbine.test
-import com.fyp.crowdlink.data.notifications.MeshNotificationManager
 import com.fyp.crowdlink.domain.model.UserProfile
 import com.fyp.crowdlink.domain.repository.FriendRepository
 import com.fyp.crowdlink.domain.repository.LocationRepository
@@ -28,7 +27,6 @@ class SettingsViewModelTest {
     private lateinit var mockSharedPreferences: SharedPreferences
     private lateinit var mockEditor: SharedPreferences.Editor
     private lateinit var mockLocationRepository: LocationRepository
-    private lateinit var mockNotificationManager: MeshNotificationManager
 
     private val testDispatcher = UnconfinedTestDispatcher()
 
@@ -47,7 +45,6 @@ class SettingsViewModelTest {
         mockFriendRepository = mockk(relaxed = true)
         mockMessageRepository = mockk(relaxed = true)
         mockLocationRepository = mockk(relaxed = true)
-        mockNotificationManager = mockk(relaxed = true)
         mockEditor = mockk(relaxed = true)
         mockSharedPreferences = mockk(relaxed = true)
 
@@ -76,8 +73,7 @@ class SettingsViewModelTest {
             mockFriendRepository,
             mockMessageRepository,
             mockSharedPreferences,
-            mockLocationRepository,
-            mockNotificationManager
+            mockLocationRepository
         )
     }
 
