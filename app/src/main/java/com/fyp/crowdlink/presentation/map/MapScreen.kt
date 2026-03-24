@@ -125,7 +125,8 @@ fun MapScreen(
                                     arrowDrawable.draw(canvas)
                                     style.addImage("location-arrow", arrowBitmap)
                                 } else {
-                                    Log.e("MapScreen", "Failed to load location arrow drawable")
+                                    Timber.tag("MapScreen")
+                                        .e("Failed to load location arrow drawable")
                                 }
 
                                 // Add a GeoJsonSource for friend pins

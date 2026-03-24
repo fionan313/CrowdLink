@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.net.InetSocketAddress
@@ -103,12 +104,14 @@ class WifiDirectManager @Inject constructor(
             messageRepository.getRelayQueue().collect { queue ->
                 val targetIp = _peerIp.value
                 if (targetIp != null && queue.isNotEmpty()) {
-                    Log.d("WifiDirect", "Relay queue update: ${queue.size} messages waiting, peer connected at $targetIp")
+                    Timber.tag("WifiDirect")
+                        .d("Relay queue update: ${queue.size} messages waiting, peer connected at $targetIp")
                     queue.forEach { meshMessage ->
                         // Attempt delivery via WiFi Direct fallback
                         val success = attemptWifiDirectDelivery(targetIp, meshMessage)
                         if (success) {
-                            Log.d("WifiDirect", "Successfully delivered message ${meshMessage.messageId} via WiFi Direct, removing from queue")
+                            Timber.tag("WifiDirect")
+                                .d("Successfully delivered message ${meshMessage.messageId} via WiFi Direct, removing from queue")
                             messageRepository.removeFromRelayQueue(meshMessage.messageId)
                         }
                     }
@@ -139,7 +142,7 @@ class WifiDirectManager @Inject constructor(
                 socket.close()
                 true
             } catch (e: Exception) {
-                Log.e("WifiDirect", "Failed to deliver mesh message to $targetAddress", e)
+                Timber.tag("WifiDirect").e(e, "Failed to deliver mesh message to $targetAddress")
                 false
             }
         }
@@ -157,8 +160,10 @@ class WifiDirectManager @Inject constructor(
     @SuppressLint("MissingPermission")
     fun discoverPeers() {
         manager?.discoverPeers(channel, object : WifiP2pManager.ActionListener {
-            override fun onSuccess() { Log.d("WifiDirect", "Discovery Started") }
-            override fun onFailure(reason: Int) { Log.e("WifiDirect", "Discovery Failed: $reason") }
+            override fun onSuccess() {
+                Timber.tag("WifiDirect").d("Discovery Started") }
+            override fun onFailure(reason: Int) {
+                Timber.tag("WifiDirect").e("Discovery Failed: $reason") }
         })
     }
 
@@ -168,24 +173,28 @@ class WifiDirectManager @Inject constructor(
             deviceAddress = device.deviceAddress
         }
         manager?.connect(channel, config, object : WifiP2pManager.ActionListener {
-            override fun onSuccess() { Log.d("WifiDirect", "Connect Success") }
-            override fun onFailure(reason: Int) { Log.e("WifiDirect", "Connect Failed: $reason") }
+            override fun onSuccess() {
+                Timber.tag("WifiDirect").d("Connect Success") }
+            override fun onFailure(reason: Int) {
+                Timber.tag("WifiDirect").e("Connect Failed: $reason") }
         })
     }
 
     fun disconnect() {
         manager?.removeGroup(channel, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
-                Log.d("WifiDirect", "Group removed successfully")
+                Timber.tag("WifiDirect").d("Group removed successfully")
                 _connectionInfo.value = null
                 _peerIp.value = null
                 stopServer()
             }
             override fun onFailure(reason: Int) {
-                Log.e("WifiDirect", "Failed to remove group: $reason")
+                Timber.tag("WifiDirect").e("Failed to remove group: $reason")
                 manager?.cancelConnect(channel, object : WifiP2pManager.ActionListener {
-                    override fun onSuccess() { Log.d("WifiDirect", "Connect cancelled") }
-                    override fun onFailure(reason: Int) { Log.e("WifiDirect", "Failed to cancel connect: $reason") }
+                    override fun onSuccess() {
+                        Timber.tag("WifiDirect").d("Connect cancelled") }
+                    override fun onFailure(reason: Int) {
+                        Timber.tag("WifiDirect").e("Failed to cancel connect: $reason") }
                 })
             }
         })
@@ -204,16 +213,16 @@ class WifiDirectManager @Inject constructor(
             var serverSocket: ServerSocket? = null
             try {
                 serverSocket = ServerSocket(8888)
-                Log.d("WifiDirect", "Server started on port 8888")
+                Timber.tag("WifiDirect").d("Server started on port 8888")
                 while (true) {
                     val client = serverSocket.accept()
                     val clientIp = client.inetAddress.hostAddress
-                    Log.d("WifiDirect", "Accepted connection from $clientIp")
+                    Timber.tag("WifiDirect").d("Accepted connection from $clientIp")
                     _peerIp.value = clientIp
                     handleIncomingConnection(client)
                 }
             } catch (e: Exception) {
-                Log.e("WifiDirect", "Server Error", e)
+                Timber.tag("WifiDirect").e(e, "Server Error")
             } finally {
                 serverSocket?.close()
             }
@@ -230,8 +239,8 @@ class WifiDirectManager @Inject constructor(
                     val senderId = input.readUTF()
                     val content = input.readUTF()
                     input.readUTF()
-                    
-                    Log.d("WifiDirect", "Received MESH message from $senderId: $content")
+
+                    Timber.tag("WifiDirect").d("Received MESH message from $senderId: $content")
                     
                     // In a real mesh refactor, we would reconstruct the MeshMessage 
                     // and hand it to MeshRoutingEngine.processIncoming().
@@ -263,7 +272,7 @@ class WifiDirectManager @Inject constructor(
                 }
                 socket.close()
             } catch (e: Exception) {
-                Log.e("WifiDirect", "Receive Error", e)
+                Timber.tag("WifiDirect").e(e, "Receive Error")
             }
         }
     }
@@ -279,9 +288,9 @@ class WifiDirectManager @Inject constructor(
                 output.writeUTF("HANDSHAKE_INIT")
                 output.flush()
                 socket.close()
-                Log.d("WifiDirect", "Handshake sent to $targetAddress")
+                Timber.tag("WifiDirect").d("Handshake sent to $targetAddress")
             } catch (e: Exception) {
-                Log.e("WifiDirect", "Handshake failed", e)
+                Timber.tag("WifiDirect").e(e, "Handshake failed")
             }
         }
     }

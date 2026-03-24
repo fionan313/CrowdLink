@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 @Singleton
 class BleScanner @Inject constructor(
@@ -44,7 +45,7 @@ class BleScanner @Inject constructor(
     private val scope = CoroutineScope(Dispatchers.IO)
 
     init {
-        Log.wtf("BLE_SCANNER", "BleScanner CREATED!")
+        Timber.tag("BLE_SCANNER").wtf("BleScanner CREATED!")
 
         // Wire relay callback — when engine decides to relay,
         // broadcast to all currently connected peers
@@ -87,7 +88,8 @@ class BleScanner @Inject constructor(
                 newState: Int
             ) {
                 if (status != BluetoothGatt.GATT_SUCCESS) {
-                    Log.w("BLE_SCANNER", "GATT connection failed for $deviceAddress status=$status")
+                    Timber.tag("BLE_SCANNER")
+                        .w("GATT connection failed for $deviceAddress status=$status")
                     activeConnections.remove(deviceAddress)
                     pendingMessages.remove(deviceAddress)
                     gatt.close()
@@ -95,11 +97,11 @@ class BleScanner @Inject constructor(
                 }
                 when (newState) {
                     BluetoothProfile.STATE_CONNECTED -> {
-                        Log.d("BLE_SCANNER", "GATT connected to $deviceAddress")
+                        Timber.tag("BLE_SCANNER").d("GATT connected to $deviceAddress")
                         gatt.requestMtu(512)
                     }
                     BluetoothProfile.STATE_DISCONNECTED -> {
-                        Log.d("BLE_SCANNER", "GATT disconnected from $deviceAddress")
+                        Timber.tag("BLE_SCANNER").d("GATT disconnected from $deviceAddress")
                         activeConnections.remove(deviceAddress)
                         pendingMessages.remove(deviceAddress)
                         gatt.close()
@@ -108,13 +110,14 @@ class BleScanner @Inject constructor(
             }
 
             override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
-                Log.d("BLE_SCANNER", "MTU changed to $mtu for $deviceAddress")
+                Timber.tag("BLE_SCANNER").d("MTU changed to $mtu for $deviceAddress")
                 gatt.discoverServices()  // NOW discover services
             }
 
             override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
                 if (status != BluetoothGatt.GATT_SUCCESS) {
-                    Log.w("BLE_SCANNER", "Service discovery failed on $deviceAddress status=$status")
+                    Timber.tag("BLE_SCANNER")
+                        .w("Service discovery failed on $deviceAddress status=$status")
                     return
                 }
 
@@ -123,14 +126,14 @@ class BleScanner @Inject constructor(
                     ?.getCharacteristic(BleAdvertiser.MESH_CHARACTERISTIC_UUID)
 
                 if (characteristic == null) {
-                    Log.w("BLE_SCANNER", "Mesh characteristic not found on $deviceAddress")
+                    Timber.tag("BLE_SCANNER").w("Mesh characteristic not found on $deviceAddress")
                     gatt.disconnect()
                     return
                 }
 
                 // Store connection for direct sends after flush
                 activeConnections[deviceAddress] = gatt
-                Log.d("BLE_SCANNER", "Services discovered on $deviceAddress, flushing queue")
+                Timber.tag("BLE_SCANNER").d("Services discovered on $deviceAddress, flushing queue")
                 flushPendingMessages(deviceAddress, gatt, characteristic)
             }
 
@@ -141,7 +144,7 @@ class BleScanner @Inject constructor(
                 status: Int
             ) {
                 val result = if (status == BluetoothGatt.GATT_SUCCESS) "OK" else "FAILED($status)"
-                Log.d("BLE_SCANNER", "Write to $deviceAddress: $result")
+                Timber.tag("BLE_SCANNER").d("Write to $deviceAddress: $result")
             }
         }
     }
@@ -173,7 +176,7 @@ class BleScanner @Inject constructor(
     @SuppressLint("MissingPermission")
     fun sendMeshMessage(message: MeshMessage, device: BluetoothDevice) {
         val bytes = serializer.serialize(message) ?: run {
-            Log.e("BLE_SCANNER", "Failed to serialize mesh message")
+            Timber.tag("BLE_SCANNER").e("Failed to serialize mesh message")
             return
         }
         sendData(bytes, device)
@@ -192,7 +195,8 @@ class BleScanner @Inject constructor(
             characteristic?.let {
                 it.value = bytes
                 val success = gatt.writeCharacteristic(it)
-                Log.d("BLE_SCANNER", "Relayed to $address ttl=${message.ttl} success=$success")
+                Timber.tag("BLE_SCANNER")
+                    .d("Relayed to $address ttl=${message.ttl} success=$success")
             }
         }
     }
@@ -214,24 +218,24 @@ class BleScanner @Inject constructor(
         characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         characteristic.value = first
         val success = gatt.writeCharacteristic(characteristic)
-        Log.d("BLE_SCANNER", "Flushed pending message to $deviceAddress success=$success")
+        Timber.tag("BLE_SCANNER").d("Flushed pending message to $deviceAddress success=$success")
     }
 
     fun startDiscovery() {
         if (isScanning) {
-            Log.d("BLE_SCANNER", "Already scanning")
+            Timber.tag("BLE_SCANNER").d("Already scanning")
             return
         }
         if (bluetoothAdapter == null) {
-            Log.e("BLE_SCANNER", "Bluetooth Adapter is NULL")
+            Timber.tag("BLE_SCANNER").e("Bluetooth Adapter is NULL")
             return
         }
         if (!bluetoothAdapter.isEnabled) {
-            Log.e("BLE_SCANNER", "Bluetooth is DISABLED")
+            Timber.tag("BLE_SCANNER").e("Bluetooth is DISABLED")
             return
         }
         if (bluetoothLeScanner == null) {
-            Log.e("BLE_SCANNER", "BLE Scanner is NULL")
+            Timber.tag("BLE_SCANNER").e("BLE Scanner is NULL")
             return
         }
 
@@ -246,9 +250,9 @@ class BleScanner @Inject constructor(
         try {
             bluetoothLeScanner?.startScan(listOf(scanFilter), scanSettings, scanCallback)
             isScanning = true
-            Log.d("BLE_SCANNER", "✓ Scan started successfully")
+            Timber.tag("BLE_SCANNER").d("✓ Scan started successfully")
         } catch (e: SecurityException) {
-            Log.e("BLE_SCANNER", "✗ Permission denied", e)
+            Timber.tag("BLE_SCANNER").e(e, "✗ Permission denied")
         }
     }
 
@@ -261,9 +265,9 @@ class BleScanner @Inject constructor(
             // Intentionally not clearing _discoveredDevices here.
             // The list remains visible while scanning is paused so the user
             // does not lose sight of nearby devices when navigating away and back.
-            Log.d("BLE_SCANNER", "Scan stopped")
+            Timber.tag("BLE_SCANNER").d("Scan stopped")
         } catch (e: SecurityException) {
-            Log.e("BLE_SCANNER", "Permission denied when stopping", e)
+            Timber.tag("BLE_SCANNER").e(e, "Permission denied when stopping")
         }
     }
 
@@ -296,7 +300,7 @@ class BleScanner @Inject constructor(
         }
 
         override fun onScanFailed(errorCode: Int) {
-            Log.e("BLE_SCANNER", "Scan failed: $errorCode")
+            Timber.tag("BLE_SCANNER").e("Scan failed: $errorCode")
             isScanning = false
         }
     }

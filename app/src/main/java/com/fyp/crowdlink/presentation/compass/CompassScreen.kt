@@ -83,7 +83,7 @@ fun CompassScreen(
 
                 if (isGpsAvailable && bearing != null) {
                     // --- GPS MODE ---
-                    var currentRotation by remember { mutableStateOf(0f) }
+                    var currentRotation by remember { mutableFloatStateOf(0f) }
                     val targetRotation = (bearing!! - heading + 360) % 360
 
                     LaunchedEffect(targetRotation) {

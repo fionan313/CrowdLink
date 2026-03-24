@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import timber.log.Timber
 import javax.inject.Inject
 
 /**
@@ -66,7 +67,7 @@ class PairingViewModel @Inject constructor(
     private fun observePairingAccepted() {
         deviceRepository.pairingAccepted
             .onEach { acceptedDeviceId ->
-                Log.d("PairingViewModel", "Pairing accepted by $acceptedDeviceId")
+                Timber.tag("PairingViewModel").d("Pairing accepted by $acceptedDeviceId")
                 if (acceptedDeviceId == pendingFriendDeviceId) {
                     viewModelScope.launch {
                         friendRepository.addFriend(Friend(
@@ -75,7 +76,7 @@ class PairingViewModel @Inject constructor(
                             pairedAt = System.currentTimeMillis()
                         ))
                         _pairingState.value = PairingState.Success
-                        Log.d("PairingViewModel", "Pairing SUCCESS for $acceptedDeviceId")
+                        Timber.tag("PairingViewModel").d("Pairing SUCCESS for $acceptedDeviceId")
                     }
                 }
             }

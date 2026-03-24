@@ -3,6 +3,7 @@ package com.fyp.crowdlink.data.mesh
 import android.content.SharedPreferences
 import android.util.Log
 import com.fyp.crowdlink.domain.model.MeshMessage
+import timber.log.Timber
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -24,35 +25,35 @@ class MeshRoutingEngine @Inject constructor(
     suspend fun processIncoming(message: MeshMessage) {
         // 1. Duplicate check
         if (seenMessageCache.hasSeenMessage(message.messageId)) {
-            Log.d(TAG, "DROP duplicate: ${message.messageId}")
+            Timber.tag(TAG).d("DROP duplicate: ${message.messageId}")
             return
         }
         seenMessageCache.markAsSeen(message.messageId)
 
         // 2. Is this message for me?
-        Log.d(TAG, "COMPARE recipientId=${message.recipientId} localDeviceId=$localDeviceId")
+        Timber.tag(TAG).d("COMPARE recipientId=${message.recipientId} localDeviceId=$localDeviceId")
         if (message.recipientId == localDeviceId) {
-            Log.d(TAG, "DELIVER to self: ${message.messageId}")
+            Timber.tag(TAG).d("DELIVER to self: ${message.messageId}")
             onMessageForMe?.invoke(message)
             return
         }
 
         // 3. TTL check
         if (message.ttl <= 0) {
-            Log.d(TAG, "DROP ttl=0: ${message.messageId}")
+            Timber.tag(TAG).d("DROP ttl=0: ${message.messageId}")
             return
         }
 
         // Check if Mesh Relay is enabled in settings
         val relayEnabled = sharedPreferences.getBoolean("mesh_relay", true)
         if (!relayEnabled) {
-            Log.d(TAG, "DROP relay disabled in settings: ${message.messageId}")
+            Timber.tag(TAG).d("DROP relay disabled in settings: ${message.messageId}")
             return
         }
 
         // 4. Probabilistic relay — 75% chance to forward
         if (Random.nextFloat() > RELAY_PROBABILITY) {
-            Log.d(TAG, "DROP probabilistic: ${message.messageId}")
+            Timber.tag(TAG).d("DROP probabilistic: ${message.messageId}")
             return
         }
 
@@ -61,9 +62,8 @@ class MeshRoutingEngine @Inject constructor(
             ttl = message.ttl - 1,
             hopCount = message.hopCount + 1
         )
-        Log.d(TAG, 
-            "RELAY messageId=${relayed.messageId} ttl=${relayed.ttl} hop=${relayed.hopCount}"
-        )
+        Timber.tag(TAG)
+            .d("RELAY messageId=${relayed.messageId} ttl=${relayed.ttl} hop=${relayed.hopCount}")
         onRelay?.invoke(relayed)
     }
 

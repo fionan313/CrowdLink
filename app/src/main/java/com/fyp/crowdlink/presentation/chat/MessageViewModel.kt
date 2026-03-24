@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 /**
@@ -117,7 +118,7 @@ class MessageViewModel @Inject constructor(
     fun sendText(content: String, friendId: String) {
         val myId = _myDeviceId.value
 
-        Log.d("MessageViewModel", "Adding to relay queue: $content")
+        Timber.tag("MessageViewModel").d("Adding to relay queue: $content")
 
         viewModelScope.launch {
             // 1. Save to local database for UI display immediately

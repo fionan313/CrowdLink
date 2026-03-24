@@ -10,13 +10,13 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.ParcelUuid
-import android.util.Log
 import androidx.annotation.RequiresPermission
 import com.fyp.crowdlink.domain.model.RelayNode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import timber.log.Timber
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -62,7 +62,7 @@ class RelayNodeScanner @Inject constructor(
         }
 
         override fun onScanFailed(errorCode: Int) {
-            Log.e(TAG, "Scan failed with error code: $errorCode")
+            Timber.tag(TAG).e("Scan failed with error code: $errorCode")
         }
     }
 
@@ -81,7 +81,7 @@ class RelayNodeScanner @Inject constructor(
     fun startScanning() {
         val s = scanner
         if (s == null) {
-            Log.e(TAG, "BluetoothLeScanner is null — permissions granted?")
+            Timber.tag(TAG).e("BluetoothLeScanner is null — permissions granted?")
             return
         }
         activeScanner = s
@@ -97,13 +97,13 @@ class RelayNodeScanner @Inject constructor(
             .build()
 
         s.startScan(filters, settings, scanCallback)
-        Log.d(TAG, "Started scanning for relays")
+        Timber.tag(TAG).d("Started scanning for relays")
     }
 
     @SuppressLint("MissingPermission")
     fun stopScanning() {
         activeScanner?.stopScan(scanCallback)
         activeScanner = null
-        Log.d(TAG, "Stopped scanning for relays")
+        Timber.tag(TAG).d("Stopped scanning for relays")
     }
 }

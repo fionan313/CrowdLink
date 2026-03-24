@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -48,12 +49,12 @@ class RelayNodeConnection @Inject constructor(
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
-                    Log.d(TAG, "Connected to relay node")
+                    Timber.tag(TAG).d("Connected to relay node")
                     _isConnected.value = true
                     gatt.discoverServices()
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
-                    Log.d(TAG, "Disconnected from relay node")
+                    Timber.tag(TAG).d("Disconnected from relay node")
                     _isConnected.value = false
                     cleanup()
                 }
@@ -64,9 +65,9 @@ class RelayNodeConnection @Inject constructor(
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 val service = gatt.getService(UUID.fromString(SERVICE_UUID))
                 writeCharacteristic = service?.getCharacteristic(UUID.fromString(CHARACTERISTIC_UUID))
-                Log.d(TAG, "Services discovered, ready to send messages")
+                Timber.tag(TAG).d("Services discovered, ready to send messages")
             } else {
-                Log.w(TAG, "onServicesDiscovered received: $status")
+                Timber.tag(TAG).w("onServicesDiscovered received: $status")
             }
         }
 
@@ -76,9 +77,9 @@ class RelayNodeConnection @Inject constructor(
             status: Int
         ) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
-                Log.d(TAG, "Message sent to relay successfully")
+                Timber.tag(TAG).d("Message sent to relay successfully")
             } else {
-                Log.e(TAG, "Failed to send message to relay, status: $status")
+                Timber.tag(TAG).e("Failed to send message to relay, status: $status")
             }
         }
     }
@@ -92,7 +93,8 @@ class RelayNodeConnection @Inject constructor(
         relayObserverJob = scope.launch {
             messageRepository.getRelayQueue().collect { queue ->
                 if (_isConnected.value && queue.isNotEmpty()) {
-                    Log.d(TAG, "Relay queue update: ${queue.size} messages waiting, ESP32 connected")
+                    Timber.tag(TAG)
+                        .d("Relay queue update: ${queue.size} messages waiting, ESP32 connected")
                     queue.forEach { meshMessage ->
                         // Attempt delivery via ESP32 BLE fallback
                         val payload = "${meshMessage.recipientId}:${String(meshMessage.payload, Charsets.UTF_8)}"

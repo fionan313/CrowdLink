@@ -24,6 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import timber.log.Timber
 import java.nio.ByteBuffer
 import java.util.UUID
 import javax.inject.Inject
@@ -36,7 +37,7 @@ class BleAdvertiser @Inject constructor(
     private val serializer: MeshMessageSerialiser
 ) {
     init {
-        Log.wtf("BLE_ADVERTISER", "BleAdvertiser CREATED!")
+        Timber.tag("BLE_ADVERTISER").wtf("BleAdvertiser CREATED!")
     }
 
     private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
@@ -61,11 +62,13 @@ class BleAdvertiser @Inject constructor(
             status: Int,
             newState: Int
         ) {
-            Log.d("BLE_ADVERTISER", "GATT connection state changed: device=${device.address} newState=$newState")
+            Timber.tag("BLE_ADVERTISER")
+                .d("GATT connection state changed: device=${device.address} newState=$newState")
         }
 
         override fun onServiceAdded(status: Int, service: BluetoothGattService?) {
-            Log.d("BLE_ADVERTISER", "GATT service added status=$status uuid=${service?.uuid}")
+            Timber.tag("BLE_ADVERTISER")
+                .d("GATT service added status=$status uuid=${service?.uuid}")
         }
 
         override fun onCharacteristicWriteRequest(
@@ -112,9 +115,10 @@ class BleAdvertiser @Inject constructor(
                 senderDisplayName = json.getString("senderName")
             )
             onPairingRequestReceived?.invoke(request)
-            Log.d("BLE_ADVERTISER", "Pairing request received from ${request.senderDisplayName}")
+            Timber.tag("BLE_ADVERTISER")
+                .d("Pairing request received from ${request.senderDisplayName}")
         } catch (e: Exception) {
-            Log.e("BLE_ADVERTISER", "Failed to parse pairing request", e)
+            Timber.tag("BLE_ADVERTISER").e(e, "Failed to parse pairing request")
         }
     }
 
@@ -124,9 +128,9 @@ class BleAdvertiser @Inject constructor(
             val json = JSONObject(jsonString)
             val senderId = json.getString("senderId")
             onPairingAcceptedReceived?.invoke(senderId)
-            Log.d("BLE_ADVERTISER", "Pairing accepted by $senderId")
+            Timber.tag("BLE_ADVERTISER").d("Pairing accepted by $senderId")
         } catch (e: Exception) {
-            Log.e("BLE_ADVERTISER", "Failed to parse pairing acceptance", e)
+            Timber.tag("BLE_ADVERTISER").e(e, "Failed to parse pairing acceptance")
         }
     }
 
@@ -135,9 +139,9 @@ class BleAdvertiser @Inject constructor(
             val json = JSONObject(value.decodeToString(startIndex = 1))
             val senderId = json.getString("senderId")
             onUnpairRequestReceived?.invoke(senderId)
-            Log.d("BLE_ADVERTISER", "Unpair request received from $senderId")
+            Timber.tag("BLE_ADVERTISER").d("Unpair request received from $senderId")
         } catch (e: Exception) {
-            Log.e("BLE_ADVERTISER", "Failed to parse unpair request", e)
+            Timber.tag("BLE_ADVERTISER").e(e, "Failed to parse unpair request")
         }
     }
 
@@ -149,9 +153,9 @@ class BleAdvertiser @Inject constructor(
             val latitude = if (json.has("lat")) json.getDouble("lat") else null
             val longitude = if (json.has("lon")) json.getDouble("lon") else null
             onSosAlertReceived?.invoke(senderId, senderName, latitude, longitude)
-            Log.d("BLE_ADVERTISER", "SOS alert received from $senderName")
+            Timber.tag("BLE_ADVERTISER").d("SOS alert received from $senderName")
         } catch (e: Exception) {
-            Log.e("BLE_ADVERTISER", "Failed to parse SOS alert", e)
+            Timber.tag("BLE_ADVERTISER").e(e, "Failed to parse SOS alert")
         }
     }
 
@@ -161,9 +165,9 @@ class BleAdvertiser @Inject constructor(
             scope.launch {
                 meshRoutingEngine.processIncoming(message)
             }
-            Log.d("BLE_ADVERTISER", "Handed to routing engine: ${message.messageId}")
+            Timber.tag("BLE_ADVERTISER").d("Handed to routing engine: ${message.messageId}")
         } else {
-            Log.w("BLE_ADVERTISER", "Failed to deserialise incoming mesh packet")
+            Timber.tag("BLE_ADVERTISER").w("Failed to deserialise incoming mesh packet")
         }
     }
 
@@ -197,23 +201,23 @@ class BleAdvertiser @Inject constructor(
 
     @SuppressLint("MissingPermission")
     fun startAdvertising(myDeviceId: String) {
-        Log.d("BLE_ADVERTISER", "Starting advertising with device ID: $myDeviceId")
+        Timber.tag("BLE_ADVERTISER").d("Starting advertising with device ID: $myDeviceId")
 
         val advertiser = bluetoothAdapter?.bluetoothLeAdvertiser
         if (advertiser == null) {
-            Log.e("BLE_ADVERTISER", "Bluetooth LE Advertiser not available")
+            Timber.tag("BLE_ADVERTISER").e("Bluetooth LE Advertiser not available")
             return
         }
 
         if (isAdvertising) {
-            Log.d("BLE_ADVERTISER", "Already advertising, stopping first")
+            Timber.tag("BLE_ADVERTISER").d("Already advertising, stopping first")
             stopAdvertising()
         }
 
         // start GATT server before advertising so it's ready when peers connect
         gattServer = bluetoothManager.openGattServer(context, gattServerCallback)
         gattServer?.addService(buildGattService())
-        Log.d("BLE_ADVERTISER", "GATT server started")
+        Timber.tag("BLE_ADVERTISER").d("GATT server started")
 
         // setConnectable(true) so peers can connect for mesh relay
         val settings = AdvertiseSettings.Builder()
@@ -230,7 +234,7 @@ class BleAdvertiser @Inject constructor(
             buffer.putLong(uuid.leastSignificantBits)
             buffer.array()
         } catch (e: Exception) {
-            Log.e("BLE_ADVERTISER", "Invalid UUID format: $myDeviceId", e)
+            Timber.tag("BLE_ADVERTISER").e(e, "Invalid UUID format: $myDeviceId")
             myDeviceId.take(16).toByteArray(Charsets.UTF_8)
         }
 
@@ -244,7 +248,7 @@ class BleAdvertiser @Inject constructor(
         try {
             advertiser.startAdvertising(settings, data, advertiseCallback)
         } catch (e: SecurityException) {
-            Log.e("BLE_ADVERTISER", "Permission denied", e)
+            Timber.tag("BLE_ADVERTISER").e(e, "Permission denied")
         }
     }
 
@@ -255,16 +259,16 @@ class BleAdvertiser @Inject constructor(
             gattServer?.close()      // close GATT server alongside advertising
             gattServer = null
             isAdvertising = false
-            Log.d("BLE_ADVERTISER", "Advertising and GATT server stopped")
+            Timber.tag("BLE_ADVERTISER").d("Advertising and GATT server stopped")
         } catch (e: SecurityException) {
-            Log.e("BLE_ADVERTISER", "Permission denied when stopping", e)
+            Timber.tag("BLE_ADVERTISER").e(e, "Permission denied when stopping")
         }
     }
 
     private val advertiseCallback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
             isAdvertising = true
-            Log.d("BLE_ADVERTISER", "✓ Advertising started successfully")
+            Timber.tag("BLE_ADVERTISER").d("✓ Advertising started successfully")
         }
 
         override fun onStartFailure(errorCode: Int) {
@@ -277,7 +281,7 @@ class BleAdvertiser @Inject constructor(
                 ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> "Feature unsupported"
                 else -> "Unknown error"
             }
-            Log.e("BLE_ADVERTISER", "✗ Advertising failed: $errorMsg (code: $errorCode)")
+            Timber.tag("BLE_ADVERTISER").e("✗ Advertising failed: $errorMsg (code: $errorCode)")
         }
     }
 
