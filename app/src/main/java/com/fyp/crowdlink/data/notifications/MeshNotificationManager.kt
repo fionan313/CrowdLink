@@ -277,11 +277,4 @@ class MeshNotificationManager @Inject constructor(
         )
     }
 
-    fun release() {
-        tts?.stop()
-        tts?.shutdown()
-        tts = null
-        sosRingtone?.stop()
-        sosRingtone = null
-    }
 }

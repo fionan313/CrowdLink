@@ -41,7 +41,7 @@ class MessageViewModel @Inject constructor(
     private val messageRepository: MessageRepository
 ) : ViewModel() {
 
-    private val _myDeviceId = MutableStateFlow<String>("")
+    private val _myDeviceId = MutableStateFlow("")
     val myDeviceId: StateFlow<String> = _myDeviceId.asStateFlow()
 
     // Expose the list of discovered Wi-Fi Direct peers for connection setup
@@ -92,10 +92,6 @@ class MessageViewModel @Inject constructor(
         device?.let {
             wifiDirectManager.connect(it)
         }
-    }
-
-    fun disconnect() {
-        wifiDirectManager.disconnect()
     }
 
     fun getMessages(friendId: String): StateFlow<List<Message>> {

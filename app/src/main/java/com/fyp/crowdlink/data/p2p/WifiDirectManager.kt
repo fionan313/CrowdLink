@@ -46,7 +46,6 @@ class WifiDirectManager @Inject constructor(
 
     // Store the IP address of the connected peer
     private val _peerIp = MutableStateFlow<String?>(null)
-    val peerIp = _peerIp.asStateFlow()
 
     private var serverJob: Job? = null
     private var relayObserverJob: Job? = null

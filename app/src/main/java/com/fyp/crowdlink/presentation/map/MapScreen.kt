@@ -45,6 +45,7 @@ import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.Point
 import timber.log.Timber
 import androidx.core.graphics.createBitmap
+import kotlin.math.cos
 
 private const val RASTER_STYLE_JSON = """
 {
@@ -373,7 +374,7 @@ private fun cacheTilesForArea(
 
     // Calculate bounding box from centre + radius
     val latDelta = radiusMeters / 111000.0
-    val lonDelta = radiusMeters / (111000.0 * Math.cos(Math.toRadians(latitude)))
+    val lonDelta = radiusMeters / (111000.0 * cos(Math.toRadians(latitude)))
 
     val bounds = LatLngBounds.Builder()
         .include(LatLng(latitude + latDelta, longitude + lonDelta))

@@ -158,15 +158,6 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun testSosAlert() {
-        meshNotificationManager.showSosNotification(
-            senderName = "Test Friend",
-            latitude = 53.3498,
-            longitude = -6.2603,
-            friendId = "debug-id"
-        )
-    }
-
     fun resetOnboarding() {
         sharedPreferences.edit { putBoolean("onboarding_complete", false) }
     }

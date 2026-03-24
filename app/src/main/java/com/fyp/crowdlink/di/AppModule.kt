@@ -18,7 +18,6 @@ import com.fyp.crowdlink.data.repository.*
 import com.fyp.crowdlink.domain.repository.*
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
-import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -29,11 +28,6 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class RepositoryModule {
-    @Binds
-    @Singleton
-    abstract fun bindLocationRepository(
-        impl: LocationRepositoryImpl
-    ): LocationRepository
 }
 
 /**
