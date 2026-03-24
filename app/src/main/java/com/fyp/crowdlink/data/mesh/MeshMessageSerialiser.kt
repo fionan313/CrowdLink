@@ -84,7 +84,7 @@ class MeshMessageSerialiser @Inject constructor() {
             val timestamp = buffer.getLong()
             val payloadLength = buffer.getShort().toInt() and 0xFFFF
 
-            if (payloadLength < 0 || payloadLength > MAX_PAYLOAD_BYTES) return null
+            if (payloadLength !in 0..MAX_PAYLOAD_BYTES) return null
 
             val payload = ByteArray(payloadLength)
             buffer.get(payload)

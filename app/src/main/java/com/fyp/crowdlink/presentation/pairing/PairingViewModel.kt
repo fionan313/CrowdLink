@@ -44,7 +44,7 @@ class PairingViewModel @Inject constructor(
     val qrCodeBitmap: StateFlow<Bitmap?> = _qrCodeBitmap.asStateFlow()
     
     // StateFlow for the current device's ID
-    private val _myDeviceId = MutableStateFlow<String>("")
+    private val _myDeviceId = MutableStateFlow("")
     val myDeviceId: StateFlow<String> = _myDeviceId.asStateFlow()
     
     // StateFlow for tracking the pairing status

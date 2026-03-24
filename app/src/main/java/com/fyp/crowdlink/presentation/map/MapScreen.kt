@@ -1,6 +1,5 @@
 package com.fyp.crowdlink.presentation.map
 
-import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.util.Log
 import androidx.appcompat.content.res.AppCompatResources

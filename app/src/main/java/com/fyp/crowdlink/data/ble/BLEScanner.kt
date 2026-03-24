@@ -22,7 +22,6 @@ import com.fyp.crowdlink.domain.model.MeshMessage
 import com.fyp.crowdlink.domain.repository.MessageRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,15 +32,13 @@ import javax.inject.Singleton
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.launch
 
 @Singleton
 class BleScanner @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val meshRoutingEngine: MeshRoutingEngine,
+    meshRoutingEngine: MeshRoutingEngine,
     private val serializer: MeshMessageSerialiser
 ) {
-    private val scope = CoroutineScope(Dispatchers.IO)
 
     init {
         Log.wtf("BLE_SCANNER", "BleScanner CREATED!")
@@ -348,10 +345,6 @@ class BleScanner @Inject constructor(
 
     fun getDeviceById(deviceId: String): BluetoothDevice? {
         return deviceIdToAddress[deviceId]?.let { address -> knownDevices[address] }
-    }
-
-    fun getDeviceIdByAddress(address: String): String? {
-        return deviceIdToAddress.entries.firstOrNull { it.value == address }?.key
     }
 
     /**

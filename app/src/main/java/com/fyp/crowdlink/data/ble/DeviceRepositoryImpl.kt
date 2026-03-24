@@ -59,7 +59,7 @@ class DeviceRepositoryImpl @Inject constructor(
         // Wire MeshRoutingEngine callbacks
         meshRoutingEngine.onMessageForMe = { meshMessage ->
             scope.launch {
-                val senderIdString = meshMessage.senderId.toString()
+                val senderIdString = meshMessage.senderId
                 val payload = meshMessage.payload
                 
                 if (payload.isNotEmpty()) {

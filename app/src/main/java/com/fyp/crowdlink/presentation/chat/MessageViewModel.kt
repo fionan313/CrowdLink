@@ -44,7 +44,7 @@ class MessageViewModel @Inject constructor(
     private val _myDeviceId = MutableStateFlow<String>("")
     val myDeviceId: StateFlow<String> = _myDeviceId.asStateFlow()
 
-    // Expose the list of discovered WiFi Direct peers for connection setup
+    // Expose the list of discovered Wi-Fi Direct peers for connection setup
     val peers = wifiDirectManager.peers
 
     // Expose connection info for status display
