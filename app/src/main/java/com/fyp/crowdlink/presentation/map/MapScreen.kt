@@ -45,6 +45,7 @@ import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.Point
 import timber.log.Timber
+import androidx.core.graphics.createBitmap
 
 private const val RASTER_STYLE_JSON = """
 {
@@ -115,10 +116,9 @@ fun MapScreen(
                                 // Load the arrow drawable and add it to the style
                                 val arrowDrawable = AppCompatResources.getDrawable(ctx, R.drawable.ic_location_arrow)
                                 if (arrowDrawable != null) {
-                                    val arrowBitmap = Bitmap.createBitmap(
+                                    val arrowBitmap = createBitmap(
                                         arrowDrawable.intrinsicWidth,
-                                        arrowDrawable.intrinsicHeight,
-                                        Bitmap.Config.ARGB_8888
+                                        arrowDrawable.intrinsicHeight
                                     )
                                     val canvas = Canvas(arrowBitmap)
                                     arrowDrawable.setBounds(0, 0, canvas.width, canvas.height)
