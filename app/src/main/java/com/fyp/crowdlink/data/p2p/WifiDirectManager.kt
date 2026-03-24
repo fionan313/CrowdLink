@@ -94,7 +94,7 @@ class WifiDirectManager @Inject constructor(
     }
 
     /**
-     * Observes the relay queue and attempts to deliver messages via WiFi Direct 
+     * Observes the relay queue and attempts to deliver messages via Wi-Fi Direct
      * if a peer is currently connected.
      */
     private fun startRelayQueueObserver() {
@@ -105,7 +105,7 @@ class WifiDirectManager @Inject constructor(
                 if (targetIp != null && queue.isNotEmpty()) {
                     Log.d("WifiDirect", "Relay queue update: ${queue.size} messages waiting, peer connected at $targetIp")
                     queue.forEach { meshMessage ->
-                        // Attempt delivery via WiFi Direct fallback
+                        // Attempt delivery via Wi-Fi Direct fallback
                         val success = attemptWifiDirectDelivery(targetIp, meshMessage)
                         if (success) {
                             Log.d("WifiDirect", "Successfully delivered message ${meshMessage.messageId} via WiFi Direct, removing from queue")
@@ -118,7 +118,7 @@ class WifiDirectManager @Inject constructor(
     }
 
     /**
-     * Helper to wrap mesh message for WiFi Direct transport
+     * Helper to wrap mesh message for Wi-Fi Direct transport
      */
     private suspend fun attemptWifiDirectDelivery(targetAddress: String, meshMessage: com.fyp.crowdlink.domain.model.MeshMessage): Boolean {
         return withContext(Dispatchers.IO) {

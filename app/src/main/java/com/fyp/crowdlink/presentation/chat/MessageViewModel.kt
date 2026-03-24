@@ -30,7 +30,7 @@ import javax.inject.Inject
  * MessageViewModel
  *
  * This ViewModel manages the UI state for the mesh-based messaging feature.
- * It uses the MeshRoutingEngine as the primary send path, with WiFi Direct
+ * It uses the MeshRoutingEngine as the primary send path, with Wi-Fi Direct
  * and ESP32 acting as background fallback transports observing the relay queue.
  */
 @HiltViewModel
@@ -49,7 +49,7 @@ class MessageViewModel @Inject constructor(
     private val _myDeviceId = MutableStateFlow<String>("")
     val myDeviceId: StateFlow<String> = _myDeviceId.asStateFlow()
 
-    // Expose the list of discovered WiFi Direct peers for connection setup
+    // Expose the list of discovered Wi-Fi Direct peers for connection setup
     val peers = wifiDirectManager.peers
 
     // Expose connection info for status display
@@ -116,7 +116,7 @@ class MessageViewModel @Inject constructor(
      * Sends a text message via the Mesh Routing Engine.
      * The engine adds it to the relay queue, which is then observed by:
      * 1. BleScanner (for BLE Mesh relay)
-     * 2. WifiDirectManager (for WiFi fallback)
+     * 2. WifiDirectManager (for Wi-Fi fallback)
      * 3. RelayNodeConnection (for ESP32 fallback)
      */
     fun sendText(content: String, friendId: String) {
