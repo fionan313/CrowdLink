@@ -41,6 +41,10 @@ android {
         compose = true
     }
 
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
+
     // Ensure 16 KB page size compatibility for Android 15+
     packaging {
         resources {
@@ -84,7 +88,7 @@ dependencies {
     implementation(libs.zxing.android.embedded)
 
     // Camera Support
-    implementation(libs.androidx.camera.camera2.v130)
+    implementation(libs.androidx.camera.camera2)
 
     // Dependency Injection (Hilt)
     implementation(libs.hilt.android)
@@ -106,6 +110,7 @@ dependencies {
     testImplementation(libs.mockk.core)
     testImplementation(libs.turbine)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.json)
 
     // Android Instrumentation Tests
     androidTestImplementation(libs.androidx.junit)
