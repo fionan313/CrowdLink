@@ -148,7 +148,7 @@ fun ChatScreen(
                 }
             }
 
-            // Peer List Overlay (WiFi Direct connections for "High Speed" transport)
+            // Peer List Overlay (Wi-Fi Direct connections for "High Speed" transport)
             if (showPeerList) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),

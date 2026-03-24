@@ -23,14 +23,14 @@ A survey of 42 people aged 18-35 found that 85.7% had lost contact with friends 
 - Friend pairing via QR code
 - Multi-hop BLE mesh networking, messages relay between devices with TTL and probabilistic flooding
 - End-to-end message delivery confirmed across physical devices
-- WiFi Direct messaging (fallback transport)
+- Wi-Fi Direct messaging (fallback transport)
 - ESP32 relay node support for extended range
 - In-app notifications for incoming mesh messages
 - Settings screen with BLE, mesh, LoRa, and privacy sections
 - Compass/arrow view for directional friend-finding with GPS fallback
 
 ### Planned
-- Single-scan QR pairing with confirmation dialog
+- Single-scan QR pairing with confirmation dialogue
 - End-to-end encryption
 - Offline map with cached tiles
 - User evaluation study (10+ participants)
@@ -65,7 +65,7 @@ The mesh transport sits entirely in the data layer. `MeshRoutingEngine` is pure 
 
 ## Getting started
 
-You need at least two physical Android devices — BLE and WiFi Direct do not work on emulators.
+You need at least two physical Android devices — BLE and Wi-Fi Direct do not work on emulators.
 
 ```bash
 git clone https://github.com/fionan313/CrowdLink.git
@@ -75,7 +75,7 @@ cd CrowdLink
 
 Requires Android Studio Hedgehog or later, JDK 17, Android SDK API 28+.
 
-**Permissions used:** Bluetooth scan/advertise, fine location (required for BLE on Android), camera (QR scanning), WiFi Direct.
+**Permissions used:** Bluetooth scan/advertise, fine location (required for BLE on Android), camera (QR scanning), Wi-Fi Direct.
 
 ---
 
@@ -142,17 +142,17 @@ app/src/main/java/com/fyp/crowdlink/
 
 ## Academic context
 
-Final Year Project — TU Dublin, BSc Computer Science (TU856), 2025/2026.
+Final Year Project — TU Dublin, B.Sc. Computer Science (TU856), 2025/2026.
 
 Student: Fionán Ó Ceallaigh (C22337521). 
 Supervisor: Bryan Duggan.
 
 This project is not open for external contributions during the assessment period. Submissions open after April 2026.
 
-AI tools (Claude, Gemini) were used for debugging assistance and code review/cleanup.
+AI tools (Claude, Gemini) were used for debugging assistance and code review/clean-up.
 
 ---
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+MIT — see [LICENCE](LICENCE) for details.
