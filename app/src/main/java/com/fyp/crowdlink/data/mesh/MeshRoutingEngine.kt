@@ -1,7 +1,6 @@
 package com.fyp.crowdlink.data.mesh
 
 import android.content.SharedPreferences
-import android.util.Log
 import com.fyp.crowdlink.domain.model.MeshMessage
 import timber.log.Timber
 import java.util.UUID

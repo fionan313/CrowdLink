@@ -14,7 +14,6 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.ParcelUuid
-import android.util.Log
 import com.fyp.crowdlink.data.mesh.MeshMessageSerialiser
 import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
 import com.fyp.crowdlink.domain.model.DiscoveredDevice
@@ -33,7 +32,6 @@ import javax.inject.Singleton
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.launch
 import timber.log.Timber
 
 @Singleton

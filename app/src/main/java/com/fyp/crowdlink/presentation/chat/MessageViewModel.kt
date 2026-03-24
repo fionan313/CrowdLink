@@ -1,6 +1,5 @@
 package com.fyp.crowdlink.presentation.chat
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fyp.crowdlink.data.ble.BleScanner
@@ -42,7 +41,7 @@ class MessageViewModel @Inject constructor(
     private val messageRepository: MessageRepository
 ) : ViewModel() {
 
-    private val _myDeviceId = MutableStateFlow<String>("")
+    private val _myDeviceId = MutableStateFlow("")
     val myDeviceId: StateFlow<String> = _myDeviceId.asStateFlow()
 
     // Expose the list of discovered Wi-Fi Direct peers for connection setup

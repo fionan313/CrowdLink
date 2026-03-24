@@ -1,11 +1,8 @@
 package com.fyp.crowdlink.data.ble
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.*
 import android.content.Context
-import android.util.Log
-import androidx.annotation.RequiresPermission
 import com.fyp.crowdlink.domain.repository.MessageRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope

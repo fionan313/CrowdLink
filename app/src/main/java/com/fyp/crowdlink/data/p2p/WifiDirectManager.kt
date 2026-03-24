@@ -9,7 +9,6 @@ import android.net.wifi.p2p.WifiP2pConfig
 import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pInfo
 import android.net.wifi.p2p.WifiP2pManager
-import android.util.Log
 import com.fyp.crowdlink.domain.model.Message
 import com.fyp.crowdlink.domain.model.TransportType
 import com.fyp.crowdlink.domain.repository.MessageRepository

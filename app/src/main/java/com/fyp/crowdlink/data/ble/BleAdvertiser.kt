@@ -14,7 +14,6 @@ import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
 import android.content.Context
 import android.os.ParcelUuid
-import android.util.Log
 import com.fyp.crowdlink.data.mesh.MeshMessageSerialiser
 import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
 import com.fyp.crowdlink.domain.model.PairingRequest

@@ -1,7 +1,6 @@
 package com.fyp.crowdlink.data.ble
 
 import android.content.SharedPreferences
-import android.util.Log
 import com.fyp.crowdlink.data.mesh.LocationMessageSerialiser
 import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
 import com.fyp.crowdlink.data.notifications.MeshNotificationManager
@@ -60,7 +59,7 @@ class DeviceRepositoryImpl @Inject constructor(
         // Wire MeshRoutingEngine callbacks
         meshRoutingEngine.onMessageForMe = { meshMessage ->
             scope.launch {
-                val senderIdString = meshMessage.senderId.toString()
+                val senderIdString = meshMessage.senderId
                 val payload = meshMessage.payload
                 
                 if (payload.isNotEmpty()) {

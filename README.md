@@ -92,12 +92,12 @@ Current status: 20/21 unit tests passing, 82% coverage on core domain logic. Int
 
 ## Performance
 
-| Metric | Target | Result |
-|--------|--------|--------|
-| Discovery time | <10s | 4.5s avg |
-| Distance accuracy | ±15m | ±0.6m |
-| Battery drain | <5%/hr | 4.2%/hr |
-| Cross-device success | >90% | 100% |
+| Metric               | Target | Result   |
+|----------------------|--------|----------|
+| Discovery time       | <10s   | 4.5s avg |
+| Distance accuracy    | ±15m   | ±0.6m    |
+| Battery drain        | <5%/hr | 4.2%/hr  |
+| Cross-device success | >90%   | 100%     |
 
 Tested on Nothing Phone 2a (API 35) and Samsung Note 10+ (API 31).
 

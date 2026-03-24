@@ -2,7 +2,6 @@ package com.fyp.crowdlink.presentation.pairing
 
 import android.graphics.Bitmap
 import android.os.Build
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fyp.crowdlink.domain.model.Friend
@@ -43,7 +42,7 @@ class PairingViewModel @Inject constructor(
     val qrCodeBitmap: StateFlow<Bitmap?> = _qrCodeBitmap.asStateFlow()
     
     // StateFlow for the current device's ID
-    private val _myDeviceId = MutableStateFlow<String>("")
+    private val _myDeviceId = MutableStateFlow("")
     val myDeviceId: StateFlow<String> = _myDeviceId.asStateFlow()
     
     // StateFlow for tracking the pairing status

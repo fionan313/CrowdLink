@@ -2,7 +2,6 @@ package com.fyp.crowdlink.presentation.discovery
 
 import android.annotation.SuppressLint
 import android.content.SharedPreferences
-import android.util.Log
 import androidx.core.content.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
