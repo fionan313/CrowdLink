@@ -1,5 +1,6 @@
 package com.fyp.crowdlink.data.p2p
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -11,6 +12,7 @@ import android.net.wifi.p2p.WifiP2pInfo
 import android.net.wifi.p2p.WifiP2pManager
 import android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceInfo
 import android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceRequest
+import androidx.annotation.RequiresPermission
 import com.fyp.crowdlink.data.mesh.MeshMessageSerialiser
 import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
 import com.fyp.crowdlink.domain.model.Message
@@ -105,6 +107,7 @@ class WifiDirectManager @Inject constructor(
         )
 
         manager?.clearLocalServices(channel, object : WifiP2pManager.ActionListener {
+            @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.NEARBY_WIFI_DEVICES])
             override fun onSuccess() {
                 manager.addLocalService(channel, serviceInfo, object : WifiP2pManager.ActionListener {
                     override fun onSuccess() { Timber.tag("WifiDirect").d("Local service added: $myDeviceId") }
