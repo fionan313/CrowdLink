@@ -16,15 +16,19 @@ import com.journeyapps.barcodescanner.ScanOptions
 @Composable
 fun QRScannerScreen(
     viewModel: PairingViewModel = hiltViewModel(),
-    onScanned: (String) -> Unit
+    onScanned: (String) -> Unit,
+    onCancelled: () -> Unit
 ) {
     // Launcher for the QR scanning activity
     val launcher = rememberLauncherForActivityResult(
         contract = ScanContract()
     ) { result ->
-        result.contents?.let { scannedData ->
+        if (result.contents != null) {
             // When a QR code is successfully scanned, the data is passed to the onScanned callback
-            onScanned(scannedData)
+            onScanned(result.contents)
+        } else {
+            // If contents is null, the user cancelled the scan
+            onCancelled()
         }
     }
     

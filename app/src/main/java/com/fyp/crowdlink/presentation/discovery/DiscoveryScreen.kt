@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.fyp.crowdlink.domain.model.NearbyFriend
+import com.fyp.crowdlink.presentation.common.ConnectivityBanner
 
 @SuppressLint("MissingPermission")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,6 +39,8 @@ fun DiscoveryScreen(
     val isRelayConnected by viewModel.isRelayConnected.collectAsState()
     val isMeshActive by viewModel.isMeshActive.collectAsState()
     val forceShowRelays by viewModel.forceShowRelays.collectAsState()
+    val isBluetoothEnabled by viewModel.isBluetoothEnabled.collectAsState()
+    val isWifiEnabled by viewModel.isWifiEnabled.collectAsState()
 
     Scaffold(
         topBar = {
@@ -53,6 +56,12 @@ fun DiscoveryScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Connectivity Banner
+            ConnectivityBanner(
+                isBluetoothEnabled = isBluetoothEnabled,
+                isWifiEnabled = isWifiEnabled
+            )
+
             MeshStatusPill(isMeshActive = isMeshActive) {
                 if (isMeshActive) {
                     viewModel.stopDiscovery()

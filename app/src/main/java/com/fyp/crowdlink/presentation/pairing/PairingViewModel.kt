@@ -1,9 +1,14 @@
 package com.fyp.crowdlink.presentation.pairing
 
+import android.bluetooth.BluetoothManager
+import android.content.Context
 import android.graphics.Bitmap
 import android.os.Build
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.set
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.fyp.crowdlink.data.ble.BleScanner
 import com.fyp.crowdlink.domain.model.Friend
 import com.fyp.crowdlink.domain.model.PairingRequest
 import com.fyp.crowdlink.domain.repository.DeviceRepository
@@ -13,18 +18,13 @@ import com.fyp.crowdlink.domain.usecase.PairFriendUseCase
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import timber.log.Timber
 import javax.inject.Inject
-import androidx.core.graphics.set
-import androidx.core.graphics.createBitmap
 
 /**
  * PairingViewModel
@@ -33,12 +33,23 @@ import androidx.core.graphics.createBitmap
  */
 @HiltViewModel
 class PairingViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val userProfileRepository: UserProfileRepository,
     private val pairFriendUseCase: PairFriendUseCase,
     private val friendRepository: FriendRepository,
-    private val deviceRepository: DeviceRepository
+    private val deviceRepository: DeviceRepository,
+    private val bleScanner: BleScanner
 ) : ViewModel() {
     
+    private val bluetoothAdapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+
+    val isBluetoothEnabled: StateFlow<Boolean> = flow {
+        while (true) {
+            emit(bluetoothAdapter?.isEnabled == true)
+            delay(2000)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
     // StateFlow for the generated QR code image
     private val _qrCodeBitmap = MutableStateFlow<Bitmap?>(null)
     val qrCodeBitmap: StateFlow<Bitmap?> = _qrCodeBitmap.asStateFlow()
@@ -144,11 +155,43 @@ class PairingViewModel @Inject constructor(
                     val userProfile = userProfileRepository.getUserProfile().first()
                     val myDisplayName = userProfile?.displayName ?: "${Build.MANUFACTURER} ${Build.MODEL}"
                     
-                    deviceRepository.sendPairingRequest(
-                        targetDeviceId = friendDeviceId,
-                        senderDisplayName = myDisplayName
-                    )
-                    _pairingState.value = PairingState.AwaitingConfirmation
+                    // Ensure scanning is active before we start looking
+                    bleScanner.startDiscovery()
+                    
+                    // Retry sending pairing request until device is found or timeout
+                    val timeoutMs = 15_000L
+                    val startTime = System.currentTimeMillis()
+                    var sent = false
+
+                    while (!sent && System.currentTimeMillis() - startTime < timeoutMs) {
+                        val device = bleScanner.getDeviceById(friendDeviceId)
+                        if (device != null) {
+                            deviceRepository.sendPairingRequest(
+                                targetDeviceId = friendDeviceId,
+                                senderDisplayName = myDisplayName
+                            )
+                            sent = true
+                        } else {
+                            delay(1000)
+                        }
+                    }
+
+                    if (sent) {
+                        _pairingState.value = PairingState.AwaitingConfirmation
+                        // Timeout after 20 seconds waiting for acceptance
+                        viewModelScope.launch {
+                            delay(20_000)
+                            if (_pairingState.value is PairingState.AwaitingConfirmation) {
+                                _pairingState.value = PairingState.Error(
+                                    "Friend did not respond. Try again with both devices nearby."
+                                )
+                            }
+                        }
+                    } else {
+                        _pairingState.value = PairingState.Error(
+                            "Could not find friend nearby. Make sure both devices have CrowdLink open."
+                        )
+                    }
                 } else {
                      _pairingState.value = PairingState.Error("Invalid QR Code")
                 }

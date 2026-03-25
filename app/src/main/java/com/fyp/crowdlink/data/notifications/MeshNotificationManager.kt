@@ -244,7 +244,7 @@ class MeshNotificationManager @Inject constructor(
             "No location available."
         }
 
-        val message = "Emergency alert from $senderName. $senderName needs help. $locationPart"
+        val message = "Emergency alert from $senderName. $senderName needs help. Tap the notification to navigate to them."
 
         // Delay by 3 seconds so alarm plays first
         Handler(Looper.getMainLooper()).postDelayed({
