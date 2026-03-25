@@ -1,5 +1,6 @@
 package com.fyp.crowdlink.presentation.pairing
 
+import android.bluetooth.BluetoothManager
 import android.content.Context
 import app.cash.turbine.test
 import com.fyp.crowdlink.data.ble.BleScanner
@@ -26,6 +27,7 @@ class PairingViewModelTest {
 
     private lateinit var viewModel: PairingViewModel
     private lateinit var mockContext: Context
+    private lateinit var mockBluetoothManager: BluetoothManager
     private lateinit var mockUserProfileRepository: UserProfileRepository
     private lateinit var mockPairFriendUseCase: PairFriendUseCase
     private lateinit var mockFriendRepository: FriendRepository
@@ -41,12 +43,15 @@ class PairingViewModelTest {
         Dispatchers.setMain(testDispatcher)
 
         mockContext = mockk(relaxed = true)
+        mockBluetoothManager = mockk(relaxed = true)
         mockUserProfileRepository = mockk(relaxed = true)
         mockPairFriendUseCase = mockk(relaxed = true)
         mockFriendRepository = mockk(relaxed = true)
         mockDeviceRepository = mockk(relaxed = true)
         mockBleScanner = mockk(relaxed = true)
 
+        every { mockContext.getSystemService(Context.BLUETOOTH_SERVICE) } returns mockBluetoothManager
+        every { mockContext.getSystemService(BluetoothManager::class.java) } returns mockBluetoothManager
         every { mockUserProfileRepository.getPersistentDeviceId() } returns "my-device-id"
     }
 

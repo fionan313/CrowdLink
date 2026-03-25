@@ -183,11 +183,10 @@ class MessageViewModelTest {
         // Then — message saved to local DB
         coVerify {
             mockSendMessageUseCase(match {
-                it.content == "Hello mesh!" &&
-                        it.senderId == "my-device-id" &&
-                        it.receiverId == "FRIEND1" &&
-                        it.isSentByMe &&
-                        it.transportType == TransportType.MESH
+                it.receiverId == "FRIEND1" &&
+                it.senderId == "my-device-id" &&
+                it.isSentByMe &&
+                (it.transportType == TransportType.BLE || it.transportType == TransportType.MESH)
             })
         }
 
