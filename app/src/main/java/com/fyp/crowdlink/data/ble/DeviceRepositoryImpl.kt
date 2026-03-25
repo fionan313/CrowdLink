@@ -110,6 +110,8 @@ class DeviceRepositoryImpl @Inject constructor(
                         longitude = longitude,
                         friendId = senderId
                     )
+                    // Update last seen upon receiving an SOS
+                    friendRepository.updateLastSeen(senderId, System.currentTimeMillis())
                 } else {
                     Timber.tag("DeviceRepo").w("Ignored SOS from unpaired device: $senderId")
                 }
