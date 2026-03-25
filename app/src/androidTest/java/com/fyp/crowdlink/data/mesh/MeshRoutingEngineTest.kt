@@ -2,6 +2,7 @@ package com.fyp.crowdlink.data.mesh
 
 import android.content.SharedPreferences
 import com.fyp.crowdlink.domain.model.MeshMessage
+import com.fyp.crowdlink.domain.model.TransportType
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -30,7 +31,7 @@ class MeshRoutingEngineTest {
     @Test
     fun message_addressed_to_local_device_is_delivered() = runTest {
         var delivered: MeshMessage? = null
-        engine.onMessageForMe = { delivered = it }
+        engine.onMessageForMe = { message, _ -> delivered = message }
 
         val msg = MeshMessage(
             senderId = "device-remote",
@@ -107,7 +108,7 @@ class MeshRoutingEngineTest {
     @Test
     fun seen_cache_prevents_reprocessing() = runTest {
         var deliveryCount = 0
-        engine.onMessageForMe = { deliveryCount++ }
+        engine.onMessageForMe = { _, _ -> deliveryCount++ }
 
         val msg = MeshMessage(
             senderId = "device-a",

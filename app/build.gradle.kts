@@ -49,6 +49,8 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+            excludes += "META-INF/LICENSE.md"
+            excludes += "META-INF/LICENSE-notice.md"
         }
         jniLibs {
             // Setting useLegacyPackaging to false ensures that native libraries 
