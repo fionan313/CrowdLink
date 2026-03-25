@@ -166,6 +166,9 @@ fun AppNavHost(
                 },
                 onScanClick = {
                     navController.navigate("scanner")
+                },
+                onNavigateBack = {
+                    navController.popBackStack()
                 }
             )
         }
@@ -175,6 +178,9 @@ fun AppNavHost(
                     navController.previousBackStackEntry
                         ?.savedStateHandle
                         ?.set("scanned_qr", scannedData)
+                    navController.popBackStack()
+                },
+                onCancelled = {
                     navController.popBackStack()
                 }
             )
