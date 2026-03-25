@@ -1,6 +1,8 @@
 package com.fyp.crowdlink.presentation.pairing
 
+import android.content.Context
 import app.cash.turbine.test
+import com.fyp.crowdlink.data.ble.BleScanner
 import com.fyp.crowdlink.domain.model.Friend
 import com.fyp.crowdlink.domain.model.PairingRequest
 import com.fyp.crowdlink.domain.repository.DeviceRepository
@@ -23,10 +25,12 @@ import org.junit.Test
 class PairingViewModelTest {
 
     private lateinit var viewModel: PairingViewModel
+    private lateinit var mockContext: Context
     private lateinit var mockUserProfileRepository: UserProfileRepository
     private lateinit var mockPairFriendUseCase: PairFriendUseCase
     private lateinit var mockFriendRepository: FriendRepository
     private lateinit var mockDeviceRepository: DeviceRepository
+    private lateinit var mockBleScanner: BleScanner
 
     private val testDispatcher = UnconfinedTestDispatcher()
     private val incomingPairingFlow = MutableStateFlow<PairingRequest?>(null)
@@ -36,10 +40,12 @@ class PairingViewModelTest {
     fun setup() {
         Dispatchers.setMain(testDispatcher)
 
+        mockContext = mockk(relaxed = true)
         mockUserProfileRepository = mockk(relaxed = true)
         mockPairFriendUseCase = mockk(relaxed = true)
         mockFriendRepository = mockk(relaxed = true)
         mockDeviceRepository = mockk(relaxed = true)
+        mockBleScanner = mockk(relaxed = true)
 
         every { mockUserProfileRepository.getPersistentDeviceId() } returns "my-device-id"
     }
@@ -53,10 +59,12 @@ class PairingViewModelTest {
         every { mockDeviceRepository.incomingPairingRequest } returns incomingPairingFlow
         every { mockDeviceRepository.pairingAccepted } returns pairingAcceptedFlow
         return PairingViewModel(
+            mockContext,
             mockUserProfileRepository,
             mockPairFriendUseCase,
             mockFriendRepository,
-            mockDeviceRepository
+            mockDeviceRepository,
+            mockBleScanner
         )
     }
 
@@ -116,6 +124,8 @@ class PairingViewModelTest {
     fun `onQRScanned with valid JSON sends pairing request`() = runTest {
         viewModel = createViewModel()
         every { mockUserProfileRepository.getUserProfile() } returns flowOf(null)
+        // Ensure scanner finds the device
+        every { mockBleScanner.getDeviceById("friend-device") } returns mockk(relaxed = true)
 
         val qrData = """{"deviceId":"friend-device","displayName":"Charlie"}"""
         viewModel.onQRScanned(qrData, "Default Name")

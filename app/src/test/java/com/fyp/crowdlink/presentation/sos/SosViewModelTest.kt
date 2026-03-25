@@ -2,6 +2,8 @@ package com.fyp.crowdlink.presentation.sos
 
 import app.cash.turbine.test
 import com.fyp.crowdlink.domain.repository.DeviceRepository
+import com.fyp.crowdlink.domain.repository.FriendRepository
+import com.fyp.crowdlink.domain.repository.LocationRepository
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -16,6 +18,8 @@ class SosViewModelTest {
 
     private lateinit var viewModel: SosViewModel
     private lateinit var mockDeviceRepository: DeviceRepository
+    private lateinit var mockFriendRepository: FriendRepository
+    private lateinit var mockLocationRepository: LocationRepository
 
     private val testDispatcher = UnconfinedTestDispatcher()
 
@@ -23,7 +27,14 @@ class SosViewModelTest {
     fun setup() {
         Dispatchers.setMain(testDispatcher)
         mockDeviceRepository = mockk(relaxed = true)
-        viewModel = SosViewModel(mockDeviceRepository)
+        mockFriendRepository = mockk(relaxed = true)
+        mockLocationRepository = mockk(relaxed = true)
+        
+        viewModel = SosViewModel(
+            mockDeviceRepository,
+            mockFriendRepository,
+            mockLocationRepository
+        )
     }
 
     @After
