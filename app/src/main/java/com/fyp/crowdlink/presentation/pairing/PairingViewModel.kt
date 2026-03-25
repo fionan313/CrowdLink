@@ -8,6 +8,7 @@ import androidx.core.graphics.createBitmap
 import androidx.core.graphics.set
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.fyp.crowdlink.data.ble.BleScanner
 import com.fyp.crowdlink.domain.model.Friend
 import com.fyp.crowdlink.domain.model.PairingRequest
 import com.fyp.crowdlink.domain.repository.DeviceRepository
@@ -36,7 +37,8 @@ class PairingViewModel @Inject constructor(
     private val userProfileRepository: UserProfileRepository,
     private val pairFriendUseCase: PairFriendUseCase,
     private val friendRepository: FriendRepository,
-    private val deviceRepository: DeviceRepository
+    private val deviceRepository: DeviceRepository,
+    private val bleScanner: BleScanner
 ) : ViewModel() {
     
     private val bluetoothAdapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
@@ -153,11 +155,31 @@ class PairingViewModel @Inject constructor(
                     val userProfile = userProfileRepository.getUserProfile().first()
                     val myDisplayName = userProfile?.displayName ?: "${Build.MANUFACTURER} ${Build.MODEL}"
                     
-                    deviceRepository.sendPairingRequest(
-                        targetDeviceId = friendDeviceId,
-                        senderDisplayName = myDisplayName
-                    )
-                    _pairingState.value = PairingState.AwaitingConfirmation
+                    // Retry sending pairing request until device is found or timeout
+                    val timeoutMs = 15_000L
+                    val startTime = System.currentTimeMillis()
+                    var sent = false
+
+                    while (!sent && System.currentTimeMillis() - startTime < timeoutMs) {
+                        val device = bleScanner.getDeviceById(friendDeviceId)
+                        if (device != null) {
+                            deviceRepository.sendPairingRequest(
+                                targetDeviceId = friendDeviceId,
+                                senderDisplayName = myDisplayName
+                            )
+                            sent = true
+                        } else {
+                            delay(1000)
+                        }
+                    }
+
+                    if (sent) {
+                        _pairingState.value = PairingState.AwaitingConfirmation
+                    } else {
+                        _pairingState.value = PairingState.Error(
+                            "Could not find friend nearby. Make sure both devices have CrowdLink open."
+                        )
+                    }
                 } else {
                      _pairingState.value = PairingState.Error("Invalid QR Code")
                 }
