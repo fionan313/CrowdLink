@@ -155,6 +155,9 @@ class PairingViewModel @Inject constructor(
                     val userProfile = userProfileRepository.getUserProfile().first()
                     val myDisplayName = userProfile?.displayName ?: "${Build.MANUFACTURER} ${Build.MODEL}"
                     
+                    // Ensure scanning is active before we start looking
+                    bleScanner.startDiscovery()
+                    
                     // Retry sending pairing request until device is found or timeout
                     val timeoutMs = 15_000L
                     val startTime = System.currentTimeMillis()
@@ -175,6 +178,15 @@ class PairingViewModel @Inject constructor(
 
                     if (sent) {
                         _pairingState.value = PairingState.AwaitingConfirmation
+                        // Timeout after 20 seconds waiting for acceptance
+                        viewModelScope.launch {
+                            delay(20_000)
+                            if (_pairingState.value is PairingState.AwaitingConfirmation) {
+                                _pairingState.value = PairingState.Error(
+                                    "Friend did not respond. Try again with both devices nearby."
+                                )
+                            }
+                        }
                     } else {
                         _pairingState.value = PairingState.Error(
                             "Could not find friend nearby. Make sure both devices have CrowdLink open."

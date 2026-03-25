@@ -16,7 +16,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.fyp.crowdlink.presentation.discovery.DiscoveryViewModel
 
 /**
  * PairingScreen
@@ -28,7 +27,6 @@ import com.fyp.crowdlink.presentation.discovery.DiscoveryViewModel
 @Composable
 fun PairingScreen(
     viewModel: PairingViewModel = hiltViewModel(),
-    discoveryViewModel: DiscoveryViewModel = hiltViewModel(),
     onPairingSuccess: () -> Unit,
     onScanClick: () -> Unit,
     onNavigateBack: () -> Unit
@@ -41,9 +39,6 @@ fun PairingScreen(
     // Trigger QR generation when the screen is first launched
     LaunchedEffect(Unit) {
         viewModel.generateQRCode()
-        // Ensure BLE is active when returning from camera or entering screen
-        discoveryViewModel.startDiscovery()
-        discoveryViewModel.startAdvertising()
     }
 
     // Step 5: Show confirmation dialogue
