@@ -1,7 +1,10 @@
 package com.fyp.crowdlink.presentation.discovery
 
 import android.annotation.SuppressLint
+import android.bluetooth.BluetoothManager
+import android.content.Context
 import android.content.SharedPreferences
+import android.net.wifi.WifiManager
 import androidx.core.content.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -13,6 +16,7 @@ import com.fyp.crowdlink.domain.model.RelayNode
 import com.fyp.crowdlink.domain.repository.FriendRepository
 import com.fyp.crowdlink.domain.usecase.ShareLocationUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -20,6 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -28,6 +33,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class DiscoveryViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val deviceRepository: DeviceRepositoryImpl,
     private val relayNodeScanner: RelayNodeScanner,
     private val relayNodeConnection: RelayNodeConnection,
@@ -35,6 +41,23 @@ class DiscoveryViewModel @Inject constructor(
     private val shareLocationUseCase: ShareLocationUseCase,
     private val friendRepository: FriendRepository
 ) : ViewModel() {
+
+    private val bluetoothAdapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+    private val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+
+    val isBluetoothEnabled: StateFlow<Boolean> = flow {
+        while (true) {
+            emit(bluetoothAdapter?.isEnabled == true)
+            delay(2000)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    val isWifiEnabled: StateFlow<Boolean> = flow {
+        while (true) {
+            emit(wifiManager.isWifiEnabled)
+            delay(2000)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
     // Generate or retrieve persistent device ID
     private val myDeviceId: String by lazy {
@@ -123,10 +146,13 @@ class DiscoveryViewModel @Inject constructor(
     }
 
     @SuppressLint("MissingPermission")
-    fun startAdvertising() {
+    fun startAdvertising(myDeviceId: String) {
         deviceRepository.startAdvertising(myDeviceId)
         _isAdvertising.value = true
     }
+
+    // Overloaded for convenience since myDeviceId is internal
+    fun startAdvertising() = startAdvertising(myDeviceId)
 
     @SuppressLint("MissingPermission")
     fun stopAdvertising() {
