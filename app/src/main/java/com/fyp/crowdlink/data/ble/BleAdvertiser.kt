@@ -298,5 +298,6 @@ class BleAdvertiser @Inject constructor(
         const val PAIRING_ACCEPTED_PREFIX: Byte = 0x02
         const val UNPAIR_REQUEST_PREFIX: Byte = 0x04
         const val SOS_ALERT_PREFIX: Byte = 0x05
+        const val ENCRYPTED_PAYLOAD_PREFIX: Byte = 0xFF.toByte()
     }
 }

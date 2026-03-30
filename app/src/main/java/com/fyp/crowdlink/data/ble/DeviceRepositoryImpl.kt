@@ -1,6 +1,7 @@
 package com.fyp.crowdlink.data.ble
 
 import android.content.SharedPreferences
+import com.fyp.crowdlink.data.crypto.EncryptionManager
 import com.fyp.crowdlink.data.mesh.LocationMessageSerialiser
 import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
 import com.fyp.crowdlink.data.notifications.MeshNotificationManager
@@ -36,7 +37,8 @@ class DeviceRepositoryImpl @Inject constructor(
     private val meshRoutingEngine: MeshRoutingEngine,
     private val meshNotificationManager: MeshNotificationManager,
     private val locationSerialiser: LocationMessageSerialiser,
-    private val userProfileRepository: UserProfileRepository
+    private val userProfileRepository: UserProfileRepository,
+    private val encryptionManager: EncryptionManager
 ) : DeviceRepository {
 
     private val scope = CoroutineScope(Dispatchers.IO)
@@ -64,6 +66,9 @@ class DeviceRepositoryImpl @Inject constructor(
                 
                 if (payload.isNotEmpty()) {
                     when (payload[0]) {
+                        BleAdvertiser.ENCRYPTED_PAYLOAD_PREFIX -> {
+                            handleIncomingEncryptedMessage(senderIdString, meshMessage, transportType, payload.copyOfRange(1, payload.size))
+                        }
                         0x01.toByte() -> handleIncomingTextMessage(senderIdString, meshMessage, transportType)
                         0x03.toByte() -> handleIncomingLocationUpdate(senderIdString, payload)
                         else -> Timber.tag("DeviceRepo").w("Unknown message type: ${payload[0]}")
@@ -151,6 +156,39 @@ class DeviceRepositoryImpl @Inject constructor(
         }.onEach { result ->
             _nearbyFriends.value = result
         }.launchIn(scope)
+    }
+
+    private suspend fun handleIncomingEncryptedMessage(
+        senderId: String,
+        meshMessage: com.fyp.crowdlink.domain.model.MeshMessage,
+        transportType: TransportType,
+        ciphertext: ByteArray
+    ) {
+        val friend = friendRepository.getFriendById(senderId)
+
+        if (friend?.sharedKey == null) {
+            Timber.tag("DeviceRepo").w("No shared key for $senderId — cannot decrypt, dropping")
+            return
+        }
+
+        val decryptedPayload = try {
+            encryptionManager.decrypt(ciphertext, friend.sharedKey)
+        } catch (e: Exception) {
+            Timber.tag("DeviceRepo").e(e, "Decryption failed from $senderId — dropping")
+            return
+        }
+
+        if (decryptedPayload.isNotEmpty()) {
+            when (decryptedPayload[0]) {
+                0x01.toByte() -> handleIncomingTextMessage(
+                    senderId,
+                    meshMessage.copy(payload = decryptedPayload),
+                    transportType
+                )
+                0x03.toByte() -> handleIncomingLocationUpdate(senderId, decryptedPayload)
+                else -> Timber.tag("DeviceRepo").w("Unknown decrypted type: ${decryptedPayload[0]}")
+            }
+        }
     }
 
     private suspend fun handleIncomingTextMessage(
@@ -272,22 +310,35 @@ class DeviceRepositoryImpl @Inject constructor(
         val myLocation = locationRepository.getLastKnownLocation()
         val myDisplayName = userProfileRepository.getUserProfile().first()?.displayName ?: "Unknown"
 
-        val json = JSONObject().apply {
-            put("senderId", meshRoutingEngine.localDeviceId)
-            put("senderName", myDisplayName)
-            myLocation?.let {
-                put("lat", it.latitude)
-                put("lon", it.longitude)
+        friends.forEach { friend ->
+            val device = bleScanner.getDeviceById(friend.deviceId) ?: return@forEach
+
+            val json = JSONObject().apply {
+                put("senderId", meshRoutingEngine.localDeviceId)
+                put("senderName", myDisplayName)
+                myLocation?.let {
+                    put("lat", it.latitude)
+                    put("lon", it.longitude)
+                }
+            }.toString().toByteArray(Charsets.UTF_8)
+
+            val plaintext = byteArrayOf(BleAdvertiser.SOS_ALERT_PREFIX) + json
+
+            val payload = if (friend.sharedKey != null) {
+                try {
+                    val ciphertext = encryptionManager.encrypt(plaintext, friend.sharedKey)
+                    byteArrayOf(BleAdvertiser.ENCRYPTED_PAYLOAD_PREFIX) + ciphertext
+                } catch (e: Exception) {
+                    Timber.tag("DeviceRepo").e(e, "SOS encryption failed for ${friend.deviceId}")
+                    plaintext
+                }
+            } else {
+                plaintext
             }
-        }.toString().toByteArray(Charsets.UTF_8)
 
-        val payload = byteArrayOf(BleAdvertiser.SOS_ALERT_PREFIX) + json
-
-        // Send to every known device in range
-        bleScanner.getDiscoveredBluetoothDevices().forEach { device ->
             bleScanner.sendData(payload, device)
         }
 
-        Timber.tag("DeviceRepo").d("SOS broadcast sent to ${friends.size} potential recipients")
+        Timber.tag("DeviceRepo").d("SOS sent to ${friends.size} paired friends")
     }
 }

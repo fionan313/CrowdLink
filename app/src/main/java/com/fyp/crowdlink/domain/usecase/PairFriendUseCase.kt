@@ -21,11 +21,11 @@ class PairFriendUseCase @Inject constructor(
      * @param displayName The name to display for the friend.
      */
     suspend operator fun invoke(deviceId: String, displayName: String) {
-        // Create a new Friend object. Public key is initially null until exchanged.
+        // Create a new Friend object. sharedKey is initially null until exchanged.
         val friend = Friend(
             deviceId = deviceId,
             displayName = displayName,
-            publicKey = null  // Will add in Week 8
+            sharedKey = null  // Will add in Week 8
         )
         // Persist the new friend to the database via the repository
         friendRepository.addFriend(friend)
