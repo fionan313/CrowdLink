@@ -106,19 +106,58 @@ class DeviceRepositoryImpl @Inject constructor(
             }
         }
 
-        bleAdvertiser.onSosAlertReceived = { senderId, senderName, latitude, longitude ->
+        bleAdvertiser.onSosAlertReceived = { deviceAddress, rawPayload ->
             scope.launch {
-                if (friendRepository.isFriendPaired(senderId)) {
+                // Strip 0xFF prefix if encrypted
+                val ciphertext = if (rawPayload.isNotEmpty() &&
+                    rawPayload[0] == BleAdvertiser.ENCRYPTED_PAYLOAD_PREFIX) {
+                    rawPayload.copyOfRange(1, rawPayload.size)
+                } else {
+                    rawPayload
+                }
+
+                // Find the friend whose key decrypts this payload
+                val friends = friendRepository.getAllFriends().first()
+                var senderId: String? = null
+                var decryptedPayload: ByteArray? = null
+
+                for (friend in friends) {
+                    if (friend.sharedKey == null) continue
+                    val attempt = try {
+                        encryptionManager.decrypt(ciphertext, friend.sharedKey)
+                    } catch (e: Exception) { null }
+                    if (attempt != null) {
+                        decryptedPayload = attempt
+                        senderId = friend.deviceId
+                        break
+                    }
+                }
+
+                if (decryptedPayload == null || senderId == null) {
+                    Timber.tag("DeviceRepo").w("SOS could not be decrypted — dropping")
+                    return@launch
+                }
+
+                if (!friendRepository.isFriendPaired(senderId)) {
+                    Timber.tag("DeviceRepo").w("Ignored SOS from unpaired device: $senderId")
+                    return@launch
+                }
+
+                try {
+                    val json = JSONObject(decryptedPayload.decodeToString(startIndex = 1))
+                    val senderName = json.getString("senderName")
+                    val latitude = if (json.has("lat")) json.getDouble("lat") else null
+                    val longitude = if (json.has("lon")) json.getDouble("lon") else null
+
                     meshNotificationManager.showSosNotification(
                         senderName = senderName,
                         latitude = latitude,
                         longitude = longitude,
                         friendId = senderId
                     )
-                    // Update last seen upon receiving an SOS
                     friendRepository.updateLastSeen(senderId, System.currentTimeMillis())
-                } else {
-                    Timber.tag("DeviceRepo").w("Ignored SOS from unpaired device: $senderId")
+                } catch (e: Exception) {
+                    Timber.tag("DeviceRepo").e(e, "Failed to parse SOS payload from $senderId")
                 }
             }
         }

@@ -226,7 +226,7 @@ class PairingViewModel @Inject constructor(
             friendRepository.addFriend(Friend(
                 deviceId = request.senderDeviceId,
                 displayName = request.senderDisplayName,
-                sharedKey = scannedSharedKey,
+                sharedKey = scannedSharedKey ?: pendingSharedKey,
                 pairedAt = System.currentTimeMillis()
             ))
             // Send acceptance back so Device A saves Device B

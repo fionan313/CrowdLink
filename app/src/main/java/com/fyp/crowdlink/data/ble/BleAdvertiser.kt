@@ -52,7 +52,7 @@ class BleAdvertiser @Inject constructor(
     var onPairingRequestReceived: ((PairingRequest) -> Unit)? = null
     var onPairingAcceptedReceived: ((String) -> Unit)? = null
     var onUnpairRequestReceived: ((String) -> Unit)? = null
-    var onSosAlertReceived: ((senderId: String, senderName: String, latitude: Double?, longitude: Double?) -> Unit)? = null
+    var onSosAlertReceived: ((deviceAddress: String, rawPayload: ByteArray) -> Unit)? = null
 
     // GATT server callback handles incoming mesh packets
     @SuppressLint("MissingPermission")
@@ -87,7 +87,11 @@ class BleAdvertiser @Inject constructor(
                         PAIRING_REQUEST_PREFIX -> handlePairingRequest(value)
                         PAIRING_ACCEPTED_PREFIX -> handlePairingAccepted(value)
                         UNPAIR_REQUEST_PREFIX -> handleUnpairRequest(value)
-                        SOS_ALERT_PREFIX -> handleSosAlert(value)
+                        SOS_ALERT_PREFIX -> handleSosAlert(device, value)
+                        ENCRYPTED_PAYLOAD_PREFIX -> {
+                            onSosAlertReceived?.invoke(device.address, value)
+                            Timber.tag("BLE_ADVERTISER").d("Encrypted direct payload from ${device.address}")
+                        }
                         else -> handleMeshMessage(value)
                     }
                 }
@@ -146,18 +150,9 @@ class BleAdvertiser @Inject constructor(
         }
     }
 
-    private fun handleSosAlert(value: ByteArray) {
-        try {
-            val json = JSONObject(value.decodeToString(startIndex = 1))
-            val senderId = json.getString("senderId")
-            val senderName = json.getString("senderName")
-            val latitude = if (json.has("lat")) json.getDouble("lat") else null
-            val longitude = if (json.has("lon")) json.getDouble("lon") else null
-            onSosAlertReceived?.invoke(senderId, senderName, latitude, longitude)
-            Timber.tag("BLE_ADVERTISER").d("SOS alert received from $senderName")
-        } catch (e: Exception) {
-            Timber.tag("BLE_ADVERTISER").e(e, "Failed to parse SOS alert")
-        }
+    private fun handleSosAlert(device: BluetoothDevice, value: ByteArray) {
+        onSosAlertReceived?.invoke(device.address, value)
+        Timber.tag("BLE_ADVERTISER").d("SOS alert received (raw) from ${device.address}")
     }
 
     private fun handleMeshMessage(value: ByteArray) {
