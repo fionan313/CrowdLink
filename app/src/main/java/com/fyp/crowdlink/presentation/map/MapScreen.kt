@@ -46,6 +46,7 @@ import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.Point
 import timber.log.Timber
+import kotlin.math.absoluteValue
 import kotlin.math.cos
 import androidx.core.graphics.createBitmap
 
@@ -125,6 +126,17 @@ fun MapScreen(
                                         .e("Failed to load location arrow drawable")
                                 }
 
+                                // Load the person pin drawable and add it to the style
+                                val personDrawable = AppCompatResources.getDrawable(ctx, R.drawable.ic_person_pin)
+                                if (personDrawable != null) {
+                                    val size = 96
+                                    val personBitmap = createBitmap(size, size)
+                                    val canvas = Canvas(personBitmap)
+                                    personDrawable.setBounds(0, 0, size, size)
+                                    personDrawable.draw(canvas)
+                                    style.addImage("person-pin", personBitmap, true) // SDF for tinting
+                                }
+
                                 // Add a GeoJsonSource for friend pins
                                 style.addSource(GeoJsonSource("friend-pins-source"))
 
@@ -133,9 +145,13 @@ fun MapScreen(
                                     SymbolLayer("friend-pins-layer", "friend-pins-source").apply {
                                         setFilter(Expression.neq(Expression.get("type"), Expression.literal("me")))
                                         setProperties(
+                                            PropertyFactory.iconImage("person-pin"),
+                                            PropertyFactory.iconSize(1.2f),
+                                            PropertyFactory.iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+                                            PropertyFactory.iconColor(Expression.get("color")),
                                             PropertyFactory.textField(Expression.get("name")),
                                             PropertyFactory.textSize(14f),
-                                            PropertyFactory.textColor("#FF5722"),
+                                            PropertyFactory.textColor(Expression.get("color")),
                                             PropertyFactory.textAnchor(Property.TEXT_ANCHOR_TOP),
                                             PropertyFactory.iconAllowOverlap(true),
                                             PropertyFactory.textAllowOverlap(true)
@@ -216,6 +232,7 @@ fun MapScreen(
                 val source = style.getSourceAs<GeoJsonSource>("friend-pins-source") ?: return@LaunchedEffect
 
                 val features = mutableListOf<Feature>()
+                val palette = listOf("#E53935", "#8E24AA", "#1E88E5", "#00897B", "#F4511E", "#6D4C41", "#039BE5", "#7CB342")
 
                 // My location pin with heading
                 myLocation?.let { loc ->
@@ -232,6 +249,7 @@ fun MapScreen(
                 }
 
                 friendPins.forEach { pin ->
+                    val colorIndex = pin.friend.deviceId.hashCode().absoluteValue % palette.size
                     features.add(
                         Feature.fromGeometry(
                             Point.fromLngLat(pin.location.longitude, pin.location.latitude),
@@ -239,6 +257,7 @@ fun MapScreen(
                                 addProperty("name", pin.friend.displayName)
                                 addProperty("type", "friend")
                                 addProperty("friendId", pin.friend.deviceId)
+                                addProperty("color", palette[colorIndex])
                             }
                         )
                     )

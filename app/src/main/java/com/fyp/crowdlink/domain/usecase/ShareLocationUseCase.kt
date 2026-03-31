@@ -1,6 +1,5 @@
 package com.fyp.crowdlink.domain.usecase
 
-import android.util.Log
 import com.fyp.crowdlink.data.ble.BleAdvertiser
 import com.fyp.crowdlink.data.crypto.EncryptionManager
 import com.fyp.crowdlink.data.mesh.LocationMessageSerialiser
@@ -10,6 +9,7 @@ import com.fyp.crowdlink.domain.repository.LocationRepository
 import com.fyp.crowdlink.domain.repository.MessageRepository
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import timber.log.Timber
 import javax.inject.Inject
 
 /**
@@ -45,7 +45,8 @@ class ShareLocationUseCase @Inject constructor(
                 val ciphertext = encryptionManager.encrypt(serialisedLocation, friend.sharedKey)
                 byteArrayOf(BleAdvertiser.ENCRYPTED_PAYLOAD_PREFIX) + ciphertext
             } catch (e: Exception) {
-                Log.e("ShareLocationUseCase", "Encryption failed — sending plaintext fallback", e)
+                Timber.tag("ShareLocationUseCase")
+                    .e(e, "Encryption failed — sending plaintext fallback")
                 serialisedLocation
             }
         } else {
