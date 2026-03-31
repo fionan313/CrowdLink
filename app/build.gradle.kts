@@ -130,4 +130,7 @@ dependencies {
     
     // MapLibre
     implementation(libs.maplibre.android)
+
+    // Networking
+    implementation(libs.okhttp)
 }

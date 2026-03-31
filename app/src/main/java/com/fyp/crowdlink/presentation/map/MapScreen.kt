@@ -19,7 +19,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.fyp.crowdlink.R
 import com.google.gson.JsonObject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.json.JSONObject
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
@@ -57,6 +60,7 @@ private const val RASTER_STYLE_JSON = """
       "attribution": "© OpenStreetMap contributors"
     }
   },
+  "glyphs": "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
   "layers": [{
     "id": "osm",
     "type": "raster",
@@ -83,6 +87,7 @@ fun MapScreen(
     val selectedPin = friendPins.firstOrNull { it.friend.deviceId == selectedFriendId }
 
     var mapboxMap by remember { mutableStateOf<MapLibreMap?>(null) }
+    var mapReady by remember { mutableStateOf(false) }
     
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -90,12 +95,6 @@ fun MapScreen(
     // Handle initial friend selection from deep link
     LaunchedEffect(initialFriendId) {
         viewModel.selectFriendOnLoad(initialFriendId)
-    }
-
-    // Initialise MapLibre — must be called before MapView is created
-    // MapLibre requires a token string but accepts empty string for OSM
-    LaunchedEffect(Unit) {
-        MapLibre.getInstance(context)
     }
 
     Scaffold(
@@ -115,12 +114,10 @@ fun MapScreen(
                                 // Load the arrow drawable and add it to the style
                                 val arrowDrawable = AppCompatResources.getDrawable(ctx, R.drawable.ic_location_arrow)
                                 if (arrowDrawable != null) {
-                                    val arrowBitmap = createBitmap(
-                                        arrowDrawable.intrinsicWidth,
-                                        arrowDrawable.intrinsicHeight
-                                    )
+                                    val size = 96 // px — hardcode a sensible size for vectors
+                                    val arrowBitmap = createBitmap(size, size)
                                     val canvas = Canvas(arrowBitmap)
-                                    arrowDrawable.setBounds(0, 0, canvas.width, canvas.height)
+                                    arrowDrawable.setBounds(0, 0, size, size)
                                     arrowDrawable.draw(canvas)
                                     style.addImage("location-arrow", arrowBitmap)
                                 } else {
@@ -192,6 +189,7 @@ fun MapScreen(
                                         onComplete = { viewModel.onTileCachingComplete() }
                                     )
                                 }
+                                mapReady = true
                             }
 
                             map.addOnMapClickListener { point ->
@@ -212,7 +210,8 @@ fun MapScreen(
             )
 
             // Update pins whenever friendPins changes
-            LaunchedEffect(friendPins, mapboxMap, myLocation, myHeading) {
+            LaunchedEffect(friendPins, mapReady, myLocation, myHeading) {
+                if (!mapReady) return@LaunchedEffect
                 val style = mapboxMap?.style ?: return@LaunchedEffect
                 val source = style.getSourceAs<GeoJsonSource>("friend-pins-source") ?: return@LaunchedEffect
 
@@ -411,6 +410,22 @@ private fun cacheTilesForArea(
                                 if (status.isComplete) {
                                     offlineRegion.setDownloadState(OfflineRegion.STATE_INACTIVE)
                                     onComplete()
+                                    
+                                    // Warm glyph cache
+                                    val client = OkHttpClient()
+                                    val font = "Open Sans Regular,Arial Unicode MS Regular"
+                                    val ranges = listOf("0-255", "256-511", "512-767")
+                                    
+                                    kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                                        ranges.forEach { range ->
+                                            try {
+                                                val request = Request.Builder()
+                                                    .url("https://demotiles.maplibre.org/font/$font/$range.pbf")
+                                                    .build()
+                                                client.newCall(request).execute().close()
+                                            } catch (_: Exception) {}
+                                        }
+                                    }
                                 }
                             }
                             override fun onError(error: OfflineRegionError) {

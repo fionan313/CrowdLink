@@ -36,6 +36,7 @@ annotationJvm = "1.9.1"
 maplibre = "13.0.1"
 appcompat = "1.7.1"
 json = "20251224"
+okhttp = "4.12.0"
 
 
 [libraries]
@@ -105,6 +106,7 @@ androidx-annotation-jvm = { group = "androidx.annotation", name = "annotation-jv
 maplibre-android = { module = "org.maplibre.gl:android-sdk", version.ref = "maplibre" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 json = { group = "org.json", name = "json", version.ref = "json" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
