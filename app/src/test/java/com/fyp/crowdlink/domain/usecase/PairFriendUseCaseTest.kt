@@ -33,13 +33,13 @@ class PairFriendUseCaseTest {
     }
 
     @Test
-    fun `invoke creates friend with null publicKey`() = runTest {
+    fun `invoke creates friend with null sharedKey`() = runTest {
         val capturedFriend = slot<Friend>()
         coEvery { mockFriendRepository.addFriend(capture(capturedFriend)) } just Runs
 
         useCase("device-123", "Bob")
 
-        assertNull(capturedFriend.captured.publicKey)
+        assertNull(capturedFriend.captured.sharedKey)
     }
 
     @Test

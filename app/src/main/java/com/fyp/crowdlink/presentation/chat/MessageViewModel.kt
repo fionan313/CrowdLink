@@ -3,12 +3,15 @@ package com.fyp.crowdlink.presentation.chat
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.fyp.crowdlink.data.ble.BleAdvertiser
 import com.fyp.crowdlink.data.ble.BleScanner
+import com.fyp.crowdlink.data.crypto.EncryptionManager
 import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
 import com.fyp.crowdlink.data.p2p.WifiDirectManager
 import com.fyp.crowdlink.domain.model.Message
 import com.fyp.crowdlink.domain.model.MessageStatus
 import com.fyp.crowdlink.domain.model.TransportType
+import com.fyp.crowdlink.domain.repository.FriendRepository
 import com.fyp.crowdlink.domain.repository.MessageRepository
 import com.fyp.crowdlink.domain.repository.UserProfileRepository
 import com.fyp.crowdlink.domain.usecase.GetMessagesUseCase
@@ -20,6 +23,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -41,6 +45,8 @@ class MessageViewModel @Inject constructor(
     private val userProfileRepository: UserProfileRepository,
     private val meshRoutingEngine: MeshRoutingEngine,
     private val messageRepository: MessageRepository,
+    private val friendRepository: FriendRepository,
+    private val encryptionManager: EncryptionManager,
     private val sharedPreferences: SharedPreferences
 ) : ViewModel() {
 
@@ -147,7 +153,20 @@ class MessageViewModel @Inject constructor(
             val localId = sendMessageUseCase(localMessage)
 
             // 2. Hand off to MeshRoutingEngine with type prefix (0x01 for text)
-            val payload = byteArrayOf(0x01) + content.toByteArray(Charsets.UTF_8)
+            val plaintext = byteArrayOf(0x01) + content.toByteArray(Charsets.UTF_8)
+            val friend = friendRepository.getFriendById(friendId)
+
+            val payload = if (friend?.sharedKey != null) {
+                try {
+                    val ciphertext = encryptionManager.encrypt(plaintext, friend.sharedKey)
+                    byteArrayOf(BleAdvertiser.ENCRYPTED_PAYLOAD_PREFIX) + ciphertext
+                } catch (e: Exception) {
+                    Timber.tag("MessageViewModel").e(e, "Encryption failed — sending plaintext fallback")
+                    plaintext
+                }
+            } else {
+                plaintext
+            }
 
             val meshMessage = meshRoutingEngine.createOutbound(
                 senderId = myId,

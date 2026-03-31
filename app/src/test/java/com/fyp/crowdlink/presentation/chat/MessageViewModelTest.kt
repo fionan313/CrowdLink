@@ -5,6 +5,7 @@ import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pInfo
 import app.cash.turbine.test
 import com.fyp.crowdlink.data.ble.BleScanner
+import com.fyp.crowdlink.data.crypto.EncryptionManager
 import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
 import com.fyp.crowdlink.data.p2p.WifiDirectManager
 import com.fyp.crowdlink.domain.model.DiscoveredDevice
@@ -12,6 +13,7 @@ import com.fyp.crowdlink.domain.model.Message
 import com.fyp.crowdlink.domain.model.MeshMessage
 import com.fyp.crowdlink.domain.model.MessageStatus
 import com.fyp.crowdlink.domain.model.TransportType
+import com.fyp.crowdlink.domain.repository.FriendRepository
 import com.fyp.crowdlink.domain.repository.MessageRepository
 import com.fyp.crowdlink.domain.repository.UserProfileRepository
 import com.fyp.crowdlink.domain.usecase.GetMessagesUseCase
@@ -39,6 +41,8 @@ class MessageViewModelTest {
     private lateinit var mockUserProfileRepository: UserProfileRepository
     private lateinit var mockMeshRoutingEngine: MeshRoutingEngine
     private lateinit var mockMessageRepository: MessageRepository
+    private lateinit var mockFriendRepository: FriendRepository
+    private lateinit var mockEncryptionManager: EncryptionManager
     private lateinit var mockSharedPreferences: SharedPreferences
 
     private val testDispatcher = UnconfinedTestDispatcher()
@@ -58,6 +62,8 @@ class MessageViewModelTest {
         mockUserProfileRepository = mockk(relaxed = true)
         mockMeshRoutingEngine = mockk(relaxed = true)
         mockMessageRepository = mockk(relaxed = true)
+        mockFriendRepository = mockk(relaxed = true)
+        mockEncryptionManager = mockk(relaxed = true)
         mockSharedPreferences = mockk(relaxed = true)
 
         every { mockWifiDirectManager.discoveredFriends } returns discoveredFriendsFlow
@@ -75,6 +81,8 @@ class MessageViewModelTest {
             mockUserProfileRepository,
             mockMeshRoutingEngine,
             mockMessageRepository,
+            mockFriendRepository,
+            mockEncryptionManager,
             mockSharedPreferences
         )
     }

@@ -4,6 +4,7 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import app.cash.turbine.test
 import com.fyp.crowdlink.data.ble.BleScanner
+import com.fyp.crowdlink.data.crypto.EncryptionManager
 import com.fyp.crowdlink.domain.model.Friend
 import com.fyp.crowdlink.domain.model.PairingRequest
 import com.fyp.crowdlink.domain.repository.DeviceRepository
@@ -33,6 +34,7 @@ class PairingViewModelTest {
     private lateinit var mockFriendRepository: FriendRepository
     private lateinit var mockDeviceRepository: DeviceRepository
     private lateinit var mockBleScanner: BleScanner
+    private lateinit var mockEncryptionManager: EncryptionManager
 
     private val testDispatcher = UnconfinedTestDispatcher()
     private val incomingPairingFlow = MutableStateFlow<PairingRequest?>(null)
@@ -49,6 +51,7 @@ class PairingViewModelTest {
         mockFriendRepository = mockk(relaxed = true)
         mockDeviceRepository = mockk(relaxed = true)
         mockBleScanner = mockk(relaxed = true)
+        mockEncryptionManager = mockk(relaxed = true)
 
         every { mockContext.getSystemService(Context.BLUETOOTH_SERVICE) } returns mockBluetoothManager
         every { mockContext.getSystemService(BluetoothManager::class.java) } returns mockBluetoothManager
@@ -69,7 +72,8 @@ class PairingViewModelTest {
             mockPairFriendUseCase,
             mockFriendRepository,
             mockDeviceRepository,
-            mockBleScanner
+            mockBleScanner,
+            mockEncryptionManager
         )
     }
 
