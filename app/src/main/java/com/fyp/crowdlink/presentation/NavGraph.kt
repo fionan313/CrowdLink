@@ -216,8 +216,8 @@ fun AppNavHost(
                         }
                     }
                 },
-                onNavigateToCompass = {
-                    navController.navigate("compass/$friendId/$senderName") {
+                onNavigateToMap = {
+                    navController.navigate("map?friendId=$friendId&friendName=$senderName") {
                         popUpTo("sos_alert/$friendId/$senderName/${latitude ?: 0.0}/${longitude ?: 0.0}/$receivedAt") {
                             inclusive = true
                         }
@@ -287,10 +287,11 @@ fun MainScreen(
                             onClick = {
                                 navController.navigate(destination.route) {
                                     popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
+                                        inclusive = false
+                                        saveState = false
                                     }
                                     launchSingleTop = true
-                                    restoreState = true
+                                    restoreState = false
                                 }
                             },
                             icon = {

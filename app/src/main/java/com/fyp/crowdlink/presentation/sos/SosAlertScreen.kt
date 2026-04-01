@@ -31,7 +31,7 @@ fun SosAlertScreen(
     longitude: Double?,
     receivedAt: Long,
     onNavigateToChat: () -> Unit,
-    onNavigateToCompass: () -> Unit,
+    onNavigateToMap: () -> Unit,
     onDismiss: () -> Unit,
     viewModel: SosViewModel = hiltViewModel()
 ) {
@@ -163,7 +163,7 @@ fun SosAlertScreen(
                 ) {
                     if (latitude != null && longitude != null) {
                         Button(
-                            onClick = onNavigateToCompass,
+                            onClick = onNavigateToMap,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(64.dp),
