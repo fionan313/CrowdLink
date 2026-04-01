@@ -9,6 +9,7 @@ import androidx.core.graphics.set
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fyp.crowdlink.data.ble.BleScanner
+import com.fyp.crowdlink.data.crypto.EncryptionManager
 import com.fyp.crowdlink.domain.model.Friend
 import com.fyp.crowdlink.domain.model.PairingRequest
 import com.fyp.crowdlink.domain.repository.DeviceRepository
@@ -38,7 +39,8 @@ class PairingViewModel @Inject constructor(
     private val pairFriendUseCase: PairFriendUseCase,
     private val friendRepository: FriendRepository,
     private val deviceRepository: DeviceRepository,
-    private val bleScanner: BleScanner
+    private val bleScanner: BleScanner,
+    private val encryptionManager: EncryptionManager
 ) : ViewModel() {
     
     private val bluetoothAdapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
@@ -66,6 +68,7 @@ class PairingViewModel @Inject constructor(
     
     private var pendingFriendDeviceId: String? = null
     private var pendingFriendName: String? = null
+    private var pendingSharedKey: String? = null
 
     init {
         loadDeviceId()
@@ -82,13 +85,17 @@ class PairingViewModel @Inject constructor(
                 Timber.tag("PairingViewModel").d("Pairing accepted by $acceptedDeviceId")
                 if (acceptedDeviceId == pendingFriendDeviceId) {
                     viewModelScope.launch {
-                        friendRepository.addFriend(Friend(
-                            deviceId = acceptedDeviceId,
-                            displayName = pendingFriendName ?: "Unknown Friend",
-                            pairedAt = System.currentTimeMillis()
-                        ))
+                        // Only save here if not already saved (Device B path)
+                        val existing = friendRepository.getFriendById(acceptedDeviceId)
+                        if (existing == null) {
+                            friendRepository.addFriend(Friend(
+                                deviceId = acceptedDeviceId,
+                                displayName = pendingFriendName ?: "Unknown Friend",
+                                sharedKey = scannedSharedKey,
+                                pairedAt = System.currentTimeMillis()
+                            ))
+                        }
                         _pairingState.value = PairingState.Success
-                        Timber.tag("PairingViewModel").d("Pairing SUCCESS for $acceptedDeviceId")
                     }
                 }
             }
@@ -102,9 +109,15 @@ class PairingViewModel @Inject constructor(
                 val deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}"
                 val displayName = userProfile?.displayName?.ifBlank { deviceModel } ?: deviceModel
                 
+                val sharedKey = encryptionManager.generateSharedKey()
+                pendingSharedKey = sharedKey
+                pendingFriendDeviceId = null  // invalidate any stale pending pairing
+                pendingFriendName = null
+
                 val qrData = JSONObject().apply {
                     put("deviceId", _myDeviceId.value)
                     put("displayName", displayName)
+                    put("sharedKey", sharedKey)
                     put("timestamp", System.currentTimeMillis())
                 }.toString()
                 
@@ -129,12 +142,15 @@ class PairingViewModel @Inject constructor(
         }
     }
 
+    private var scannedSharedKey: String? = null
+
     fun onQRScanned(scannedData: String, defaultName: String) {
         viewModelScope.launch {
             _pairingState.value = PairingState.Pairing
             try {
                 var friendDeviceId = ""
                 var friendName = defaultName
+                scannedSharedKey = null
 
                 try {
                     val json = JSONObject(scannedData)
@@ -143,6 +159,9 @@ class PairingViewModel @Inject constructor(
                     }
                     if (json.has("displayName")) {
                         friendName = json.getString("displayName")
+                    }
+                    if (json.has("sharedKey")) {
+                        scannedSharedKey = json.getString("sharedKey")
                     }
                 } catch (_: Exception) {
                     friendDeviceId = scannedData
@@ -207,6 +226,7 @@ class PairingViewModel @Inject constructor(
             friendRepository.addFriend(Friend(
                 deviceId = request.senderDeviceId,
                 displayName = request.senderDisplayName,
+                sharedKey = scannedSharedKey ?: pendingSharedKey,
                 pairedAt = System.currentTimeMillis()
             ))
             // Send acceptance back so Device A saves Device B

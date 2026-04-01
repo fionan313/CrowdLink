@@ -1,11 +1,15 @@
 package com.fyp.crowdlink.domain.usecase
 
+import com.fyp.crowdlink.data.ble.BleAdvertiser
+import com.fyp.crowdlink.data.crypto.EncryptionManager
 import com.fyp.crowdlink.data.mesh.LocationMessageSerialiser
 import com.fyp.crowdlink.data.mesh.MeshRoutingEngine
+import com.fyp.crowdlink.domain.repository.FriendRepository
 import com.fyp.crowdlink.domain.repository.LocationRepository
 import com.fyp.crowdlink.domain.repository.MessageRepository
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import timber.log.Timber
 import javax.inject.Inject
 
 /**
@@ -17,7 +21,9 @@ class ShareLocationUseCase @Inject constructor(
     private val locationRepository: LocationRepository,
     private val messageRepository: MessageRepository,
     private val meshRoutingEngine: MeshRoutingEngine,
-    private val locationSerialiser: LocationMessageSerialiser
+    private val locationSerialiser: LocationMessageSerialiser,
+    private val encryptionManager: EncryptionManager,
+    private val friendRepository: FriendRepository
 ) {
     suspend operator fun invoke(friendDeviceId: String) {
         // Prefer a fresh fix with acceptable accuracy
@@ -32,10 +38,25 @@ class ShareLocationUseCase @Inject constructor(
 
         val serialisedLocation = locationSerialiser.serialize(myLocation)
 
+        val friend = friendRepository.getFriendById(friendDeviceId)
+
+        val payload = if (friend?.sharedKey != null) {
+            try {
+                val ciphertext = encryptionManager.encrypt(serialisedLocation, friend.sharedKey)
+                byteArrayOf(BleAdvertiser.ENCRYPTED_PAYLOAD_PREFIX) + ciphertext
+            } catch (e: Exception) {
+                Timber.tag("ShareLocationUseCase")
+                    .e(e, "Encryption failed — sending plaintext fallback")
+                serialisedLocation
+            }
+        } else {
+            serialisedLocation
+        }
+
         val meshMessage = meshRoutingEngine.createOutbound(
             senderId = meshRoutingEngine.localDeviceId,
             recipientId = friendDeviceId,
-            payload = serialisedLocation
+            payload = payload
         )
 
         messageRepository.addToRelayQueue(meshMessage)

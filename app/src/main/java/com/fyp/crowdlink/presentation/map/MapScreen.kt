@@ -19,7 +19,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.fyp.crowdlink.R
 import com.google.gson.JsonObject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.json.JSONObject
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
@@ -43,6 +46,7 @@ import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.Point
 import timber.log.Timber
+import kotlin.math.absoluteValue
 import kotlin.math.cos
 import androidx.core.graphics.createBitmap
 
@@ -57,6 +61,7 @@ private const val RASTER_STYLE_JSON = """
       "attribution": "© OpenStreetMap contributors"
     }
   },
+  "glyphs": "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
   "layers": [{
     "id": "osm",
     "type": "raster",
@@ -83,6 +88,7 @@ fun MapScreen(
     val selectedPin = friendPins.firstOrNull { it.friend.deviceId == selectedFriendId }
 
     var mapboxMap by remember { mutableStateOf<MapLibreMap?>(null) }
+    var mapReady by remember { mutableStateOf(false) }
     
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -90,12 +96,6 @@ fun MapScreen(
     // Handle initial friend selection from deep link
     LaunchedEffect(initialFriendId) {
         viewModel.selectFriendOnLoad(initialFriendId)
-    }
-
-    // Initialise MapLibre — must be called before MapView is created
-    // MapLibre requires a token string but accepts empty string for OSM
-    LaunchedEffect(Unit) {
-        MapLibre.getInstance(context)
     }
 
     Scaffold(
@@ -115,17 +115,26 @@ fun MapScreen(
                                 // Load the arrow drawable and add it to the style
                                 val arrowDrawable = AppCompatResources.getDrawable(ctx, R.drawable.ic_location_arrow)
                                 if (arrowDrawable != null) {
-                                    val arrowBitmap = createBitmap(
-                                        arrowDrawable.intrinsicWidth,
-                                        arrowDrawable.intrinsicHeight
-                                    )
+                                    val size = 96 // px — hardcode a sensible size for vectors
+                                    val arrowBitmap = createBitmap(size, size)
                                     val canvas = Canvas(arrowBitmap)
-                                    arrowDrawable.setBounds(0, 0, canvas.width, canvas.height)
+                                    arrowDrawable.setBounds(0, 0, size, size)
                                     arrowDrawable.draw(canvas)
                                     style.addImage("location-arrow", arrowBitmap)
                                 } else {
                                     Timber.tag("MapScreen")
                                         .e("Failed to load location arrow drawable")
+                                }
+
+                                // Load the person pin drawable and add it to the style
+                                val personDrawable = AppCompatResources.getDrawable(ctx, R.drawable.ic_person_pin)
+                                if (personDrawable != null) {
+                                    val size = 96
+                                    val personBitmap = createBitmap(size, size)
+                                    val canvas = Canvas(personBitmap)
+                                    personDrawable.setBounds(0, 0, size, size)
+                                    personDrawable.draw(canvas)
+                                    style.addImage("person-pin", personBitmap, true) // SDF for tinting
                                 }
 
                                 // Add a GeoJsonSource for friend pins
@@ -136,9 +145,13 @@ fun MapScreen(
                                     SymbolLayer("friend-pins-layer", "friend-pins-source").apply {
                                         setFilter(Expression.neq(Expression.get("type"), Expression.literal("me")))
                                         setProperties(
+                                            PropertyFactory.iconImage("person-pin"),
+                                            PropertyFactory.iconSize(1.2f),
+                                            PropertyFactory.iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+                                            PropertyFactory.iconColor(Expression.get("color")),
                                             PropertyFactory.textField(Expression.get("name")),
                                             PropertyFactory.textSize(14f),
-                                            PropertyFactory.textColor("#FF5722"),
+                                            PropertyFactory.textColor(Expression.get("color")),
                                             PropertyFactory.textAnchor(Property.TEXT_ANCHOR_TOP),
                                             PropertyFactory.iconAllowOverlap(true),
                                             PropertyFactory.textAllowOverlap(true)
@@ -192,6 +205,7 @@ fun MapScreen(
                                         onComplete = { viewModel.onTileCachingComplete() }
                                     )
                                 }
+                                mapReady = true
                             }
 
                             map.addOnMapClickListener { point ->
@@ -212,11 +226,13 @@ fun MapScreen(
             )
 
             // Update pins whenever friendPins changes
-            LaunchedEffect(friendPins, mapboxMap, myLocation, myHeading) {
+            LaunchedEffect(friendPins, mapReady, myLocation, myHeading) {
+                if (!mapReady) return@LaunchedEffect
                 val style = mapboxMap?.style ?: return@LaunchedEffect
                 val source = style.getSourceAs<GeoJsonSource>("friend-pins-source") ?: return@LaunchedEffect
 
                 val features = mutableListOf<Feature>()
+                val palette = listOf("#E53935", "#8E24AA", "#1E88E5", "#00897B", "#F4511E", "#6D4C41", "#039BE5", "#7CB342")
 
                 // My location pin with heading
                 myLocation?.let { loc ->
@@ -233,6 +249,7 @@ fun MapScreen(
                 }
 
                 friendPins.forEach { pin ->
+                    val colorIndex = pin.friend.deviceId.hashCode().absoluteValue % palette.size
                     features.add(
                         Feature.fromGeometry(
                             Point.fromLngLat(pin.location.longitude, pin.location.latitude),
@@ -240,6 +257,7 @@ fun MapScreen(
                                 addProperty("name", pin.friend.displayName)
                                 addProperty("type", "friend")
                                 addProperty("friendId", pin.friend.deviceId)
+                                addProperty("color", palette[colorIndex])
                             }
                         )
                     )
@@ -411,6 +429,22 @@ private fun cacheTilesForArea(
                                 if (status.isComplete) {
                                     offlineRegion.setDownloadState(OfflineRegion.STATE_INACTIVE)
                                     onComplete()
+                                    
+                                    // Warm glyph cache
+                                    val client = OkHttpClient()
+                                    val font = "Open Sans Regular,Arial Unicode MS Regular"
+                                    val ranges = listOf("0-255", "256-511", "512-767")
+                                    
+                                    kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                                        ranges.forEach { range ->
+                                            try {
+                                                val request = Request.Builder()
+                                                    .url("https://demotiles.maplibre.org/font/$font/$range.pbf")
+                                                    .build()
+                                                client.newCall(request).execute().close()
+                                            } catch (_: Exception) {}
+                                        }
+                                    }
                                 }
                             }
                             override fun onError(error: OfflineRegionError) {

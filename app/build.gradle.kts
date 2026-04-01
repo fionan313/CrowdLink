@@ -15,8 +15,8 @@ android {
         applicationId = "com.fyp.crowdlink"
         minSdk = 28
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -130,4 +130,7 @@ dependencies {
     
     // MapLibre
     implementation(libs.maplibre.android)
+
+    // Networking
+    implementation(libs.okhttp)
 }

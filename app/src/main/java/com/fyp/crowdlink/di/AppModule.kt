@@ -7,6 +7,7 @@ import androidx.room.Room
 import com.fyp.crowdlink.data.ble.BleAdvertiser
 import com.fyp.crowdlink.data.ble.BleScanner
 import com.fyp.crowdlink.data.ble.DeviceRepositoryImpl
+import com.fyp.crowdlink.data.crypto.EncryptionManager
 import com.fyp.crowdlink.data.local.AppDatabase
 import com.fyp.crowdlink.data.local.dao.*
 import com.fyp.crowdlink.data.mesh.LocationMessageSerialiser
@@ -134,7 +135,8 @@ object AppModule {
         meshRoutingEngine: MeshRoutingEngine,
         meshNotificationManager: MeshNotificationManager,
         locationSerialiser: LocationMessageSerialiser,
-        userProfileRepository: UserProfileRepository
+        userProfileRepository: UserProfileRepository,
+        encryptionManager: EncryptionManager
     ): DeviceRepository {
         return DeviceRepositoryImpl(
             bleScanner,
@@ -146,7 +148,8 @@ object AppModule {
             meshRoutingEngine,
             meshNotificationManager,
             locationSerialiser,
-            userProfileRepository
+            userProfileRepository,
+            encryptionManager
         )
     }
 
