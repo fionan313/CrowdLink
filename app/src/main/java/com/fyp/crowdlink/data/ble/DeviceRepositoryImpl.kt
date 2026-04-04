@@ -48,7 +48,7 @@ class DeviceRepositoryImpl @Inject constructor(
     private val _incomingPairingRequest = MutableStateFlow<PairingRequest?>(null)
     override val incomingPairingRequest: StateFlow<PairingRequest?> = _incomingPairingRequest.asStateFlow()
 
-    private val _pairingAccepted = MutableSharedFlow<String>(replay = 0)
+    private val _pairingAccepted = MutableSharedFlow<String>(replay = 1)
     override val pairingAccepted: SharedFlow<String> = _pairingAccepted.asSharedFlow()
 
     private val _nearbyFriends = MutableStateFlow<List<NearbyFriend>>(emptyList())

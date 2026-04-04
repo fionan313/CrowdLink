@@ -69,7 +69,7 @@ class BleAdvertiser @Inject constructor(
 
         override fun onServiceAdded(status: Int, service: BluetoothGattService?) {
             Timber.tag("BLE_ADVERTISER")
-                .d("GATT service added status=$status uuid=${service?.uuid}")
+                .d("GATT service added status=$status uuid=${service?.uuid} at=${System.currentTimeMillis()}")
         }
 
         override fun onCharacteristicWriteRequest(
@@ -111,6 +111,7 @@ class BleAdvertiser @Inject constructor(
     }
 
     private fun handlePairingRequest(value: ByteArray) {
+        Timber.tag("BLE_ADVERTISER").d("handlePairingRequest fired at=${System.currentTimeMillis()}")
         try {
             // Skip prefix byte
             val jsonString = value.decodeToString(startIndex = 1)
@@ -213,6 +214,7 @@ class BleAdvertiser @Inject constructor(
 
         // start GATT server before advertising so it's ready when peers connect
         gattServer = bluetoothManager.openGattServer(context, gattServerCallback)
+        Timber.tag("BLE_ADVERTISER").d("Adding GATT service at=${System.currentTimeMillis()}")
         gattServer?.addService(buildGattService())
         Timber.tag("BLE_ADVERTISER").d("GATT server started")
 
@@ -247,6 +249,7 @@ class BleAdvertiser @Inject constructor(
         } catch (e: SecurityException) {
             Timber.tag("BLE_ADVERTISER").e(e, "Permission denied")
         }
+        Timber.tag("BLE_ADVERTISER").d("startAdvertising() completed at=${System.currentTimeMillis()}")
     }
 
     @SuppressLint("MissingPermission")

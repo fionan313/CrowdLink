@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+    id("jacoco")
 }
 
 android {
@@ -28,6 +29,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        debug {
+            enableUnitTestCoverage = true
         }
     }
     compileOptions {
@@ -58,6 +62,10 @@ android {
             // for 16 KB page size support.
             useLegacyPackaging = false
         }
+    }
+
+    testCoverage {
+        jacocoVersion = "0.8.11"
     }
 }
 

@@ -38,7 +38,7 @@ class PairingViewModelTest {
 
     private val testDispatcher = UnconfinedTestDispatcher()
     private val incomingPairingFlow = MutableStateFlow<PairingRequest?>(null)
-    private val pairingAcceptedFlow = MutableSharedFlow<String>(replay = 0)
+    private val pairingAcceptedFlow = MutableSharedFlow<String>(replay = 1)
 
     @Before
     fun setup() {
