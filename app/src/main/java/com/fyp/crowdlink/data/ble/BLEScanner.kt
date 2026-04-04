@@ -68,6 +68,11 @@ class BleScanner @Inject constructor(
     private val knownDevices = mutableMapOf<String, BluetoothDevice>()
     private val deviceIdToAddress = mutableMapOf<String, String>()
 
+    private val connectionQueue: ArrayDeque<Pair<BluetoothDevice, ByteArray>> = ArrayDeque()
+    private var isConnecting = false
+    private val connectionFailureCount = mutableMapOf<String, Int>()
+    private val connectionBackoffUntil = mutableMapOf<String, Long>()
+
     @SuppressLint("MissingPermission")
     private fun BluetoothGatt.writeChar(characteristic: BluetoothGattCharacteristic, bytes: ByteArray) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -90,6 +95,17 @@ class BleScanner @Inject constructor(
                     activeConnections.remove(deviceAddress)
                     pendingMessages.remove(deviceAddress)
                     gatt.close()
+                    
+                    val failCount = (connectionFailureCount[deviceAddress] ?: 0) + 1
+                    connectionFailureCount[deviceAddress] = failCount
+                    if (failCount >= MAX_FAILURES_BEFORE_BACKOFF) {
+                        connectionBackoffUntil[deviceAddress] = System.currentTimeMillis() + BACKOFF_DURATION_MS
+                        connectionFailureCount[deviceAddress] = 0
+                        Timber.tag("BLE_SCANNER").w("Device $deviceAddress backing off for 30s after $failCount failures")
+                    }
+
+                    isConnecting = false
+                    processConnectionQueue()
                     return
                 }
                 when (newState) {
@@ -102,6 +118,8 @@ class BleScanner @Inject constructor(
                         activeConnections.remove(deviceAddress)
                         pendingMessages.remove(deviceAddress)
                         gatt.close()
+                        isConnecting = false
+                        processConnectionQueue()
                     }
                 }
             }
@@ -128,6 +146,10 @@ class BleScanner @Inject constructor(
                 }
 
                 activeConnections[deviceAddress] = gatt
+                connectionFailureCount[deviceAddress] = 0
+                connectionBackoffUntil[deviceAddress] = 0L
+                isConnecting = false
+                processConnectionQueue()
                 Timber.tag("BLE_SCANNER").d("Services discovered on $deviceAddress, flushing queue")
                 flushPendingMessages(deviceAddress, gatt, characteristic)
             }
@@ -157,8 +179,40 @@ class BleScanner @Inject constructor(
             return
         }
 
+        connectionQueue.addLast(Pair(device, data))
+        processConnectionQueue()
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun processConnectionQueue() {
+        if (isConnecting) return
+        val next = connectionQueue.removeFirstOrNull() ?: return
+        val (device, data) = next
+        val address = device.address
+
+        val backoffUntil = connectionBackoffUntil[address] ?: 0L
+        if (System.currentTimeMillis() < backoffUntil) {
+            Timber.tag("BLE_SCANNER").d("Skipping $address — in backoff period")
+            processConnectionQueue()
+            return
+        }
+
+        if (activeConnections.containsKey(address)) {
+            val gatt = activeConnections[address]!!
+            val characteristic = gatt
+                .getService(BleAdvertiser.SERVICE_UUID)
+                ?.getCharacteristic(BleAdvertiser.MESH_CHARACTERISTIC_UUID) ?: run {
+                processConnectionQueue()
+                return
+            }
+            gatt.writeChar(characteristic, data)
+            processConnectionQueue()
+            return
+        }
+        isConnecting = true
         knownDevices[address] = device
         pendingMessages.getOrPut(address) { mutableListOf() }.add(data)
+        Timber.tag("BLE_SCANNER").d("Connecting to $address from queue")
         device.connectGatt(context, false, buildGattCallback(address))
     }
 
@@ -340,5 +394,7 @@ class BleScanner @Inject constructor(
 
     companion object {
         private const val RSSI_SAMPLE_SIZE = 10
+        private const val MAX_FAILURES_BEFORE_BACKOFF = 3
+        private const val BACKOFF_DURATION_MS = 30_000L
     }
 }

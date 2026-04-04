@@ -50,6 +50,7 @@ fun ChatScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0.dp),
         topBar = {
             TopAppBar(
                 title = {
@@ -80,6 +81,7 @@ fun ChatScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .imePadding()
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Message List Area
@@ -147,13 +149,14 @@ fun ChatScreen(
 
 @Composable
 fun ChatEmptyState(friendName: String) {
+    val icon = Icons.AutoMirrored.Filled.Chat
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.padding(horizontal = 40.dp)
     ) {
         Icon(
-            imageVector = Icons.AutoMirrored.Filled.Chat,
+            imageVector = icon,
             contentDescription = null,
             modifier = Modifier.size(64.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
