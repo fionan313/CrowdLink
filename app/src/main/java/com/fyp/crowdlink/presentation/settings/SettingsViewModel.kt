@@ -59,6 +59,9 @@ class SettingsViewModel @Inject constructor(
     private val _forceShowRelays = MutableStateFlow(sharedPreferences.getBoolean("force_show_relays", false))
     val forceShowRelays: StateFlow<Boolean> = _forceShowRelays.asStateFlow()
 
+    private val _indoorOverride = MutableStateFlow(sharedPreferences.getBoolean("indoor_override", false))
+    val indoorOverride: StateFlow<Boolean> = _indoorOverride.asStateFlow()
+
     private val _wifiDirectMode = MutableStateFlow(sharedPreferences.getBoolean("wifi_direct_mode", false))
     val wifiDirectMode: StateFlow<Boolean> = _wifiDirectMode.asStateFlow()
 
@@ -145,6 +148,11 @@ class SettingsViewModel @Inject constructor(
     fun setForceShowRelays(enabled: Boolean) {
         sharedPreferences.edit { putBoolean("force_show_relays", enabled) }
         _forceShowRelays.value = enabled
+    }
+
+    fun setIndoorOverride(enabled: Boolean) {
+        sharedPreferences.edit { putBoolean("indoor_override", enabled) }
+        _indoorOverride.value = enabled
     }
 
     fun setWifiDirectMode(enabled: Boolean) {

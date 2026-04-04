@@ -27,6 +27,7 @@ fun SettingsScreen(
     val ghostMode by viewModel.ghostMode.collectAsState()
     val locationSharing by viewModel.locationSharing.collectAsState()
     val forceShowRelays by viewModel.forceShowRelays.collectAsState()
+    val indoorOverride by viewModel.indoorOverride.collectAsState()
     val wifiDirectMode by viewModel.wifiDirectMode.collectAsState()
 
     val pairedFriendsCount by viewModel.pairedFriendsCount.collectAsState()
@@ -265,6 +266,13 @@ fun SettingsScreen(
                 subtitle = "Always show the relay node banner on Nearby screen",
                 checked = forceShowRelays,
                 onCheckedChange = { viewModel.setForceShowRelays(it) }
+            )
+            SettingsToggleItem(
+                icon = Icons.Default.HomeWork,
+                title = "Force indoor mode",
+                subtitle = "Always show RSSI indoor screen on compass, ignoring GPS",
+                checked = indoorOverride,
+                onCheckedChange = { viewModel.setIndoorOverride(it) }
             )
             SettingsNavigationItem(
                 icon = Icons.Default.RestartAlt,

@@ -43,6 +43,7 @@ fun CompassScreen(
     LaunchedEffect(Unit) {
         permissionState.launchMultiplePermissionRequest()
         viewModel.setFriendId(friendId)
+        viewModel.refreshIndoorOverride()
     }
 
     // Share location every 30 seconds while on this screen
@@ -66,11 +67,11 @@ fun CompassScreen(
                 }
             )
         }
-    ) { padding ->
+    ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(paddingValues),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {

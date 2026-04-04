@@ -1,5 +1,6 @@
 package com.fyp.crowdlink.presentation.compass
 
+import android.content.SharedPreferences
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -22,7 +23,8 @@ class CompassViewModel @Inject constructor(
     private val locationRepository: LocationRepository,
     private val sensorManager: SensorManager,
     private val bleScanner: BleScanner,
-    private val shareLocationUseCase: ShareLocationUseCase
+    private val shareLocationUseCase: ShareLocationUseCase,
+    private val sharedPreferences: SharedPreferences
 ) : ViewModel(), SensorEventListener {
 
     private val _myLocation = locationRepository.getMyLocation().stateIn(
@@ -47,6 +49,10 @@ class CompassViewModel @Inject constructor(
     private val _rssiDistance = MutableStateFlow<Double?>(null)
     val rssiDistance: StateFlow<Double?> = _rssiDistance.asStateFlow()
 
+    private val _indoorOverride = MutableStateFlow(
+        sharedPreferences.getBoolean("indoor_override", false)
+    )
+
     // Smoothing sensors
     private var gravity: FloatArray? = null
     private var geomagnetic: FloatArray? = null
@@ -61,7 +67,7 @@ class CompassViewModel @Inject constructor(
         sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI)
         sensorManager.registerListener(this, magnetometer, SensorManager.SENSOR_DELAY_UI)
 
-        combine(_myLocation, _friendLocation) { myLoc, friendLoc ->
+        combine(_myLocation, _friendLocation, _indoorOverride) { myLoc, friendLoc, forceIndoor ->
             if (myLoc != null && friendLoc != null) {
                 val results = FloatArray(1)
                 Location.distanceBetween(
@@ -88,7 +94,7 @@ class CompassViewModel @Inject constructor(
                 }
 
                 val isStale = System.currentTimeMillis() - friendLoc.timestamp > 60000
-                _isGpsAvailable.value = myLoc.accuracy < 50f && !isStale
+                _isGpsAvailable.value = !forceIndoor && myLoc.accuracy < 50f && !isStale
             } else {
                 _distanceMetres.value = null
                 _bearingToFriend.value = null
@@ -115,6 +121,10 @@ class CompassViewModel @Inject constructor(
                 _friendLocation.value = it
             }
         }
+    }
+
+    fun refreshIndoorOverride() {
+        _indoorOverride.value = sharedPreferences.getBoolean("indoor_override", false)
     }
 
     fun shareLocation() {
