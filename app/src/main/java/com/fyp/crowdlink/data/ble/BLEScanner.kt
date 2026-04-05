@@ -81,6 +81,39 @@ class BleScanner @Inject constructor(
     private val connectionFailureCount = mutableMapOf<String, Int>()
     private val connectionBackoffUntil = mutableMapOf<String, Long>()
 
+    init {
+        scope.launch {
+            while (true) {
+                delay(5000)
+                cleanUpOldDevices()
+            }
+        }
+    }
+
+    private fun cleanUpOldDevices() {
+        val now = System.currentTimeMillis()
+        val timeout = 15_000L // 15 seconds
+        
+        val currentList = _discoveredDevices.value
+        val filtered = currentList.filter { now - it.lastSeen < timeout }
+        
+        if (filtered.size != currentList.size) {
+            _discoveredDevices.value = filtered
+            
+            // Also clean up local caches for devices that are gone
+            val goneDeviceIds = currentList.map { it.deviceId } - filtered.map { it.deviceId }.toSet()
+            goneDeviceIds.forEach { deviceId ->
+                deviceCache.remove(deviceId)
+                deviceIdToAddress.remove(deviceId)?.let { address ->
+                    // Only remove if not actively connected
+                    if (!activeConnections.containsKey(address)) {
+                        knownDevices.remove(address)
+                    }
+                }
+            }
+        }
+    }
+
     @SuppressLint("MissingPermission")
     private fun BluetoothGatt.writeChar(characteristic: BluetoothGattCharacteristic, bytes: ByteArray) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

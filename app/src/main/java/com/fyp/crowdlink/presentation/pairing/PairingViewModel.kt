@@ -69,6 +69,12 @@ class PairingViewModel @Inject constructor(
     private val _showDebugInfo = MutableStateFlow(sharedPreferences.getBoolean("show_pairing_debug", false))
     val showDebugInfo: StateFlow<Boolean> = _showDebugInfo.asStateFlow()
 
+    private val preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+        if (key == "show_pairing_debug") {
+            _showDebugInfo.value = prefs.getBoolean(key, false)
+        }
+    }
+
     val incomingPairingRequest: StateFlow<PairingRequest?> = deviceRepository.incomingPairingRequest
     
     val isGattServerReady: StateFlow<Boolean> = deviceRepository.isGattServerReady
@@ -104,6 +110,12 @@ class PairingViewModel @Inject constructor(
     init {
         loadDeviceId()
         observePairingAccepted()
+        sharedPreferences.registerOnSharedPreferenceChangeListener(preferenceListener)
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        sharedPreferences.unregisterOnSharedPreferenceChangeListener(preferenceListener)
     }
     
     private fun loadDeviceId() {
