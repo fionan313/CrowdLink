@@ -1,5 +1,6 @@
 package com.fyp.crowdlink.data.ble
 
+import android.bluetooth.BluetoothDevice
 import android.content.SharedPreferences
 import com.fyp.crowdlink.data.crypto.EncryptionManager
 import com.fyp.crowdlink.data.mesh.LocationMessageSerialiser
@@ -19,6 +20,7 @@ import com.fyp.crowdlink.domain.repository.MessageRepository
 import com.fyp.crowdlink.domain.repository.UserProfileRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -45,8 +47,12 @@ class DeviceRepositoryImpl @Inject constructor(
 
     override val discoveredDevices: StateFlow<List<DiscoveredDevice>> = bleScanner.discoveredDevices
 
+    override val isGattServerReady: StateFlow<Boolean> = bleAdvertiser.isGattServerReady
+
     private val _incomingPairingRequest = MutableStateFlow<PairingRequest?>(null)
     override val incomingPairingRequest: StateFlow<PairingRequest?> = _incomingPairingRequest.asStateFlow()
+
+    override val lastGattError: StateFlow<Pair<Int, Long>?> = bleScanner.lastGattError
 
     private val _pairingAccepted = MutableSharedFlow<String>(replay = 1)
     override val pairingAccepted: SharedFlow<String> = _pairingAccepted.asSharedFlow()
@@ -286,7 +292,7 @@ class DeviceRepositoryImpl @Inject constructor(
     override fun stopAdvertising() = bleAdvertiser.stopAdvertising()
     override suspend fun getPairedFriends(): List<Friend> = friendRepository.getAllFriends().first()
 
-    override fun sendPairingRequest(targetDeviceId: String, senderDisplayName: String) {
+    override fun sendPairingRequest(targetDeviceId: String, senderDisplayName: String, sharedKey: String?) {
         val device = bleScanner.getDeviceById(targetDeviceId)
         if (device == null) {
             Timber.tag("DeviceRepo")
@@ -297,6 +303,7 @@ class DeviceRepositoryImpl @Inject constructor(
         val payload = JSONObject().apply {
             put("senderId", meshRoutingEngine.localDeviceId)
             put("senderName", senderDisplayName)
+            put("sharedKey", sharedKey ?: "")
         }.toString().toByteArray(Charsets.UTF_8)
 
         val finalPayload = ByteArray(payload.size + 1)
@@ -307,17 +314,26 @@ class DeviceRepositoryImpl @Inject constructor(
     }
 
     override fun sendPairingAccepted(targetDeviceId: String) {
-        val device = bleScanner.getDeviceById(targetDeviceId) ?: return
-
-        val payload = JSONObject().apply {
-            put("senderId", meshRoutingEngine.localDeviceId)
-        }.toString().toByteArray(Charsets.UTF_8)
-
-        val finalPayload = ByteArray(payload.size + 1)
-        finalPayload[0] = BleAdvertiser.PAIRING_ACCEPTED_PREFIX
-        System.arraycopy(payload, 0, finalPayload, 1, payload.size)
-
-        bleScanner.sendData(finalPayload, device)
+        scope.launch {
+            var device: BluetoothDevice? = null
+            repeat(5) { attempt ->
+                device = bleScanner.getDeviceById(targetDeviceId)
+                if (device != null) return@repeat
+                Timber.tag("DeviceRepo").d("sendPairingAccepted: device not found, retry ${attempt + 1}/5")
+                delay(1000)
+            }
+            if (device == null) {
+                Timber.tag("DeviceRepo").e("sendPairingAccepted: $targetDeviceId not found after 5 retries")
+                return@launch
+            }
+            val payload = JSONObject().apply {
+                put("senderId", meshRoutingEngine.localDeviceId)
+            }.toString().toByteArray(Charsets.UTF_8)
+            val finalPayload = ByteArray(payload.size + 1)
+            finalPayload[0] = BleAdvertiser.PAIRING_ACCEPTED_PREFIX
+            System.arraycopy(payload, 0, finalPayload, 1, payload.size)
+            bleScanner.sendData(finalPayload, device!!)
+        }
     }
 
     override fun sendUnpairNotification(targetDeviceId: String) {

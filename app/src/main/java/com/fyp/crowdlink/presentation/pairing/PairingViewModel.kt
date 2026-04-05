@@ -66,6 +66,32 @@ class PairingViewModel @Inject constructor(
 
     val incomingPairingRequest: StateFlow<PairingRequest?> = deviceRepository.incomingPairingRequest
     
+    val isGattServerReady: StateFlow<Boolean> = deviceRepository.isGattServerReady
+    
+    val lastGattError: StateFlow<Pair<Int, Long>?> = deviceRepository.lastGattError
+    
+    val debugInfo: StateFlow<String> = combine(
+        isGattServerReady,
+        _pairingState,
+        incomingPairingRequest,
+        lastGattError
+    ) { gattReady, state, request, gattError ->
+        val sb = StringBuilder()
+        sb.append("GATT Server: ${if (gattReady) "READY" else "NOT READY"}\n")
+        sb.append("Local SharedKey: ${if (pendingSharedKey != null) "SET" else "NULL"}\n")
+        sb.append("Scanned SharedKey: ${if (scannedSharedKey != null) "SET" else "NULL"}\n")
+        if (request != null) {
+            sb.append("Incoming SharedKey: ${if (request.sharedKey != null) "SET" else "NULL"}\n")
+        }
+        if (gattError != null) {
+            val (code, time) = gattError
+            val secondsAgo = (System.currentTimeMillis() - time) / 1000
+            sb.append("Last GATT Error: $code (${secondsAgo}s ago)")
+            if (code == 133) sb.append(" (GATT_ERROR - try toggling BT)")
+        }
+        sb.toString()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+
     private var pendingFriendDeviceId: String? = null
     private var pendingFriendName: String? = null
     private var pendingSharedKey: String? = null
@@ -187,7 +213,8 @@ class PairingViewModel @Inject constructor(
                         if (device != null) {
                             deviceRepository.sendPairingRequest(
                                 targetDeviceId = friendDeviceId,
-                                senderDisplayName = myDisplayName
+                                senderDisplayName = myDisplayName,
+                                sharedKey = scannedSharedKey
                             )
                             sent = true
                         } else {
@@ -226,7 +253,7 @@ class PairingViewModel @Inject constructor(
             friendRepository.addFriend(Friend(
                 deviceId = request.senderDeviceId,
                 displayName = request.senderDisplayName,
-                sharedKey = scannedSharedKey ?: pendingSharedKey,
+                sharedKey = request.sharedKey ?: scannedSharedKey ?: pendingSharedKey,
                 pairedAt = System.currentTimeMillis()
             ))
             // Send acceptance back so Device A saves Device B

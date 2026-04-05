@@ -15,7 +15,11 @@ interface DeviceRepository {
     
     val discoveredDevices: StateFlow<List<DiscoveredDevice>>
 
+    val isGattServerReady: StateFlow<Boolean>
+
     val incomingPairingRequest: StateFlow<PairingRequest?>
+
+    val lastGattError: StateFlow<Pair<Int, Long>?>
 
     val pairingAccepted: SharedFlow<String>
 
@@ -32,7 +36,7 @@ interface DeviceRepository {
     /**
      * Sends a pairing request to a target device over BLE.
      */
-    fun sendPairingRequest(targetDeviceId: String, senderDisplayName: String)
+    fun sendPairingRequest(targetDeviceId: String, senderDisplayName: String, sharedKey: String?)
     
     /**
      * Sends a pairing acceptance back to the requester.

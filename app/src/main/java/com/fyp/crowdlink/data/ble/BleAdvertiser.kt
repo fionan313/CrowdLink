@@ -23,6 +23,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import timber.log.Timber
@@ -46,6 +49,9 @@ class BleAdvertiser @Inject constructor(
     private val bluetoothAdapter: BluetoothAdapter? = bluetoothManager.adapter
 
     private var isAdvertising = false
+    private val _isGattServerReady = MutableStateFlow(false)
+    val isGattServerReady: StateFlow<Boolean> = _isGattServerReady.asStateFlow()
+
     private var gattServer: BluetoothGattServer? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -70,6 +76,10 @@ class BleAdvertiser @Inject constructor(
         override fun onServiceAdded(status: Int, service: BluetoothGattService?) {
             Timber.tag("BLE_ADVERTISER")
                 .d("GATT service added status=$status uuid=${service?.uuid} at=${System.currentTimeMillis()}")
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                _isGattServerReady.value = true
+                startLeAdvertising()
+            }
         }
 
         override fun onCharacteristicWriteRequest(
@@ -116,9 +126,13 @@ class BleAdvertiser @Inject constructor(
             // Skip prefix byte
             val jsonString = value.decodeToString(startIndex = 1)
             val json = JSONObject(jsonString)
+            val sharedKey = if (json.has("sharedKey") && json.getString("sharedKey").isNotEmpty()) {
+                json.getString("sharedKey")
+            } else null
             val request = PairingRequest(
                 senderDeviceId = json.getString("senderId"),
-                senderDisplayName = json.getString("senderName")
+                senderDisplayName = json.getString("senderName"),
+                sharedKey = sharedKey
             )
             onPairingRequestReceived?.invoke(request)
             Timber.tag("BLE_ADVERTISER")
@@ -212,11 +226,22 @@ class BleAdvertiser @Inject constructor(
             stopAdvertising()
         }
 
+        // Store device ID for startLeAdvertising
+        this.lastMyDeviceId = myDeviceId
+
         // start GATT server before advertising so it's ready when peers connect
         gattServer = bluetoothManager.openGattServer(context, gattServerCallback)
         Timber.tag("BLE_ADVERTISER").d("Adding GATT service at=${System.currentTimeMillis()}")
         gattServer?.addService(buildGattService())
         Timber.tag("BLE_ADVERTISER").d("GATT server started")
+    }
+
+    private var lastMyDeviceId: String? = null
+
+    @SuppressLint("MissingPermission")
+    private fun startLeAdvertising() {
+        val myDeviceId = lastMyDeviceId ?: return
+        val advertiser = bluetoothAdapter?.bluetoothLeAdvertiser ?: return
 
         // setConnectable(true) so peers can connect for mesh relay
         val settings = AdvertiseSettings.Builder()
@@ -249,7 +274,6 @@ class BleAdvertiser @Inject constructor(
         } catch (e: SecurityException) {
             Timber.tag("BLE_ADVERTISER").e(e, "Permission denied")
         }
-        Timber.tag("BLE_ADVERTISER").d("startAdvertising() completed at=${System.currentTimeMillis()}")
     }
 
     @SuppressLint("MissingPermission")
@@ -259,6 +283,7 @@ class BleAdvertiser @Inject constructor(
             gattServer?.close()      // close GATT server alongside advertising
             gattServer = null
             isAdvertising = false
+            _isGattServerReady.value = false
             Timber.tag("BLE_ADVERTISER").d("Advertising and GATT server stopped")
         } catch (e: SecurityException) {
             Timber.tag("BLE_ADVERTISER").e(e, "Permission denied when stopping")

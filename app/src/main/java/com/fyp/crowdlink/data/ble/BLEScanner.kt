@@ -23,12 +23,16 @@ import com.fyp.crowdlink.domain.model.MeshMessage
 import com.fyp.crowdlink.domain.repository.MessageRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.nio.ByteBuffer
 import java.util.UUID
@@ -60,6 +64,10 @@ class BleScanner @Inject constructor(
     private val _discoveredDevices = MutableStateFlow<List<DiscoveredDevice>>(emptyList())
     val discoveredDevices: StateFlow<List<DiscoveredDevice>> = _discoveredDevices.asStateFlow()
 
+    private val _lastGattError = MutableStateFlow<Pair<Int, Long>?>(null)
+    val lastGattError: StateFlow<Pair<Int, Long>?> = _lastGattError.asStateFlow()
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val deviceCache = mutableMapOf<String, MutableList<Int>>()
     private var isScanning = false
 
@@ -86,47 +94,95 @@ class BleScanner @Inject constructor(
     }
 
     @SuppressLint("MissingPermission")
+    private fun BluetoothGatt.refreshDeviceCache(): Boolean {
+        return try {
+            val refreshMethod = this.javaClass.getMethod("refresh")
+            val result = refreshMethod.invoke(this) as? Boolean
+            result ?: false
+        } catch (e: Exception) {
+            Timber.tag("BLE_SCANNER").w("GATT cache refresh not available: ${e.message}")
+            false
+        }
+    }
+
+    @SuppressLint("MissingPermission")
     private fun buildGattCallback(deviceAddress: String): BluetoothGattCallback {
         return object : BluetoothGattCallback() {
 
             override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-                if (status != BluetoothGatt.GATT_SUCCESS) {
-                    Timber.tag("BLE_SCANNER").w("GATT connection failed for $deviceAddress status=$status")
-                    activeConnections.remove(deviceAddress)
-                    pendingMessages.remove(deviceAddress)
-                    gatt.close()
-                    
-                    val failCount = (connectionFailureCount[deviceAddress] ?: 0) + 1
-                    connectionFailureCount[deviceAddress] = failCount
-                    if (failCount >= MAX_FAILURES_BEFORE_BACKOFF) {
-                        connectionBackoffUntil[deviceAddress] = System.currentTimeMillis() + BACKOFF_DURATION_MS
-                        connectionFailureCount[deviceAddress] = 0
-                        Timber.tag("BLE_SCANNER").w("Device $deviceAddress backing off for 30s after $failCount failures")
-                    }
-
-                    isConnecting = false
-                    processConnectionQueue()
-                    return
-                }
-                when (newState) {
-                    BluetoothProfile.STATE_CONNECTED -> {
-                        Timber.tag("BLE_SCANNER").d("GATT connected to $deviceAddress")
-                        gatt.requestMtu(512)
-                    }
-                    BluetoothProfile.STATE_DISCONNECTED -> {
-                        Timber.tag("BLE_SCANNER").d("GATT disconnected from $deviceAddress")
+                scope.launch {
+                    if (status != BluetoothGatt.GATT_SUCCESS) {
+                        _lastGattError.value = status to System.currentTimeMillis()
+                        Timber.tag("BLE_SCANNER").w("GATT connection failed for $deviceAddress status=$status")
+                        
                         activeConnections.remove(deviceAddress)
-                        pendingMessages.remove(deviceAddress)
-                        gatt.close()
+                        
+                        // Robust cleanup: disconnect -> delay -> close
+                        try {
+                            gatt.disconnect()
+                            delay(600)
+                            gatt.close()
+                        } catch (e: Exception) {
+                            Timber.tag("BLE_SCANNER").e(e, "Error during GATT cleanup")
+                        }
+
+                        // Exponential backoff retry logic for Root Causes 1 & 2
+                        val failCount = (connectionFailureCount[deviceAddress] ?: 0) + 1
+                        connectionFailureCount[deviceAddress] = failCount
+                        
+                        val messages = pendingMessages.remove(deviceAddress) ?: emptyList<ByteArray>()
+                        
+                        if (failCount < MAX_FAILURES_BEFORE_BACKOFF) {
+                            val backoff = 2000L * (1L shl (failCount - 1))
+                            connectionBackoffUntil[deviceAddress] = System.currentTimeMillis() + backoff
+                            Timber.tag("BLE_SCANNER").d("Retrying $deviceAddress in ${backoff}ms (attempt $failCount)")
+                            
+                            val device = knownDevices[deviceAddress]
+                            if (device != null) {
+                                // Put messages back at the front of the queue
+                                messages.asReversed().forEach { connectionQueue.addFirst(device to it) }
+                            }
+                        } else {
+                            connectionBackoffUntil[deviceAddress] = System.currentTimeMillis() + BACKOFF_DURATION_MS
+                            connectionFailureCount[deviceAddress] = 0
+                            Timber.tag("BLE_SCANNER").w("Device $deviceAddress reached max failures. Backing off for 30s.")
+                        }
+
                         isConnecting = false
                         processConnectionQueue()
+                        return@launch
+                    }
+
+                    when (newState) {
+                        BluetoothProfile.STATE_CONNECTED -> {
+                            Timber.tag("BLE_SCANNER").d("GATT connected to $deviceAddress")
+                            // Refresh cache to avoid Root Cause 3 (GATT cache corruption)
+                            gatt.refreshDeviceCache()
+                            gatt.requestMtu(512)
+                        }
+                        BluetoothProfile.STATE_DISCONNECTED -> {
+                            Timber.tag("BLE_SCANNER").d("GATT disconnected from $deviceAddress")
+                            activeConnections.remove(deviceAddress)
+                            pendingMessages.remove(deviceAddress)
+                            
+                            try {
+                                gatt.close()
+                            } catch (e: Exception) {}
+                            
+                            delay(600)
+                            isConnecting = false
+                            processConnectionQueue()
+                        }
                     }
                 }
             }
 
             override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
                 Timber.tag("BLE_SCANNER").d("MTU changed to $mtu for $deviceAddress")
-                gatt.discoverServices()
+                scope.launch {
+                    delay(500)
+                    gatt.discoverServices()
+                }
             }
 
             override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
@@ -192,8 +248,12 @@ class BleScanner @Inject constructor(
 
         val backoffUntil = connectionBackoffUntil[address] ?: 0L
         if (System.currentTimeMillis() < backoffUntil) {
-            Timber.tag("BLE_SCANNER").d("Skipping $address — in backoff period")
-            processConnectionQueue()
+            // Re-add to end and try again later to avoid busy-looping
+            connectionQueue.addLast(next)
+            scope.launch {
+                delay(1000)
+                processConnectionQueue()
+            }
             return
         }
 
@@ -213,7 +273,9 @@ class BleScanner @Inject constructor(
         knownDevices[address] = device
         pendingMessages.getOrPut(address) { mutableListOf() }.add(data)
         Timber.tag("BLE_SCANNER").d("Connecting to $address from queue")
-        device.connectGatt(context, false, buildGattCallback(address))
+        
+        // Use TRANSPORT_LE to help prevent 133 errors on many devices
+        device.connectGatt(context, false, buildGattCallback(address), BluetoothDevice.TRANSPORT_LE)
     }
 
     @SuppressLint("MissingPermission")

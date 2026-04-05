@@ -35,6 +35,7 @@ fun PairingScreen(
     val qrCodeBitmap by viewModel.qrCodeBitmap.collectAsState()
     val pairingState by viewModel.pairingState.collectAsState()
     val incomingRequest by viewModel.incomingPairingRequest.collectAsState()
+    val debugInfo by viewModel.debugInfo.collectAsState()
     
     // Trigger QR generation when the screen is first launched
     LaunchedEffect(Unit) {
@@ -135,6 +136,16 @@ fun PairingScreen(
                 }
                 else -> {}
             }
+
+            // Debug Info at the bottom
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = debugInfo,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.secondary,
+                textAlign = TextAlign.Start,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
