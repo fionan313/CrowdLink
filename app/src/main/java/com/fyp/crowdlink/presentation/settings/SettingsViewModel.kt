@@ -65,6 +65,9 @@ class SettingsViewModel @Inject constructor(
     private val _wifiDirectMode = MutableStateFlow(sharedPreferences.getBoolean("wifi_direct_mode", false))
     val wifiDirectMode: StateFlow<Boolean> = _wifiDirectMode.asStateFlow()
 
+    private val _showPairingDebug = MutableStateFlow(sharedPreferences.getBoolean("show_pairing_debug", false))
+    val showPairingDebug: StateFlow<Boolean> = _showPairingDebug.asStateFlow()
+
     val pairedFriendsCount: StateFlow<Int> = friendRepository.getAllFriends()
         .map { it.size }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
@@ -158,6 +161,11 @@ class SettingsViewModel @Inject constructor(
     fun setWifiDirectMode(enabled: Boolean) {
         sharedPreferences.edit { putBoolean("wifi_direct_mode", enabled) }
         _wifiDirectMode.value = enabled
+    }
+
+    fun setShowPairingDebug(enabled: Boolean) {
+        sharedPreferences.edit { putBoolean("show_pairing_debug", enabled) }
+        _showPairingDebug.value = enabled
     }
 
     fun clearMessageHistory() {

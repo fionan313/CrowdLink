@@ -29,6 +29,7 @@ fun SettingsScreen(
     val forceShowRelays by viewModel.forceShowRelays.collectAsState()
     val indoorOverride by viewModel.indoorOverride.collectAsState()
     val wifiDirectMode by viewModel.wifiDirectMode.collectAsState()
+    val showPairingDebug by viewModel.showPairingDebug.collectAsState()
 
     val pairedFriendsCount by viewModel.pairedFriendsCount.collectAsState()
     val deviceId = viewModel.deviceId
@@ -241,7 +242,7 @@ fun SettingsScreen(
             SettingsInfoHeader(
                 icon = Icons.Default.Info,
                 title = "Version",
-                value = "0.7.0"
+                value = "1.0.2"
             )
             SettingsInfoHeader(
                 icon = Icons.Default.Devices,
@@ -259,6 +260,13 @@ fun SettingsScreen(
                 subtitle = "Bypass BLE mesh and send text via WiFi Direct socket",
                 checked = wifiDirectMode,
                 onCheckedChange = { viewModel.setWifiDirectMode(it) }
+            )
+            SettingsToggleItem(
+                icon = Icons.Default.BugReport,
+                title = "Show pairing debug info",
+                subtitle = "Display GATT and SharedKey status in pairing screen",
+                checked = showPairingDebug,
+                onCheckedChange = { viewModel.setShowPairingDebug(it) }
             )
             SettingsToggleItem(
                 icon = Icons.Default.BugReport,

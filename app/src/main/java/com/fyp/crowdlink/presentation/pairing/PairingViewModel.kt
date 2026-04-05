@@ -2,6 +2,7 @@ package com.fyp.crowdlink.presentation.pairing
 
 import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.os.Build
 import androidx.core.graphics.createBitmap
@@ -40,7 +41,8 @@ class PairingViewModel @Inject constructor(
     private val friendRepository: FriendRepository,
     private val deviceRepository: DeviceRepository,
     private val bleScanner: BleScanner,
-    private val encryptionManager: EncryptionManager
+    private val encryptionManager: EncryptionManager,
+    private val sharedPreferences: SharedPreferences
 ) : ViewModel() {
     
     private val bluetoothAdapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
@@ -63,6 +65,9 @@ class PairingViewModel @Inject constructor(
     // StateFlow for tracking the pairing status
     private val _pairingState = MutableStateFlow<PairingState>(PairingState.Idle)
     val pairingState: StateFlow<PairingState> = _pairingState.asStateFlow()
+
+    private val _showDebugInfo = MutableStateFlow(sharedPreferences.getBoolean("show_pairing_debug", false))
+    val showDebugInfo: StateFlow<Boolean> = _showDebugInfo.asStateFlow()
 
     val incomingPairingRequest: StateFlow<PairingRequest?> = deviceRepository.incomingPairingRequest
     
