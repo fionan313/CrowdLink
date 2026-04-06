@@ -2,6 +2,7 @@ package com.fyp.crowdlink.presentation.pairing
 
 import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.content.SharedPreferences
 import app.cash.turbine.test
 import com.fyp.crowdlink.data.ble.BleScanner
 import com.fyp.crowdlink.data.crypto.EncryptionManager
@@ -35,6 +36,7 @@ class PairingViewModelTest {
     private lateinit var mockDeviceRepository: DeviceRepository
     private lateinit var mockBleScanner: BleScanner
     private lateinit var mockEncryptionManager: EncryptionManager
+    private lateinit var mockSharedPreferences: SharedPreferences
 
     private val testDispatcher = UnconfinedTestDispatcher()
     private val incomingPairingFlow = MutableStateFlow<PairingRequest?>(null)
@@ -52,6 +54,7 @@ class PairingViewModelTest {
         mockDeviceRepository = mockk(relaxed = true)
         mockBleScanner = mockk(relaxed = true)
         mockEncryptionManager = mockk(relaxed = true)
+        mockSharedPreferences = mockk<SharedPreferences>(relaxed = true)
 
         every { mockContext.getSystemService(Context.BLUETOOTH_SERVICE) } returns mockBluetoothManager
         every { mockContext.getSystemService(BluetoothManager::class.java) } returns mockBluetoothManager
@@ -73,7 +76,8 @@ class PairingViewModelTest {
             mockFriendRepository,
             mockDeviceRepository,
             mockBleScanner,
-            mockEncryptionManager
+            mockEncryptionManager,
+            mockSharedPreferences
         )
     }
 
@@ -142,7 +146,8 @@ class PairingViewModelTest {
         verify {
             mockDeviceRepository.sendPairingRequest(
                 targetDeviceId = "friend-device",
-                senderDisplayName = any()
+                senderDisplayName = any(),
+                sharedKey = any()
             )
         }
     }
