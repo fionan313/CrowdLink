@@ -168,6 +168,8 @@ If something isn't working, try the steps below before reporting it as a bug —
 4. Also try tapping the **chat** button on the alert screen
 5. Try dismissing the alert using the **Dismiss** button
 
+> **Tip:** This uses the alarm sound to alert you even if your phone is on silent, make sure your volume is up to hear the voice announcement as well.
+
 > **Tip:** The SOS alert uses the same Bluetooth mesh as messaging. If Person B doesn't receive it within 30 seconds, check that both phones are discoverable in the Discovery tab first.
 
 ### What should happen
