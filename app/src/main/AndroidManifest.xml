@@ -26,6 +26,9 @@
 
     <!-- Required for SOS vibration -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
     <!-- Required for full-screen intent on API 34+ -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"
@@ -77,6 +80,12 @@
             android:screenOrientation="portrait"
             tools:replace="android:screenOrientation"
             android:stateNotNeeded="true" />
+
+        <service
+            android:name=".data.service.MeshService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice|location" />
 
     </application>
 

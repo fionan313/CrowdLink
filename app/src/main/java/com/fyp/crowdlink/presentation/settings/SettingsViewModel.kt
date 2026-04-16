@@ -1,6 +1,10 @@
 package com.fyp.crowdlink.presentation.settings
 
 import android.content.SharedPreferences
+import android.content.Context
+import android.content.Intent
+import com.fyp.crowdlink.data.service.MeshService
+import dagger.hilt.android.qualifiers.ApplicationContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fyp.crowdlink.domain.model.UserProfile
@@ -28,6 +32,7 @@ sealed class SaveStatus {
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val userProfileRepository: UserProfileRepository,
     private val friendRepository: FriendRepository,
     private val messageRepository: MessageRepository,
@@ -67,6 +72,9 @@ class SettingsViewModel @Inject constructor(
 
     private val _showPairingDebug = MutableStateFlow(sharedPreferences.getBoolean("show_pairing_debug", false))
     val showPairingDebug: StateFlow<Boolean> = _showPairingDebug.asStateFlow()
+
+    private val _backgroundMesh = MutableStateFlow(sharedPreferences.getBoolean("background_mesh", false))
+    val backgroundMesh: StateFlow<Boolean> = _backgroundMesh.asStateFlow()
 
     val pairedFriendsCount: StateFlow<Int> = friendRepository.getAllFriends()
         .map { it.size }
@@ -166,6 +174,17 @@ class SettingsViewModel @Inject constructor(
     fun setShowPairingDebug(enabled: Boolean) {
         sharedPreferences.edit { putBoolean("show_pairing_debug", enabled) }
         _showPairingDebug.value = enabled
+    }
+
+    fun setBackgroundMesh(enabled: Boolean) {
+        sharedPreferences.edit { putBoolean("background_mesh", enabled) }
+        _backgroundMesh.value = enabled
+        val intent = Intent(context, MeshService::class.java)
+        if (enabled) {
+            context.startForegroundService(intent)
+        } else {
+            context.stopService(intent)
+        }
     }
 
     fun clearMessageHistory() {

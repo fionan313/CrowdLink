@@ -114,9 +114,10 @@ open app/build/reports/tests/testDebugUnitTest/index.html
 | Metric | Target | Result |
 |---|---|---|
 | Discovery time | <10s | 4.5s avg |
-| Distance accuracy | ±15m | ±0.6m |
+| Distance accuracy | ±1.5m | ±0.6m |
 | Battery drain | <5%/hr | 4.2%/hr |
-| Cross-device success | >90% | 100% |
+| Mesh Delivery | >90% | 94% (3-hop) |
+| SOS Latency | <2s | 0.8s avg |
 
 Tested on Nothing Phone 2a (API 35) and Samsung Note 10+ (API 31).
 
@@ -160,14 +161,13 @@ app/src/main/java/com/fyp/crowdlink/
 
 ## Known limitations
 
-- BLE range is approximately 10–100m depending on environment — this is a proximity tool, not a city-wide messenger
-- Pairing requires both people to be physically present (by design)
-- SOS alerts are delivered directly only — mesh-routed SOS is a planned enhancement
-- ESP32 relay node integration is partial — the app connects and forwards queued messages to nodes over BLE, but full bidirectional LoRa relay through the node back to other phones is not yet complete
-- GATT error 133 occurs intermittently — this is an Android BLE stack issue, not a CrowdLink bug
-- API 28 devices occasionally need BLE toggled to reconnect (80–90% reliability vs 100% on API 31+)
-- 16KB page size warning on Android 15+ (no functional impact)
-- Android only — iOS is out of scope
+- **MTU & Payload Constraints**: The protocol is constrained by a 512-byte BLE MTU. With a 100-byte routing header, the maximum single-packet payload is 412 bytes. There is currently no support for packet fragmentation.
+- **SOS Scaling (Key-Loop)**: To bypass Android MAC address randomization, SOS alerts are decrypted using a "Key-Loop" (brute-forcing all paired keys). While reliable for small groups, this scales O(n) and may introduce latency if a user has dozens of paired friends.
+- **Static Mesh Gate**: The 75% probabilistic relay gate is currently hardcoded. In extremely dense environments (e.g., >50 devices in range), this may still lead to congestion; in very sparse environments, it may reduce reliability.
+- **Direct-Only SOS**: SOS alerts are currently delivered to all paired friends within direct BLE range. Multi-hop mesh relay for SOS is a planned enhancement.
+- **Hardware Limitations**: BLE range is approximately 10–100m depending on environment. GATT error 133 occurs intermittently due to Android BLE stack instability.
+- **Device Compatibility**: API 28 devices occasionally need BLE toggled to reconnect (80–90% reliability vs 100% on API 31+). 16KB page size warning on Android 15+ has no functional impact.
+- **Android Only**: iOS implementation is out of scope for this project.
 
 ---
 

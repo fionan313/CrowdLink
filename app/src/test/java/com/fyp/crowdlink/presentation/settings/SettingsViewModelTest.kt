@@ -1,6 +1,7 @@
 package com.fyp.crowdlink.presentation.settings
 
 import android.content.SharedPreferences
+import android.content.Context
 import app.cash.turbine.test
 import com.fyp.crowdlink.domain.model.UserProfile
 import com.fyp.crowdlink.domain.repository.FriendRepository
@@ -21,6 +22,7 @@ import org.junit.Test
 class SettingsViewModelTest {
 
     private lateinit var viewModel: SettingsViewModel
+    private lateinit var mockContext: Context
     private lateinit var mockUserProfileRepository: UserProfileRepository
     private lateinit var mockFriendRepository: FriendRepository
     private lateinit var mockMessageRepository: MessageRepository
@@ -41,6 +43,7 @@ class SettingsViewModelTest {
     fun setup() {
         Dispatchers.setMain(testDispatcher)
 
+        mockContext = mockk(relaxed = true)
         mockUserProfileRepository = mockk(relaxed = true)
         mockFriendRepository = mockk(relaxed = true)
         mockMessageRepository = mockk(relaxed = true)
@@ -69,6 +72,7 @@ class SettingsViewModelTest {
     private fun createViewModel(profile: UserProfile? = testProfile): SettingsViewModel {
         coEvery { mockUserProfileRepository.getUserProfile() } returns flowOf(profile)
         return SettingsViewModel(
+            mockContext,
             mockUserProfileRepository,
             mockFriendRepository,
             mockMessageRepository,

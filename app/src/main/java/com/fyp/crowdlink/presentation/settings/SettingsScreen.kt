@@ -30,6 +30,7 @@ fun SettingsScreen(
     val indoorOverride by viewModel.indoorOverride.collectAsState()
     val wifiDirectMode by viewModel.wifiDirectMode.collectAsState()
     val showPairingDebug by viewModel.showPairingDebug.collectAsState()
+    val backgroundMesh by viewModel.backgroundMesh.collectAsState()
 
     val pairedFriendsCount by viewModel.pairedFriendsCount.collectAsState()
     val deviceId = viewModel.deviceId
@@ -216,6 +217,13 @@ fun SettingsScreen(
                 subtitle = "Share GPS coordinates with paired friends",
                 checked = locationSharing,
                 onCheckedChange = { viewModel.setLocationSharing(it) }
+            )
+            SettingsToggleItem(
+                icon = Icons.Default.CellTower,
+                title = "Background Mesh Mode",
+                subtitle = "Keep relaying and sharing location when app is closed",
+                checked = backgroundMesh,
+                onCheckedChange = { viewModel.setBackgroundMesh(it) }
             )
             SettingsNavigationItem(
                 icon = Icons.Default.DeleteSweep,
