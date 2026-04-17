@@ -31,6 +31,11 @@ import timber.log.Timber
 import java.util.UUID
 import javax.inject.Inject
 
+/**
+ * DiscoveryViewModel
+ *
+ * orchestrates peer and relay discovery; manages mesh networking lifecycle.
+ */
 @HiltViewModel
 class DiscoveryViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -45,6 +50,7 @@ class DiscoveryViewModel @Inject constructor(
     private val bluetoothAdapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
     private val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
 
+    // hardware status streams with 2s polling intervals
     val isBluetoothEnabled: StateFlow<Boolean> = flow {
         while (true) {
             emit(bluetoothAdapter?.isEnabled == true)
@@ -59,7 +65,7 @@ class DiscoveryViewModel @Inject constructor(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
-    // Generate or retrieve persistent device ID
+    // retrieve or initialise persistent device identifier
     private val myDeviceId: String by lazy {
         val id = sharedPreferences.getString(KEY_DEVICE_ID, null)
             ?: UUID.randomUUID().toString().also { newId ->
@@ -69,18 +75,18 @@ class DiscoveryViewModel @Inject constructor(
     }
 
     private val _isDiscovering = MutableStateFlow(false)
-
     private val _isAdvertising = MutableStateFlow(false)
 
+    // mesh active state requires concurrent scanning and advertising
     val isMeshActive: StateFlow<Boolean> = combine(_isDiscovering, _isAdvertising) { scanning, advertising ->
         scanning && advertising
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
-    // Expose nearby friends with distance
+    // real-time peer discovery data from the repository
     val nearbyFriends: StateFlow<List<NearbyFriend>> =
         deviceRepository.nearbyFriends
 
-    // Relay node flows
+    // streams for infrastructure node discovery and connection state
     val discoveredRelays: StateFlow<List<RelayNode>> = relayNodeScanner.discoveredRelays
     val isRelayConnected: StateFlow<Boolean> = relayNodeConnection.isConnected
 
@@ -96,10 +102,11 @@ class DiscoveryViewModel @Inject constructor(
     init {
         sharedPreferences.registerOnSharedPreferenceChangeListener(preferenceChangeListener)
         
-        // Start discovery and advertising by default
+        // auto-start discovery services on initialisation
         startDiscovery()
         startAdvertising()
 
+        // periodic background location synchronisation to paired peers
         viewModelScope.launch {
             while (true) {
                 delay(60_000L)
@@ -120,7 +127,7 @@ class DiscoveryViewModel @Inject constructor(
             }
         }
 
-        // Auto-connect to relay logic
+        // automated connection logic for infrastructure relays
         viewModelScope.launch {
             discoveredRelays.collect { relays ->
                 val autoConnect = sharedPreferences.getBoolean("auto_connect_relay", true)
@@ -151,7 +158,7 @@ class DiscoveryViewModel @Inject constructor(
         _isAdvertising.value = true
     }
 
-    // Overloaded for convenience since myDeviceId is internal
+    // advertising convenience wrapper for local id
     fun startAdvertising() = startAdvertising(myDeviceId)
 
     @SuppressLint("MissingPermission")
@@ -162,6 +169,7 @@ class DiscoveryViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        // clean up listener to prevent preference leaks
         sharedPreferences.unregisterOnSharedPreferenceChangeListener(preferenceChangeListener)
     }
 

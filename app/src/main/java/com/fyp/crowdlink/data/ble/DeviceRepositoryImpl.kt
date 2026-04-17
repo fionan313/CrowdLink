@@ -28,6 +28,8 @@ import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
+// glues together BleScanner, BleAdvertiser, and all the domain repositories.
+// sits in the data layer — the rest of the app talks to DeviceRepository, not BLE directly
 @Singleton
 class DeviceRepositoryImpl @Inject constructor(
     private val bleScanner: BleScanner,
@@ -45,54 +47,63 @@ class DeviceRepositoryImpl @Inject constructor(
 
     private val scope = CoroutineScope(Dispatchers.IO)
 
+    // pass-throughs — expose scanner/advertiser state to the domain layer
     override val discoveredDevices: StateFlow<List<DiscoveredDevice>> = bleScanner.discoveredDevices
-
     override val isGattServerReady: StateFlow<Boolean> = bleAdvertiser.isGattServerReady
+    override val lastGattError: StateFlow<Pair<Int, Long>?> = bleScanner.lastGattError
 
     private val _incomingPairingRequest = MutableStateFlow<PairingRequest?>(null)
     override val incomingPairingRequest: StateFlow<PairingRequest?> = _incomingPairingRequest.asStateFlow()
 
-    override val lastGattError: StateFlow<Pair<Int, Long>?> = bleScanner.lastGattError
-
+    // replay=1 so the consumer doesn't miss the event if it subscribes slightly late
     private val _pairingAccepted = MutableSharedFlow<String>(replay = 1)
     override val pairingAccepted: SharedFlow<String> = _pairingAccepted.asSharedFlow()
 
+    // paired friends that are currently visible over BLE
     private val _nearbyFriends = MutableStateFlow<List<NearbyFriend>>(emptyList())
     val nearbyFriends: StateFlow<List<NearbyFriend>> = _nearbyFriends.asStateFlow()
 
     init {
         meshRoutingEngine.localDeviceId = sharedPreferences
             .getString("device_id", "") ?: ""
-        
-        // Wire MeshRoutingEngine callbacks
+
+        // called by the routing engine when a mesh message is addressed to this device
         meshRoutingEngine.onMessageForMe = { meshMessage, transportType ->
             scope.launch {
                 val senderIdString = meshMessage.senderId
                 val payload = meshMessage.payload
-                
+
                 if (payload.isNotEmpty()) {
                     when (payload[0]) {
                         BleAdvertiser.ENCRYPTED_PAYLOAD_PREFIX -> {
-                            handleIncomingEncryptedMessage(senderIdString, meshMessage, transportType, payload.copyOfRange(1, payload.size))
+                            // strip the 0xFF prefix before passing ciphertext to the handler
+                            handleIncomingEncryptedMessage(
+                                senderIdString,
+                                meshMessage,
+                                transportType,
+                                payload.copyOfRange(1, payload.size)
+                            )
                         }
                         0x01.toByte() -> handleIncomingTextMessage(senderIdString, meshMessage, transportType)
                         0x03.toByte() -> handleIncomingLocationUpdate(senderIdString, payload)
                         else -> Timber.tag("DeviceRepo").w("Unknown message type: ${payload[0]}")
                     }
                 }
-                
-                // Refresh last seen when any message is received
+
+                // keep lastSeen fresh whenever any message arrives from a friend
                 friendRepository.updateLastSeen(senderIdString, meshMessage.timestamp)
             }
         }
 
+        // routing engine decided this message needs relaying — hand it to Room so the
+        // scanner can pick it up and blast it to connected peers
         meshRoutingEngine.onRelay = { relayedMessage ->
             messageRepository.addToRelayQueue(relayedMessage)
         }
 
         bleScanner.observeRelayQueue(scope, messageRepository)
 
-        // Wire pairing request callbacks
+        // pairing handshake callbacks from the GATT server
         bleAdvertiser.onPairingRequestReceived = { request ->
             _incomingPairingRequest.value = request
         }
@@ -107,14 +118,14 @@ class DeviceRepositoryImpl @Inject constructor(
         bleAdvertiser.onUnpairRequestReceived = { senderId ->
             scope.launch {
                 friendRepository.removeFriendById(senderId)
-                Timber.tag("DeviceRepo")
-                    .d("Removed $senderId from friends list via unpair notification")
+                Timber.tag("DeviceRepo").d("Removed $senderId from friends list via unpair notification")
             }
         }
 
+        // SOS arrives as a raw encrypted payload directly over BLE (not through the mesh engine)
         bleAdvertiser.onSosAlertReceived = { deviceAddress, rawPayload ->
             scope.launch {
-                // Strip 0xFF prefix if encrypted
+                // strip 0xFF prefix if present
                 val ciphertext = if (rawPayload.isNotEmpty() &&
                     rawPayload[0] == BleAdvertiser.ENCRYPTED_PAYLOAD_PREFIX) {
                     rawPayload.copyOfRange(1, rawPayload.size)
@@ -122,7 +133,7 @@ class DeviceRepositoryImpl @Inject constructor(
                     rawPayload
                 }
 
-                // Find the friend whose key decrypts this payload
+                // try each paired friend's key until one decrypts successfully (key-loop)
                 val friends = friendRepository.getAllFriends().first()
                 var senderId: String? = null
                 var decryptedPayload: ByteArray? = null
@@ -150,6 +161,7 @@ class DeviceRepositoryImpl @Inject constructor(
                 }
 
                 try {
+                    // skip the 0x05 type byte before parsing JSON
                     val json = JSONObject(decryptedPayload.decodeToString(startIndex = 1))
                     val senderName = json.getString("senderName")
                     val latitude = if (json.has("lat")) json.getDouble("lat") else null
@@ -168,7 +180,7 @@ class DeviceRepositoryImpl @Inject constructor(
             }
         }
 
-        // Sync real-time BLE discovery back to the database
+        // sync real-time BLE discovery back to the database so lastSeen stays accurate
         bleScanner.discoveredDevices
             .onEach { devices ->
                 devices.forEach { device ->
@@ -181,6 +193,7 @@ class DeviceRepositoryImpl @Inject constructor(
             }
             .launchIn(scope)
 
+        // merge raw BLE discovery with the friends list to produce NearbyFriend objects
         combine(
             bleScanner.discoveredDevices,
             friendRepository.getAllFriends()
@@ -203,6 +216,7 @@ class DeviceRepositoryImpl @Inject constructor(
         }.launchIn(scope)
     }
 
+    // look up the sender's shared key, decrypt the payload, then dispatch to the correct handler
     private suspend fun handleIncomingEncryptedMessage(
         senderId: String,
         meshMessage: com.fyp.crowdlink.domain.model.MeshMessage,
@@ -237,7 +251,7 @@ class DeviceRepositoryImpl @Inject constructor(
     }
 
     private suspend fun handleIncomingTextMessage(
-        senderId: String, 
+        senderId: String,
         meshMessage: com.fyp.crowdlink.domain.model.MeshMessage,
         transportType: TransportType
     ) {
@@ -246,10 +260,11 @@ class DeviceRepositoryImpl @Inject constructor(
             return
         }
 
-        val content = meshMessage.payload.toString(Charsets.UTF_8).substring(1) // Skip type byte
+        // skip the 0x01 type byte to get the actual message content
+        val content = meshMessage.payload.toString(Charsets.UTF_8).substring(1)
         val friend = friendRepository.getFriendById(senderId)
-        
-        // Logical display logic: if it was relayed, show "MESH". If direct, show physical transport.
+
+        // if it hopped through the mesh, show MESH regardless of the physical transport
         val displayTransport = if (meshMessage.hopCount > 0) TransportType.MESH else transportType
 
         val incomingMessage = Message(
@@ -263,9 +278,9 @@ class DeviceRepositoryImpl @Inject constructor(
             hopCount = meshMessage.hopCount,
             transportType = displayTransport
         )
-        
+
         messageRepository.sendMessage(incomingMessage)
-        
+
         meshNotificationManager.showMessageNotification(
             senderName = friend?.displayName ?: "Unknown",
             content = content,
@@ -286,6 +301,7 @@ class DeviceRepositoryImpl @Inject constructor(
         }
     }
 
+    // simple pass-throughs to the scanner/advertiser
     override fun startDiscovery() = bleScanner.startDiscovery()
     override fun stopDiscovery() = bleScanner.stopDiscovery()
     override fun startAdvertising(myDeviceId: String) = bleAdvertiser.startAdvertising(myDeviceId)
@@ -300,6 +316,7 @@ class DeviceRepositoryImpl @Inject constructor(
             return
         }
 
+        // prefix byte 0x01 tells the receiver this is a pairing request
         val payload = JSONObject().apply {
             put("senderId", meshRoutingEngine.localDeviceId)
             put("senderName", senderDisplayName)
@@ -315,6 +332,7 @@ class DeviceRepositoryImpl @Inject constructor(
 
     override fun sendPairingAccepted(targetDeviceId: String) {
         scope.launch {
+            // the accepting device may not have the scanner warmed up yet — retry up to 5 times
             var device: BluetoothDevice? = null
             repeat(5) { attempt ->
                 device = bleScanner.getDeviceById(targetDeviceId)
@@ -326,12 +344,15 @@ class DeviceRepositoryImpl @Inject constructor(
                 Timber.tag("DeviceRepo").e("sendPairingAccepted: $targetDeviceId not found after 5 retries")
                 return@launch
             }
+
             val payload = JSONObject().apply {
                 put("senderId", meshRoutingEngine.localDeviceId)
             }.toString().toByteArray(Charsets.UTF_8)
+
             val finalPayload = ByteArray(payload.size + 1)
             finalPayload[0] = BleAdvertiser.PAIRING_ACCEPTED_PREFIX
             System.arraycopy(payload, 0, finalPayload, 1, payload.size)
+
             bleScanner.sendData(finalPayload, device!!)
         }
     }
@@ -339,6 +360,7 @@ class DeviceRepositoryImpl @Inject constructor(
     override fun sendUnpairNotification(targetDeviceId: String) {
         val device = bleScanner.getDeviceById(targetDeviceId)
         if (device == null) {
+            // not in range — they'll remove us from their list next time they see us
             Timber.tag("DeviceRepo").w("Unpair target not in range — they'll clean up on next seen")
             return
         }
@@ -377,8 +399,10 @@ class DeviceRepositoryImpl @Inject constructor(
                 }
             }.toString().toByteArray(Charsets.UTF_8)
 
+            // build plaintext with 0x05 type byte prepended
             val plaintext = byteArrayOf(BleAdvertiser.SOS_ALERT_PREFIX) + json
 
+            // encrypt if we have a shared key, fall back to plaintext to guarantee delivery
             val payload = if (friend.sharedKey != null) {
                 try {
                     val ciphertext = encryptionManager.encrypt(plaintext, friend.sharedKey)

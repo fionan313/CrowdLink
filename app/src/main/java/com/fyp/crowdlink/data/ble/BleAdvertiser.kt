@@ -1,5 +1,11 @@
+/* data/ble/BleAdvertiser
+* This acts as the server side of the BLE Mesh. Making the phone visible to other CrowdLink devices.
+* It also handles everything arriving over GATT like: pairing, messages, SOS alerts, etc.*/
+
+// package
 package com.fyp.crowdlink.data.ble
 
+// imports
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -34,11 +40,12 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
+// singleton constructor - ensures one instance for the app's lifetime, managed by Hilt
 @Singleton
 class BleAdvertiser @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val meshRoutingEngine: MeshRoutingEngine,
-    private val serializer: MeshMessageSerialiser
+    private val meshRoutingEngine: MeshRoutingEngine, // decides what to do with incoming mesh packets
+    private val serializer: MeshMessageSerialiser // converts bytes and MeshMessage objects
 ) {
     init {
         Timber.tag("BLE_ADVERTISER").wtf("BleAdvertiser CREATED!")
@@ -49,11 +56,18 @@ class BleAdvertiser @Inject constructor(
     private val bluetoothAdapter: BluetoothAdapter? = bluetoothManager.adapter
 
     private var isAdvertising = false
+
+    // ensures other components wait until the GATT server is actually ready before writing
     private val _isGattServerReady = MutableStateFlow(false)
     val isGattServerReady: StateFlow<Boolean> = _isGattServerReady.asStateFlow()
 
     private var gattServer: BluetoothGattServer? = null
+
+    // background scope for handing off mesh packets to the routing engine
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /* These lambdas are set externally (by BleService)
+    * So the advertiser stays focused on BLE mechanics and the business logic lives elsewhere.*/
 
     var onPairingRequestReceived: ((PairingRequest) -> Unit)? = null
     var onPairingAcceptedReceived: ((String) -> Unit)? = null
@@ -73,6 +87,8 @@ class BleAdvertiser @Inject constructor(
                 .d("GATT connection state changed: device=${device.address} newState=$newState")
         }
 
+        /* Don't start advertising until the service is fully added.
+        * Avoids a race condition where a peer connects, before the GATT server is ready to receive writes.*/
         override fun onServiceAdded(status: Int, service: BluetoothGattService?) {
             Timber.tag("BLE_ADVERTISER")
                 .d("GATT service added status=$status uuid=${service?.uuid} at=${System.currentTimeMillis()}")
@@ -82,6 +98,8 @@ class BleAdvertiser @Inject constructor(
             }
         }
 
+        /*Every incoming write from remote devices is handled here.
+        * The first byte is used to determine the type of message.*/
         override fun onCharacteristicWriteRequest(
             device: BluetoothDevice,
             requestId: Int,
@@ -99,6 +117,8 @@ class BleAdvertiser @Inject constructor(
                         UNPAIR_REQUEST_PREFIX -> handleUnpairRequest(value)
                         SOS_ALERT_PREFIX -> handleSosAlert(device, value)
                         ENCRYPTED_PAYLOAD_PREFIX -> {
+                            /* 0xFF = encrypted payload, this could be a message or an SOS alert.
+                            * It is passed up as is. Decryption happens higher up the stack. */
                             onSosAlertReceived?.invoke(device.address, value)
                             Timber.tag("BLE_ADVERTISER").d("Encrypted direct payload from ${device.address}")
                         }
@@ -106,7 +126,7 @@ class BleAdvertiser @Inject constructor(
                     }
                 }
 
-                // Acknowledge if required
+                // some writes require an explicit ACK back to the sender
                 if (responseNeeded) {
                     gattServer?.sendResponse(
                         device,
@@ -120,12 +140,14 @@ class BleAdvertiser @Inject constructor(
         }
     }
 
+    // incoming pairing request. strip the prefix byte, parse the JSON, passed up
     private fun handlePairingRequest(value: ByteArray) {
         Timber.tag("BLE_ADVERTISER").d("handlePairingRequest fired at=${System.currentTimeMillis()}")
         try {
             // Skip prefix byte
             val jsonString = value.decodeToString(startIndex = 1)
             val json = JSONObject(jsonString)
+            // sharedKey is optional. Checks if present when the QR code was scanned
             val sharedKey = if (json.has("sharedKey") && json.getString("sharedKey").isNotEmpty()) {
                 json.getString("sharedKey")
             } else null
@@ -142,6 +164,7 @@ class BleAdvertiser @Inject constructor(
         }
     }
 
+    // the remote device accepted our pairing. their ID is extracted and passed up
     private fun handlePairingAccepted(value: ByteArray) {
         try {
             val jsonString = value.decodeToString(startIndex = 1)
@@ -154,6 +177,7 @@ class BleAdvertiser @Inject constructor(
         }
     }
 
+    // remote device wants to remove this device from their friends list
     private fun handleUnpairRequest(value: ByteArray) {
         try {
             val json = JSONObject(value.decodeToString(startIndex = 1))
@@ -165,11 +189,13 @@ class BleAdvertiser @Inject constructor(
         }
     }
 
+    // plaintext SOS. encryption failed. Pass the raw bytes up for processing
     private fun handleSosAlert(device: BluetoothDevice, value: ByteArray) {
         onSosAlertReceived?.invoke(device.address, value)
         Timber.tag("BLE_ADVERTISER").d("SOS alert received (raw) from ${device.address}")
     }
 
+    // regular mesh packet — deserialise and pass onto the routing engine, on background thread
     private fun handleMeshMessage(value: ByteArray) {
         val message = serializer.deserialize(value)
         if (message != null) {
@@ -183,21 +209,21 @@ class BleAdvertiser @Inject constructor(
         }
     }
 
-    // builds the GATT service with both discovery and mesh characteristics
+    /* Two characteristics under one service:
+    * - discovery: read-only, peers can read basic info without connecting properly
+    * - mesh relay: writable, this is where all messages, pairings and SOS alerts come in */
     private fun buildGattService(): BluetoothGattService {
         val service = BluetoothGattService(
             SERVICE_UUID,
             BluetoothGattService.SERVICE_TYPE_PRIMARY
         )
 
-        // Existing discovery characteristic — read only
         val discoveryCharacteristic = BluetoothGattCharacteristic(
             DISCOVERY_CHARACTERISTIC_UUID,
             BluetoothGattCharacteristic.PROPERTY_READ,
             BluetoothGattCharacteristic.PERMISSION_READ
         )
 
-         // mesh relay characteristic — writable by remote devices
         val meshCharacteristic = BluetoothGattCharacteristic(
             MESH_CHARACTERISTIC_UUID,
             BluetoothGattCharacteristic.PROPERTY_WRITE or
@@ -226,10 +252,11 @@ class BleAdvertiser @Inject constructor(
             stopAdvertising()
         }
 
-        // Store device ID for startLeAdvertising
+        // Stash the device ID - startLeAdvertising() reads it after onServiceAdded fires
         this.lastMyDeviceId = myDeviceId
 
-        // start GATT server before advertising so it's ready when peers connect
+        /* GATT server must be open when advertising starts,
+        * otherwise peers can connect and write before it's ready to be handled */
         gattServer = bluetoothManager.openGattServer(context, gattServerCallback)
         Timber.tag("BLE_ADVERTISER").d("Adding GATT service at=${System.currentTimeMillis()}")
         gattServer?.addService(buildGattService())
@@ -243,7 +270,8 @@ class BleAdvertiser @Inject constructor(
         val myDeviceId = lastMyDeviceId ?: return
         val advertiser = bluetoothAdapter?.bluetoothLeAdvertiser ?: return
 
-        // setConnectable(true) so peers can connect for mesh relay
+        /* Low latency + high power mode, to be found quickly at crowded events
+        * setConnectable(true) is critical, without it peers can see this device but not write to it. */
         val settings = AdvertiseSettings.Builder()
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
             .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
@@ -251,6 +279,8 @@ class BleAdvertiser @Inject constructor(
             .setTimeout(0)
             .build()
 
+        /* Encode devices UUID as 16 raw bytes to embed in the advertise payload.
+        * Scanners read this to identify, without needing to connect. */
         val deviceIdBytes = try {
             val uuid = UUID.fromString(myDeviceId)
             val buffer = ByteBuffer.allocate(16)
@@ -259,9 +289,10 @@ class BleAdvertiser @Inject constructor(
             buffer.array()
         } catch (e: Exception) {
             Timber.tag("BLE_ADVERTISER").e(e, "Invalid UUID format: $myDeviceId")
-            myDeviceId.take(16).toByteArray(Charsets.UTF_8)
+            myDeviceId.take(16).toByteArray(Charsets.UTF_8) // fallback if UUID parsing fails
         }
 
+        // don't include device name or TX power, keeps the payload small
         val data = AdvertiseData.Builder()
             .setIncludeDeviceName(false)
             .setIncludeTxPowerLevel(false)
@@ -311,12 +342,14 @@ class BleAdvertiser @Inject constructor(
     }
 
     companion object {
+        // all devices advertise the same service UUID so scanners know what to look for
         val SERVICE_UUID: UUID = UUID.fromString("0000FE9F-0000-1000-8000-00805f9b34fb")
         val DISCOVERY_CHARACTERISTIC_UUID: UUID =
             UUID.fromString("0000FE9E-0000-1000-8000-00805f9b34fb")
         val MESH_CHARACTERISTIC_UUID: UUID =
             UUID.fromString("a8f2e3d1-4b5c-6e7f-8a9b-0c1d2e3f4a5b")
-        
+
+        // First byte of every write, tells what kind of payload it is
         const val PAIRING_REQUEST_PREFIX: Byte = 0x01
         const val PAIRING_ACCEPTED_PREFIX: Byte = 0x02
         const val UNPAIR_REQUEST_PREFIX: Byte = 0x04

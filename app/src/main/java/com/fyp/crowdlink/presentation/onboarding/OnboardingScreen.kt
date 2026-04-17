@@ -28,6 +28,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.launch
 
+/**
+ * OnboardingScreen
+ *
+ * guides the user through initial configuration and profile setup.
+ * manages pager state for educational content and local identity generation.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun OnboardingScreen(
@@ -42,6 +48,7 @@ fun OnboardingScreen(
 
     Column(modifier = Modifier.fillMaxSize()) {
 
+        // multi-stage introduction to mesh concepts and local identity setup
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.weight(1f),
@@ -57,7 +64,7 @@ fun OnboardingScreen(
             }
         }
 
-        // Bottom bar — dot indicator + button
+        // persistence and navigation controls
         OnboardingBottomBar(
             pagerState = pagerState,
             isNameValid = isNameValid,
@@ -74,6 +81,11 @@ fun OnboardingScreen(
     }
 }
 
+/**
+ * WelcomePage
+ *
+ * initial landing view; introduces the CrowdLink brand and core value proposition.
+ */
 @Composable
 fun WelcomePage() {
     Column(
@@ -106,6 +118,11 @@ fun WelcomePage() {
     }
 }
 
+/**
+ * HowItWorksPage
+ *
+ * high-level overview of infrastructure-free networking and store-and-forward messaging.
+ */
 @Composable
 fun HowItWorksPage() {
     Column(
@@ -162,6 +179,11 @@ fun HowItWorksItem(icon: ImageVector, title: String, subtitle: String) {
     }
 }
 
+/**
+ * SetupProfilePage
+ *
+ * handles initial pseudonym registration and basic validation.
+ */
 @Composable
 fun SetupProfilePage(
     displayName: String,
@@ -216,6 +238,11 @@ fun SetupProfilePage(
     }
 }
 
+/**
+ * OnboardingBottomBar
+ *
+ * contextual navigation bar; manages page transitions and final profile persistence.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun OnboardingBottomBar(
@@ -232,7 +259,7 @@ fun OnboardingBottomBar(
             .padding(horizontal = 24.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Dot indicator
+        // Dot indicator showing current progress
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             repeat(3) { index ->
                 val isSelected = pagerState.currentPage == index

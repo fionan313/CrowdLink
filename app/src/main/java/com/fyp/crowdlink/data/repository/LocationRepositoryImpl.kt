@@ -19,6 +19,7 @@ import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
+// handles all location concerns — live GPS updates, last known fix, and friend location caching
 @Singleton
 class LocationRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -26,6 +27,7 @@ class LocationRepositoryImpl @Inject constructor(
     private val locationDao: LocationDao
 ) : LocationRepository {
 
+    // emits live GPS updates via callbackFlow — cleans up the callback when the collector cancels
     @SuppressLint("MissingPermission")
     override fun getMyLocation(): Flow<DeviceLocation?> = callbackFlow {
         val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10000)
@@ -51,6 +53,7 @@ class LocationRepositoryImpl @Inject constructor(
         }
     }
 
+    // best-effort last fix — used for SOS payload and initial map position
     @SuppressLint("MissingPermission")
     override suspend fun getLastKnownLocation(): DeviceLocation? {
         return try {
@@ -60,6 +63,7 @@ class LocationRepositoryImpl @Inject constructor(
         }
     }
 
+    // friend locations come in over the mesh and are written to Room for the map to observe
     override suspend fun cacheFriendLocation(location: DeviceLocation) {
         locationDao.upsertLocation(location.toEntity())
     }
@@ -72,6 +76,7 @@ class LocationRepositoryImpl @Inject constructor(
         locationDao.deleteAllLocations()
     }
 
+    // wipes the offline tile cache from disk — called from settings
     override suspend fun clearMapCache() {
         val cacheDir = File(context.filesDir, "map_tiles")
         if (cacheDir.exists()) {
@@ -79,6 +84,7 @@ class LocationRepositoryImpl @Inject constructor(
         }
     }
 
+    // mapping helpers — keep conversion logic out of the domain layer
     private fun Location.toDomain(deviceId: String): DeviceLocation {
         return DeviceLocation(
             deviceId = deviceId,

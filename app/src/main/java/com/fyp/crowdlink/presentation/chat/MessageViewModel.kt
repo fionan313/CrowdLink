@@ -129,7 +129,7 @@ class MessageViewModel @Inject constructor(
     /**
      * Sends a text message via the Mesh Routing Engine.
      * The engine adds it to the relay queue, which is then observed by BLE mesh transport.
-     * WiFi Direct is bypassed for small text messages unless the debug "wifi_direct_mode" is enabled.
+     * Wi-Fi Direct is bypassed for small text messages unless the debug "wifi_direct_mode" is enabled.
      */
     fun sendText(content: String, friendId: String) {
         val myId = _myDeviceId.value

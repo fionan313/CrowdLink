@@ -25,6 +25,11 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import kotlinx.coroutines.delay
 
+/**
+ * CompassScreen
+ *
+ * visualises direction and proximity to a peer using GPS or BLE signal strength.
+ */
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun CompassScreen(
@@ -33,6 +38,7 @@ fun CompassScreen(
     onNavigateBack: () -> Unit,
     viewModel: CompassViewModel = hiltViewModel()
 ) {
+    // request fine location for GPS-based bearing and distance
     val permissionState = rememberMultiplePermissionsState(
         permissions = listOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
@@ -40,13 +46,14 @@ fun CompassScreen(
         )
     )
 
+    // initialise viewmodel state and trigger permission flow
     LaunchedEffect(Unit) {
         permissionState.launchMultiplePermissionRequest()
         viewModel.setFriendId(friendId)
         viewModel.refreshIndoorOverride()
     }
 
-    // Share location every 30 seconds while on this screen
+    // share local location to the mesh every 30s while tracking
     LaunchedEffect(friendId) {
         while (true) {
             if (permissionState.allPermissionsGranted) {
@@ -84,6 +91,7 @@ fun CompassScreen(
 
                 if (isGpsAvailable && bearing != null) {
                     // --- GPS MODE ---
+                    // calculate rotation relative to current device heading
                     var currentRotation by remember { mutableFloatStateOf(0f) }
                     val targetRotation = (bearing!! - heading + 360) % 360
 
@@ -114,7 +122,7 @@ fun CompassScreen(
                         fontWeight = FontWeight.Bold
                     )
 
-                    // Secondary RSSI confidence indicator — shown beneath GPS distance when both available
+                    // show BLE proximity as a secondary confidence metric
                     rssiDistance?.let {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
@@ -128,7 +136,7 @@ fun CompassScreen(
                     // --- RSSI FALLBACK MODE ---
                     IndoorModeIndicator(rssiDistance)
 
-                    // If we have a stale GPS distance, show it with a clear warning
+                    // display warning if only stale GPS data exists
                     if (distance != null) {
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
@@ -148,8 +156,9 @@ fun CompassScreen(
 }
 
 /**
- * Calculates the shortest rotation path to avoid the arrow spinning 350 degrees
- * when jumping from 355 to 5.
+ * shortestRotation
+ *
+ * calculates the shortest rotation path to avoid "spinning" across the 0/360 border.
  */
 fun shortestRotation(from: Float, to: Float): Float {
     var diff = (to - from + 360) % 360
@@ -157,6 +166,11 @@ fun shortestRotation(from: Float, to: Float): Float {
     return from + diff
 }
 
+/**
+ * IndoorModeIndicator
+ *
+ * proximity UI for when GPS is unavailable; uses BLE signal strength bars.
+ */
 @Composable
 fun IndoorModeIndicator(rssiDistance: Double?) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -169,7 +183,7 @@ fun IndoorModeIndicator(rssiDistance: Double?) {
         Text("Indoor Mode", style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(16.dp))
         
-        // Simple signal bars
+        // signal bars representing proximity ranges
         Row(verticalAlignment = Alignment.Bottom) {
             repeat(3) { index ->
                 val isFilled = rssiDistance != null && rssiDistance < (index + 1) * 10
@@ -191,6 +205,11 @@ fun IndoorModeIndicator(rssiDistance: Double?) {
     }
 }
 
+/**
+ * LocationPermissionRationale
+ *
+ * simple CTA to prompt users for required system permissions.
+ */
 @Composable
 fun LocationPermissionRationale(onRequestPermission: () -> Unit) {
     Column(

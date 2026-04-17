@@ -14,6 +14,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 
+/**
+ * SettingsScreen
+ *
+ * provides a centralised interface for user profile management, mesh networking
+ * parameters, privacy toggles, and developer debug utilities.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -40,6 +46,7 @@ fun SettingsScreen(
     var showUnpairAllDialog by remember { mutableStateOf(false) }
     var showResetAppDialog by remember { mutableStateOf(false) }
 
+    // destructive action confirmation dialogues
     if (showClearHistoryDialog) {
         AlertDialog(
             onDismissRequest = { showClearHistoryDialog = false },
@@ -145,7 +152,7 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
         ) {
 
-            // ── Profile ──────────────────────────────────────────
+            // user identity and pseudonym management
             SettingsSectionHeader("Profile")
             SettingsNavigationItem(
                 icon = Icons.Default.Person,
@@ -156,7 +163,7 @@ fun SettingsScreen(
 
             HorizontalDivider()
 
-            // ── BLE & Mesh ────────────────────────────────────────
+            // bluetooth low energy and mesh network configuration
             SettingsSectionHeader("BLE & Mesh")
             SettingsToggleItem(
                 icon = Icons.Default.Bluetooth,
@@ -185,7 +192,7 @@ fun SettingsScreen(
 
             HorizontalDivider()
 
-            // ── LoRa / ESP32 ──────────────────────────────────────
+            // long range radio and external hardware integration
             SettingsSectionHeader("LoRa / Relay Nodes")
             SettingsToggleItem(
                 icon = Icons.Default.Router,
@@ -202,7 +209,7 @@ fun SettingsScreen(
 
             HorizontalDivider()
 
-            // ── Privacy ───────────────────────────────────────────
+            // visibility and data persistence controls
             SettingsSectionHeader("Privacy")
             SettingsToggleItem(
                 icon = Icons.Default.Security,
@@ -240,7 +247,7 @@ fun SettingsScreen(
 
             HorizontalDivider()
 
-            // ── About ─────────────────────────────────────────────
+            // versioning and system identity
             SettingsSectionHeader("About")
             SettingsInfoHeader(
                 icon = Icons.Default.Groups,
@@ -260,7 +267,7 @@ fun SettingsScreen(
 
             HorizontalDivider()
 
-            // ── Debug ─────────────────────────────────────────────
+            // developer telemetry and override utilities
             SettingsSectionHeader("Debug")
             SettingsToggleItem(
                 icon = Icons.Default.Wifi,

@@ -1,5 +1,11 @@
+/* data/ble/BleScanner
+* This acts as the client side of the BLE Mesh. It initiates connections and sends writes
+* It also handles everything arriving over GATT like: pairing, messages, SOS alerts, etc.*/
+
+// package
 package com.fyp.crowdlink.data.ble
 
+// imports
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -40,6 +46,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.pow
 
+// singleton constructor - ensures one instance for the app's lifetime, managed by Hilt
 @Singleton
 class BleScanner @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -50,6 +57,8 @@ class BleScanner @Inject constructor(
     init {
         Timber.tag("BLE_SCANNER").wtf("BleScanner CREATED!")
 
+        /* Hook into the routing engine. When it decides a message needs relaying,
+        It calls back here and then blasts it out to all currently connected peers */
         meshRoutingEngine.onRelay = { message ->
             relayToAllPeers(message)
         }
@@ -58,31 +67,40 @@ class BleScanner @Inject constructor(
     private val bluetoothAdapter: BluetoothAdapter? =
         (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
 
+    // always fetches a new reference in case BT was turned off/on
     private val bluetoothLeScanner: BluetoothLeScanner?
         get() = bluetoothAdapter?.bluetoothLeScanner
 
+    // the list of nearby CrowdLink devices currently visible on BLE
     private val _discoveredDevices = MutableStateFlow<List<DiscoveredDevice>>(emptyList())
     val discoveredDevices: StateFlow<List<DiscoveredDevice>> = _discoveredDevices.asStateFlow()
 
+    // exposes the last GATT error code + timestamp, shown in UI for debugging
     private val _lastGattError = MutableStateFlow<Pair<Int, Long>?>(null)
     val lastGattError: StateFlow<Pair<Int, Long>?> = _lastGattError.asStateFlow()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    // rolling RSSI readings per device, smooth out noisy signal strength values
     private val deviceCache = mutableMapOf<String, MutableList<Int>>()
     private var isScanning = false
-
+    // tracks open GATT connections keyed by MAC address
     private val activeConnections = mutableMapOf<String, BluetoothGatt>()
+    // messages waiting to be sent once a connection is established
     private val pendingMessages = mutableMapOf<String, MutableList<ByteArray>>()
+    // known BluetoothDevice references. This is needed to reconnect if a connection drops
     private val knownDevices = mutableMapOf<String, BluetoothDevice>()
+    // maps internal device UUID -> MAC address so it can be looked up devices by ID
     private val deviceIdToAddress = mutableMapOf<String, String>()
-
+    // FIFO queue of (device, payload) pairs waiting for a GATT connection slot
     private val connectionQueue: ArrayDeque<Pair<BluetoothDevice, ByteArray>> = ArrayDeque()
     private var isConnecting = false
+    // tracks consecutive failures per device, to trigger exponential backoff
     private val connectionFailureCount = mutableMapOf<String, Int>()
     private val connectionBackoffUntil = mutableMapOf<String, Long>()
 
     init {
         scope.launch {
+            //  Remove devices that haven't been heard from in 15 seconds
             while (true) {
                 delay(5000)
                 cleanUpOldDevices()
@@ -90,6 +108,7 @@ class BleScanner @Inject constructor(
         }
     }
 
+    // Remove stale devices from the discovered list and cleans up cache entries
     private fun cleanUpOldDevices() {
         val now = System.currentTimeMillis()
         val timeout = 15_000L // 15 seconds
@@ -105,7 +124,7 @@ class BleScanner @Inject constructor(
             goneDeviceIds.forEach { deviceId ->
                 deviceCache.remove(deviceId)
                 deviceIdToAddress.remove(deviceId)?.let { address ->
-                    // Only remove if not actively connected
+                    // Don't remove from knownDevices if still actively connected
                     if (!activeConnections.containsKey(address)) {
                         knownDevices.remove(address)
                     }
@@ -114,6 +133,7 @@ class BleScanner @Inject constructor(
         }
     }
 
+    // Android 13 changed the writeCharacteristic API, this wrapper handles both paths
     @SuppressLint("MissingPermission")
     private fun BluetoothGatt.writeChar(characteristic: BluetoothGattCharacteristic, bytes: ByteArray) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -126,6 +146,8 @@ class BleScanner @Inject constructor(
         }
     }
 
+    /* Forces Android to re-read the remote GATT service table, rather than using a stale cached version.
+    * Helps avoid: "services discovered but characteristic missing" */
     @SuppressLint("MissingPermission")
     private fun BluetoothGatt.refreshDeviceCache(): Boolean {
         return try {
@@ -234,6 +256,7 @@ class BleScanner @Inject constructor(
                     return
                 }
 
+                // Connection is ready. Register it and flush anything queued up
                 activeConnections[deviceAddress] = gatt
                 connectionFailureCount[deviceAddress] = 0
                 connectionBackoffUntil[deviceAddress] = 0L
@@ -255,6 +278,8 @@ class BleScanner @Inject constructor(
         }
     }
 
+    // Entry point for sending any raw byte payload to a specific device.
+    // If we're already connected, write immediately. Otherwise queue it up.
     @SuppressLint("MissingPermission")
     fun sendData(data: ByteArray, device: BluetoothDevice) {
         val address = device.address
@@ -272,6 +297,8 @@ class BleScanner @Inject constructor(
         processConnectionQueue()
     }
 
+    /* Works through the connection queue one device at a time.
+    * Only one GATT connection attempt runs at a time. isConnecting gates the rest.*/
     @SuppressLint("MissingPermission")
     private fun processConnectionQueue() {
         if (isConnecting) return
@@ -281,7 +308,7 @@ class BleScanner @Inject constructor(
 
         val backoffUntil = connectionBackoffUntil[address] ?: 0L
         if (System.currentTimeMillis() < backoffUntil) {
-            // Re-add to end and try again later to avoid busy-looping
+            // Still in the cooldown window, put back and try again in a second
             connectionQueue.addLast(next)
             scope.launch {
                 delay(1000)
@@ -291,6 +318,7 @@ class BleScanner @Inject constructor(
         }
 
         if (activeConnections.containsKey(address)) {
+            // Connection came up while this sitting in the queue, write directly
             val gatt = activeConnections[address]!!
             val characteristic = gatt
                 .getService(BleAdvertiser.SERVICE_UUID)
@@ -307,10 +335,11 @@ class BleScanner @Inject constructor(
         pendingMessages.getOrPut(address) { mutableListOf() }.add(data)
         Timber.tag("BLE_SCANNER").d("Connecting to $address from queue")
         
-        // Use TRANSPORT_LE to help prevent 133 errors on many devices
+        // TRANSPORT_LE forces BLE rather than classic Bluetooth, prevent 133 errors on many devices
         device.connectGatt(context, false, buildGattCallback(address), BluetoothDevice.TRANSPORT_LE)
     }
 
+    // Serialises MeshMessage and passes to sendData
     @SuppressLint("MissingPermission")
     fun sendMeshMessage(message: MeshMessage, device: BluetoothDevice) {
         val bytes = serializer.serialize(message) ?: run {
@@ -320,6 +349,8 @@ class BleScanner @Inject constructor(
         sendData(bytes, device)
     }
 
+    /* Called by routing engine when a message needs forwarding.
+    * Writes to every currently open GATT connection (store-and-forward relay).*/
     @SuppressLint("MissingPermission")
     private fun relayToAllPeers(message: MeshMessage) {
         val bytes = serializer.serialize(message) ?: return
@@ -336,6 +367,8 @@ class BleScanner @Inject constructor(
         }
     }
 
+    /* Sends first queued message once a connection is established.
+    * Only sends the first, subsequent messages are sent on the next write callback. */
     @SuppressLint("MissingPermission")
     private fun flushPendingMessages(
         deviceAddress: String,
@@ -366,10 +399,13 @@ class BleScanner @Inject constructor(
             return
         }
 
+        /* Only surface devices that are advertising CrowdLink UUID.
+        * Filters out all noise from other BLE devices nearby */
         val scanFilter = ScanFilter.Builder()
             .setServiceUuid(ParcelUuid(BleAdvertiser.SERVICE_UUID))
             .build()
 
+        // low latency mode, finds peers faster
         val scanSettings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
@@ -399,6 +435,8 @@ class BleScanner @Inject constructor(
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
             result?.let {
                 val rssi = it.rssi
+                /* The advertiser embeds device UUID as 16 bytes in service data field.
+                Read back here to identify the device without needing to connect. */
                 val serviceData = it.scanRecord
                     ?.getServiceData(ParcelUuid(BleAdvertiser.SERVICE_UUID))
 
@@ -429,6 +467,8 @@ class BleScanner @Inject constructor(
         }
     }
 
+    /* Watches the relay queue in Room
+    * when a message is ready to forward, pop it off queue and send to every known device*/
     fun observeRelayQueue(scope: CoroutineScope, repository: MessageRepository) {
         repository.getRelayQueue()
             .distinctUntilChanged()
@@ -444,6 +484,9 @@ class BleScanner @Inject constructor(
             .launchIn(scope)
     }
 
+    /*Adds the new RSSI reading to a rolling window and smooths it out,
+    * before updating the discovered device list
+    * raw RSSI is too noisy to use directly */
     private fun updateDeviceRssi(deviceId: String, rssi: Int) {
         val readings = deviceCache.getOrPut(deviceId) { mutableListOf() }
         readings.add(rssi)
@@ -468,12 +511,16 @@ class BleScanner @Inject constructor(
         _discoveredDevices.value = currentList
     }
 
+    /*Log-distance path loss model
+    * txPower of -59 dBm at 1m is a standard BLE assumption.
+    * The 2.5 path loss exponent is tuned for indoor/crowded environments. */
     private fun estimateDistance(rssi: Int): Double {
         val txPower = -59
         return if (rssi == 0) -1.0
         else 10.0.pow((txPower - rssi) / (10.0 * 2.5))
     }
 
+    // lookup helpers used by other parts of the app to get a BluetoothDevice by internal ID
     fun getDeviceById(deviceId: String): BluetoothDevice? {
         return deviceIdToAddress[deviceId]?.let { address -> knownDevices[address] }
     }
@@ -488,8 +535,8 @@ class BleScanner @Inject constructor(
     }
 
     companion object {
-        private const val RSSI_SAMPLE_SIZE = 10
-        private const val MAX_FAILURES_BEFORE_BACKOFF = 3
-        private const val BACKOFF_DURATION_MS = 30_000L
+        private const val RSSI_SAMPLE_SIZE = 10 // rolling window size for signal smoothing
+        private const val MAX_FAILURES_BEFORE_BACKOFF = 3 // attempts before the long cooldown kicks in
+        private const val BACKOFF_DURATION_MS = 30_000L // 30s cooldown after repeated failure
     }
 }

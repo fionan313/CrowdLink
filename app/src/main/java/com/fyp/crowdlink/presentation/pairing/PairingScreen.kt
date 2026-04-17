@@ -20,8 +20,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 /**
  * PairingScreen
  *
- * This composable screen allows users to pair with friends by either displaying a QR code
- * or scanning a friend's QR code. It interacts with the [PairingViewModel] to manage state.
+ * handles secure cryptographic handshake via QR exchange.
+ * manages bidirectional pairing state and incoming bond requests.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,19 +31,19 @@ fun PairingScreen(
     onScanClick: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
-    // Explicitly observing StateFlows from the ViewModel
+    // reactive state bindings for pairing lifecycle
     val qrCodeBitmap by viewModel.qrCodeBitmap.collectAsState()
     val pairingState by viewModel.pairingState.collectAsState()
     val incomingRequest by viewModel.incomingPairingRequest.collectAsState()
     val debugInfo by viewModel.debugInfo.collectAsState()
     val showDebugInfo by viewModel.showDebugInfo.collectAsState()
     
-    // Trigger QR generation when the screen is first launched
+    // initialise local identity QR on entry
     LaunchedEffect(Unit) {
         viewModel.generateQRCode()
     }
 
-    // Step 5: Show confirmation dialogue
+    // verification dialogue for incoming mesh bond requests
     incomingRequest?.let { request ->
         AlertDialog(
             onDismissRequest = { viewModel.declinePairingRequest() },
@@ -86,7 +86,7 @@ fun PairingScreen(
         ) {
             Spacer(modifier = Modifier.height(16.dp))
             
-            // Show QR Code if generated, otherwise show a loading indicator
+            // display generated QR containing local public key and identity
             if (qrCodeBitmap != null) {
                 Image(
                     bitmap = qrCodeBitmap!!.asImageBitmap(),
@@ -99,7 +99,7 @@ fun PairingScreen(
             
             Spacer(modifier = Modifier.height(32.dp))
             
-            // Button to initiate QR scanning flow
+            // trigger external scanner flow for peer QR ingestion
             Button(
                 onClick = onScanClick,
                 modifier = Modifier.fillMaxWidth().height(56.dp)
@@ -109,7 +109,7 @@ fun PairingScreen(
                 Text("Scan Friend's QR Code")
             }
             
-            // Handle pairing state changes (Success, Error, etc.)
+            // qualitative feedback for handshake progress
             when (pairingState) {
                 is PairingState.Pairing -> {
                     Spacer(modifier = Modifier.height(16.dp))
@@ -122,7 +122,6 @@ fun PairingScreen(
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
                 is PairingState.Success -> {
-                    // Navigate away or show success message when pairing is successful
                     LaunchedEffect(Unit) {
                         onPairingSuccess()
                     }
@@ -138,7 +137,7 @@ fun PairingScreen(
                 else -> {}
             }
 
-            // Debug Info at the bottom
+            // conditional debug telemetry for mesh diagnostics
             if (showDebugInfo) {
                 Spacer(modifier = Modifier.weight(1f))
                 Text(

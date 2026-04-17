@@ -20,6 +20,11 @@ import com.fyp.crowdlink.presentation.sos.SosViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
+/**
+ * FriendsScreen
+ *
+ * primary dashboard for managing paired peers and triggering emergency alerts.
+ */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun FriendsScreen(
@@ -31,13 +36,13 @@ fun FriendsScreen(
     sosViewModel: SosViewModel = hiltViewModel()
 ) {
     val friends by viewModel.friends.collectAsState()
-    var friendToDelete by remember { mutableStateOf<Friend?>(null) }
+    var friendToDelete by remember { mutableStateOf<Friend?>(null) } // state for unpair confirmation dialogue
     
     val isSending by sosViewModel.isSending.collectAsState()
     val sosSent by sosViewModel.sosSent.collectAsState()
     var showSosConfirmDialog by remember { mutableStateOf(false) }
 
-    // Confirmation dialog
+    // safety check to prevent accidental distress broadcasts
     if (showSosConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showSosConfirmDialog = false },
@@ -84,6 +89,7 @@ fun FriendsScreen(
                 .padding(paddingValues)
         ) {
             if (friends.isEmpty()) {
+                // empty state when no cryptographic bonds exist
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -130,13 +136,13 @@ fun FriendsScreen(
                 }
             }
 
-            // SOS Button - requires long press to prevent accidental triggers
+            // emergency SOS trigger; enforced long-press to mitigate false positives
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)
                     .combinedClickable(
-                        onClick = { /* Do nothing, requires long press */ },
+                        onClick = { /* long press required for safety */ },
                         onLongClick = { 
                             if (!sosSent && !isSending) {
                                 showSosConfirmDialog = true 
@@ -174,6 +180,7 @@ fun FriendsScreen(
             }
         }
         
+        // unpair verification dialogue
         friendToDelete?.let { friend ->
             AlertDialog(
                 onDismissRequest = { friendToDelete = null },
@@ -201,6 +208,11 @@ fun FriendsScreen(
     }
 }
 
+/**
+ * FriendListItem
+ *
+ * individual list entry displaying peer metadata and management actions.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FriendListItem(
@@ -209,6 +221,7 @@ fun FriendListItem(
     onClick: () -> Unit,
     onFindClick: () -> Unit
 ) {
+    // localised timestamp formatter
     val dateFormat = remember { SimpleDateFormat("MMM d, yyyy 'at' h:mm a", Locale.getDefault()) }
     
     Card(
@@ -245,6 +258,7 @@ fun FriendListItem(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 
+                // absolute timestamp of last confirmed mesh interaction
                 if (friend.lastSeen > 0) {
                     Text(
                         text = "Last seen: ${dateFormat.format(Date(friend.lastSeen))}",

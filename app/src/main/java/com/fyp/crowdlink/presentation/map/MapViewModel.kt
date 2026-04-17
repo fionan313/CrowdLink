@@ -18,11 +18,21 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import javax.inject.Inject
 
+/**
+ * FriendMapPin
+ *
+ * simple wrapper combining peer identity with their last known mesh-reported location.
+ */
 data class FriendMapPin(
     val friend: Friend,
     val location: DeviceLocation
 )
 
+/**
+ * MapViewModel
+ *
+ * manages reactive state for the map interface; synchronises peer telemetry and device orientation.
+ */
 @HiltViewModel
 class MapViewModel @Inject constructor(
     private val locationRepository: LocationRepository,
@@ -45,17 +55,18 @@ class MapViewModel @Inject constructor(
     private val _myHeading = MutableStateFlow(0f)
     val myHeading: StateFlow<Float> = _myHeading.asStateFlow()
 
+    // buffers for sensor fusion and smoothing
     private var gravity: FloatArray? = null
     private var geomagnetic: FloatArray? = null
-    private val alpha = 0.15f
+    private val alpha = 0.15f // low-pass filter constant
 
     init {
-        // Collect own GPS location
+        // synchronise local GPS position
         locationRepository.getMyLocation()
             .onEach { _myLocation.value = it }
             .launchIn(viewModelScope)
 
-        // Collect friends and their cached locations, combine into pins
+        // aggregate peer locations into reactive pins for map rendering
         friendRepository.getAllFriends()
             .onEach { friends ->
                 friends.forEach { friend ->
@@ -74,6 +85,7 @@ class MapViewModel @Inject constructor(
             }
             .launchIn(viewModelScope)
 
+        // initialise orientation sensors
         val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         val magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
         sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI)
@@ -81,6 +93,7 @@ class MapViewModel @Inject constructor(
     }
 
     override fun onSensorChanged(event: SensorEvent) {
+        // apply noise reduction to raw sensor vectors
         if (event.sensor.type == Sensor.TYPE_ACCELEROMETER) {
             gravity = lowPass(event.values.clone(), gravity)
         }
@@ -90,6 +103,7 @@ class MapViewModel @Inject constructor(
         val g = gravity ?: return
         val m = geomagnetic ?: return
 
+        // compute device heading relative to magnetic north
         val r = FloatArray(9)
         val i = FloatArray(9)
         if (SensorManager.getRotationMatrix(r, i, g, m)) {
@@ -100,6 +114,11 @@ class MapViewModel @Inject constructor(
         }
     }
 
+    /**
+     * lowPass
+     *
+     * basic temporal filter to reduce jitter on sensor readings.
+     */
     private fun lowPass(input: FloatArray, output: FloatArray?): FloatArray {
         if (output == null) return input
         for (i in input.indices) {
@@ -122,8 +141,7 @@ class MapViewModel @Inject constructor(
 
     fun startTileCaching() {
         _isCachingTiles.value = true
-        // Tile caching is handled in MapScreen via the MapLibre offline manager
-        // This flag drives the UI indicator
+        // UI flag only; actual caching logic resides in MapScreen via MapLibre's offline manager
     }
 
     fun onTileCachingComplete() {
@@ -132,6 +150,7 @@ class MapViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        // prevent sensor listener leaks
         sensorManager.unregisterListener(this)
     }
 }

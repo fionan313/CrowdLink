@@ -18,6 +18,11 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/**
+ * CompassViewModel
+ *
+ * computes bearing and distance to peers using fused sensor data and mesh locations.
+ */
 @HiltViewModel
 class CompassViewModel @Inject constructor(
     private val locationRepository: LocationRepository,
@@ -34,6 +39,7 @@ class CompassViewModel @Inject constructor(
     private var currentFriendId: String = ""
     private val _friendLocation = MutableStateFlow<DeviceLocation?>(null)
 
+    // navigation state exports
     private val _compassHeading = MutableStateFlow(0f)
     val compassHeading: StateFlow<Float> = _compassHeading.asStateFlow()
 
@@ -53,20 +59,22 @@ class CompassViewModel @Inject constructor(
         sharedPreferences.getBoolean("indoor_override", false)
     )
 
-    // Smoothing sensors
+    // sensor fusion buffers and smoothing constant
     private var gravity: FloatArray? = null
     private var geomagnetic: FloatArray? = null
-    private val alpha = 0.15f // Low-pass filter constant
+    private val alpha = 0.15f // low-pass filter alpha; smaller is smoother but laggier
 
     private var lastBearingLocation: Location? = null
 
     init {
+        // initialise hardware sensors for orientation
         val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         val magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
 
         sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI)
         sensorManager.registerListener(this, magnetometer, SensorManager.SENSOR_DELAY_UI)
 
+        // reactively compute relative distance and bearing
         combine(_myLocation, _friendLocation, _indoorOverride) { myLoc, friendLoc, forceIndoor ->
             if (myLoc != null && friendLoc != null) {
                 val results = FloatArray(1)
@@ -82,8 +90,7 @@ class CompassViewModel @Inject constructor(
                     longitude = myLoc.longitude
                 }
 
-                // Only update bearing if we have significant movement (>2m) or it's the first fix
-                // to avoid jitter when stationary
+                // debounce bearing updates to avoid rotation jitter while stationary
                 if (lastBearingLocation == null || myAndroidLoc.distanceTo(lastBearingLocation!!) > 2f) {
                     val friendAndroidLoc = Location("").apply {
                         latitude = friendLoc.latitude
@@ -93,6 +100,7 @@ class CompassViewModel @Inject constructor(
                     lastBearingLocation = myAndroidLoc
                 }
 
+                // determine if GPS data is reliable and current
                 val isStale = System.currentTimeMillis() - friendLoc.timestamp > 60000
                 _isGpsAvailable.value = !forceIndoor && myLoc.accuracy < 50f && !isStale
             } else {
@@ -102,7 +110,7 @@ class CompassViewModel @Inject constructor(
             }
         }.launchIn(viewModelScope)
 
-        // Watch RSSI for the current friend from BLE scanner
+        // map real-time BLE proximity for indoor/fallback tracking
         bleScanner.discoveredDevices
             .onEach { devices ->
                 val device = devices.firstOrNull { it.deviceId == currentFriendId }
@@ -136,6 +144,7 @@ class CompassViewModel @Inject constructor(
     }
 
     override fun onSensorChanged(event: SensorEvent) {
+        // filter raw sensor noise
         if (event.sensor.type == Sensor.TYPE_ACCELEROMETER) {
             gravity = lowPass(event.values.clone(), gravity)
         }
@@ -143,6 +152,7 @@ class CompassViewModel @Inject constructor(
             geomagnetic = lowPass(event.values.clone(), geomagnetic)
         }
 
+        // derive device orientation from smoothed vectors
         if (gravity != null && geomagnetic != null) {
             val r = FloatArray(9)
             val i = FloatArray(9)
@@ -151,13 +161,18 @@ class CompassViewModel @Inject constructor(
                 SensorManager.getOrientation(r, orientation)
                 val azimuth = Math.toDegrees(orientation[0].toDouble()).toFloat()
                 
-                // Final value smoothing
+                // map azimuth to 0-360 range
                 val newHeading = (azimuth + 360) % 360
                 _compassHeading.value = newHeading
             }
         }
     }
 
+    /**
+     * lowPass
+     *
+     * applies a basic temporal filter to reduce jitter on sensor vectors.
+     */
     private fun lowPass(input: FloatArray, output: FloatArray?): FloatArray {
         if (output == null) return input
         for (i in input.indices) {
@@ -170,6 +185,7 @@ class CompassViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        // prevent sensor leaks
         sensorManager.unregisterListener(this)
     }
 }

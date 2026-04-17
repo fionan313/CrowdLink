@@ -21,6 +21,8 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
+// scans for ESP32 relay nodes advertising the CrowdLink relay service UUID.
+// separate from BleScanner — that handles peer phones, this handles hardware nodes only
 @Singleton
 class RelayNodeScanner @Inject constructor(
     @ApplicationContext private val context: Context
@@ -32,6 +34,8 @@ class RelayNodeScanner @Inject constructor(
 
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     private val adapter = bluetoothManager.adapter
+
+    // computed each time in case BT was toggled
     private val scanner get() = adapter?.bluetoothLeScanner
     private var activeScanner: BluetoothLeScanner? = null
 
@@ -43,7 +47,8 @@ class RelayNodeScanner @Inject constructor(
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val device = result.device
             val name = result.scanRecord?.deviceName ?: device.name ?: "Unknown"
-            
+
+            // only surface devices broadcasting the CrowdLink relay name prefix
             if (name.startsWith("CrowdLink-Relay")) {
                 val relay = RelayNode(
                     deviceId = device.address,
@@ -66,6 +71,7 @@ class RelayNodeScanner @Inject constructor(
         }
     }
 
+    // upsert into the list, keep sorted strongest signal first
     private fun updateDiscoveredRelays(relay: RelayNode) {
         val currentList = _discoveredRelays.value.toMutableList()
         val index = currentList.indexOfFirst { it.deviceId == relay.deviceId }
@@ -86,6 +92,7 @@ class RelayNodeScanner @Inject constructor(
         }
         activeScanner = s
 
+        // filter by service UUID so we only see CrowdLink relay nodes, not every BLE device
         val filters = listOf(
             ScanFilter.Builder()
                 .setServiceUuid(ParcelUuid(UUID.fromString(SERVICE_UUID)))

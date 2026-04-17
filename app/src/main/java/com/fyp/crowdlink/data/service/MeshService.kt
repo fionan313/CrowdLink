@@ -1,5 +1,6 @@
 package com.fyp.crowdlink.data.service
 
+import android.R
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -9,7 +10,6 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
-import com.fyp.crowdlink.R
 import com.fyp.crowdlink.domain.repository.FriendRepository
 import com.fyp.crowdlink.domain.usecase.ShareLocationUseCase
 import com.fyp.crowdlink.presentation.MainActivity
@@ -24,6 +24,8 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 
+// foreground service that keeps the mesh alive when the app is backgrounded.
+// broadcasts location to all paired friends every 60 seconds if location sharing is enabled
 @AndroidEntryPoint
 class MeshService : Service() {
 
@@ -31,6 +33,7 @@ class MeshService : Service() {
     @Inject lateinit var friendRepository: FriendRepository
     @Inject lateinit var sharedPreferences: SharedPreferences
 
+    // SupervisorJob so a failed broadcast doesn't cancel the whole loop
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -41,9 +44,9 @@ class MeshService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val notification = createNotification("Mesh Network Active")
-        startForeground(NOTIFICATION_ID, notification)
+        startForeground(NOTIFICATION_ID, createNotification("Mesh Network Active"))
         startLocationLoop()
+        // START_STICKY — OS restarts the service if killed, no intent needed
         return START_STICKY
     }
 
@@ -74,9 +77,9 @@ class MeshService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("CrowdLink")
             .setContentText(content)
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setSmallIcon(R.drawable.stat_notify_sync)
             .setContentIntent(pendingIntent)
-            .setOngoing(true)
+            .setOngoing(true) // persistent — can't be dismissed while service is running
             .build()
     }
 
@@ -84,7 +87,7 @@ class MeshService : Service() {
         val channel = NotificationChannel(
             CHANNEL_ID,
             "Mesh Status",
-            NotificationManager.IMPORTANCE_LOW
+            NotificationManager.IMPORTANCE_LOW // low importance — no sound or heads-up
         ).apply {
             description = "Shows when the mesh network is active in the background"
         }

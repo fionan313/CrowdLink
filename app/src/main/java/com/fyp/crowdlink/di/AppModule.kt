@@ -27,6 +27,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
+// @Binds is used here because LocationRepositoryImpl is injected by Hilt directly —
+// no manual construction needed, unlike the repos in AppModule
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class RepositoryModule {
@@ -37,18 +39,13 @@ abstract class RepositoryModule {
     ): LocationRepository
 }
 
-/**
- * AppModule
- *
- * This module provides application-level dependencies for dependency injection using Dagger Hilt.
- */
+// provides all app-level singletons to the Hilt dependency graph
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
-    /**
-     * Provides the singleton instance of the AppDatabase.
-     */
+    // fallbackToDestructiveMigration — acceptable during development, replace with proper
+    // migrations before any public release
     @Provides
     @Singleton
     fun provideFriendDatabase(@ApplicationContext context: Context): AppDatabase {
@@ -57,28 +54,24 @@ object AppModule {
             AppDatabase::class.java,
             "friend_db"
         )
-        .fallbackToDestructiveMigration()
-        .build()
+            .fallbackToDestructiveMigration()
+            .build()
     }
 
-    @Provides
-    @Singleton
+    // DAO providers — each pulls from the single AppDatabase instance above
+    @Provides @Singleton
     fun provideFriendDao(db: AppDatabase): FriendDao = db.friendDao()
 
-    @Provides
-    @Singleton
+    @Provides @Singleton
     fun provideUserProfileDao(db: AppDatabase): UserProfileDao = db.userProfileDao()
 
-    @Provides
-    @Singleton
+    @Provides @Singleton
     fun provideMessageDao(db: AppDatabase): MessageDao = db.messageDao()
 
-    @Provides
-    @Singleton
+    @Provides @Singleton
     fun provideRelayMessageDao(db: AppDatabase): RelayMessageDao = db.relayMessageDao()
 
-    @Provides
-    @Singleton
+    @Provides @Singleton
     fun provideLocationDao(db: AppDatabase): LocationDao = db.locationDao()
 
     @Provides
@@ -104,13 +97,15 @@ object AppModule {
     ): MessageRepository {
         return MessageRepositoryImpl(messageDao, relayMessageDao)
     }
-    
+
     @Provides
     @Singleton
     fun provideSharedPreferences(@ApplicationContext context: Context): SharedPreferences {
         return context.getSharedPreferences("crowdlink_prefs", Context.MODE_PRIVATE)
     }
 
+    // localDeviceId is set here at construction time so the routing engine is ready
+    // before any BLE traffic arrives
     @Provides
     @Singleton
     fun provideMeshRoutingEngine(
@@ -123,6 +118,8 @@ object AppModule {
         }
     }
 
+    // manually constructed because DeviceRepositoryImpl wires BLE callbacks in init{} —
+    // Hilt's @Binds approach can't guarantee the right construction order here
     @Provides
     @Singleton
     fun provideDeviceRepository(
@@ -153,22 +150,18 @@ object AppModule {
         )
     }
 
-    @Provides
-    @Singleton
+    @Provides @Singleton
     fun provideMeshMessageSerializer(): MeshMessageSerialiser = MeshMessageSerialiser()
 
-    @Provides
-    @Singleton
+    @Provides @Singleton
     fun provideSeenMessageCache(): SeenMessageCache = SeenMessageCache()
 
-    @Provides
-    @Singleton
+    @Provides @Singleton
     fun provideFusedLocationClient(
         @ApplicationContext context: Context
     ): FusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(context)
 
-    @Provides
-    @Singleton
+    @Provides @Singleton
     fun provideSensorManager(
         @ApplicationContext context: Context
     ): SensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager

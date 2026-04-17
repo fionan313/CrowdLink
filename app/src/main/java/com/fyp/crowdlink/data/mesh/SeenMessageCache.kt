@@ -5,10 +5,12 @@ import java.util.Collections
 import javax.inject.Inject
 import javax.inject.Singleton
 
+// tracks which message UUIDs this device has already processed.
+// prevents the same packet being relayed or delivered more than once
 @Singleton
 class SeenMessageCache @Inject constructor() {
 
-    // LinkedHashMap gives us insertion-order eviction for the LRU behaviour
+    // LinkedHashMap gives insertion-order eviction — oldest entry goes first when full
     private val cache: MutableSet<UUID> = Collections.synchronizedSet(
         object : LinkedHashSet<UUID>() {
             override fun add(element: UUID): Boolean {
@@ -27,6 +29,6 @@ class SeenMessageCache @Inject constructor() {
     }
 
     companion object {
-        private const val MAX_SIZE = 200
+        private const val MAX_SIZE = 200 // cap at 200 UUIDs to bound memory use
     }
 }

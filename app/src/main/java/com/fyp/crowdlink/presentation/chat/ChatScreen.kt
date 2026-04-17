@@ -23,9 +23,8 @@ import com.fyp.crowdlink.domain.model.MessageStatus
 /**
  * ChatScreen
  *
- * This screen allows the user to exchange messages with a paired friend.
- * It uses the Mesh Network as the primary transport. WiFi Direct connections
- * are established automatically in the background for high-bandwidth reliability.
+ * handles point-to-point messaging over BLE mesh.
+ * establishes background discovery and automated connection management.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,12 +34,13 @@ fun ChatScreen(
     onNavigateBack: () -> Unit,
     viewModel: MessageViewModel = hiltViewModel()
 ) {
+    // observe message stream and connectivity status
     val messages by viewModel.getMessages(friendId).collectAsState()
     val discoveryStatus by viewModel.discoveryStatus.collectAsState()
     val isMeshActive by viewModel.isMeshActive.collectAsState()
     var textState by remember { mutableStateOf("") }
 
-    // Lifecycle management for background discovery and auto-connection
+    // manage discovery lifecycle; stops scanning on exit
     DisposableEffect(friendId) {
         viewModel.onResume(friendId)
         viewModel.discover()
@@ -69,7 +69,6 @@ fun ChatScreen(
                     }
                 },
                 actions = {
-                    // WiFi Direct peer list is now hidden as it connects automatically
                     IconButton(onClick = { viewModel.discover() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh Discovery")
                     }
@@ -84,7 +83,6 @@ fun ChatScreen(
                 .imePadding()
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // Message List Area
                 if (messages.isEmpty()) {
                     Box(
                         modifier = Modifier
@@ -95,6 +93,7 @@ fun ChatScreen(
                         ChatEmptyState(friendName = friendName)
                     }
                 } else {
+                    // scrollable message history; newest at bottom
                     LazyColumn(
                         modifier = Modifier
                             .weight(1f)
@@ -109,7 +108,7 @@ fun ChatScreen(
                     }
                 }
 
-                // Input Area
+                // composition area with state-hoisted input
                 Surface(tonalElevation = 2.dp) {
                     Row(
                         modifier = Modifier
@@ -177,6 +176,12 @@ fun ChatEmptyState(friendName: String) {
     }
 }
 
+/**
+ * MessageBubble
+ *
+ * renders text content with aligned alignment based on sender.
+ * displays transport metadata and delivery acknowledgements.
+ */
 @Composable
 fun MessageBubble(message: Message) {
     val alignment = if (message.isSentByMe) Alignment.End else Alignment.Start
@@ -204,7 +209,7 @@ fun MessageBubble(message: Message) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.End
                 ) {
-                    // Transport and Hop indicator
+                    // format delivery metadata: transport type and relay depth
                     val infoText = buildString {
                         append(message.transportType)
                         if (message.hopCount > 0) {
@@ -228,6 +233,11 @@ fun MessageBubble(message: Message) {
     }
 }
 
+/**
+ * StatusIcon
+ *
+ * maps MessageStatus to specific iconography and semantic colours.
+ */
 @Composable
 fun StatusIcon(status: MessageStatus) {
     val icon = when (status) {

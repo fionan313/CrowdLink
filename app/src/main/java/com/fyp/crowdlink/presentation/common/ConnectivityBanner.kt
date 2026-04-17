@@ -10,15 +10,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
+/**
+ * ConnectivityBanner
+ *
+ * persistent warning banner for radio state alerts.
+ * informs users when hardware requirements for mesh networking aren't met.
+ */
 @Composable
 fun ConnectivityBanner(
     isBluetoothEnabled: Boolean,
     isWifiEnabled: Boolean,
     modifier: Modifier = Modifier
 ) {
+    // only visible if core transport radios are offline
     if (!isBluetoothEnabled || !isWifiEnabled) {
         Surface(
-            color = MaterialTheme.colorScheme.errorContainer,
+            color = MaterialTheme.colorScheme.errorContainer, // error colour palette for high-visibility alerts
             modifier = modifier
                 .fillMaxWidth()
                 .padding(8.dp),
@@ -26,7 +33,7 @@ fun ConnectivityBanner(
         ) {
             Row(
                 modifier = Modifier.padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically // centre content vertically
             ) {
                 Icon(
                     Icons.Default.Warning,
@@ -36,6 +43,7 @@ fun ConnectivityBanner(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = when {
+                        // dynamic strings based on specific radio unavailability
                         !isBluetoothEnabled && !isWifiEnabled -> "Bluetooth and WiFi are off. CrowdLink needs both to work."
                         !isBluetoothEnabled -> "Bluetooth is off. Turn it on to discover friends."
                         else -> "WiFi is off. Turn it on for high-speed connections."

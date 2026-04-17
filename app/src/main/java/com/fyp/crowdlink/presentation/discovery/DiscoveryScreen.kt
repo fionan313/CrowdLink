@@ -24,6 +24,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.fyp.crowdlink.domain.model.NearbyFriend
 import com.fyp.crowdlink.presentation.common.ConnectivityBanner
 
+/**
+ * DiscoveryScreen
+ *
+ * primary hub for local peer discovery. 
+ * manages mesh lifecycle and lists reachable nodes within BLE range.
+ */
 @SuppressLint("MissingPermission")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,6 +40,7 @@ fun DiscoveryScreen(
     onNavigateToRelay: () -> Unit,
     viewModel: DiscoveryViewModel = hiltViewModel()
 ) {
+    // reactive state bindings for discovery and hardware status
     val nearbyFriends by viewModel.nearbyFriends.collectAsState()
     val discoveredRelays by viewModel.discoveredRelays.collectAsState()
     val isRelayConnected by viewModel.isRelayConnected.collectAsState()
@@ -56,12 +63,13 @@ fun DiscoveryScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Connectivity Banner
+            // system-level radio status warnings
             ConnectivityBanner(
                 isBluetoothEnabled = isBluetoothEnabled,
                 isWifiEnabled = isWifiEnabled
             )
 
+            // manual toggle for mesh advertising and discovery
             MeshStatusPill(isMeshActive = isMeshActive) {
                 if (isMeshActive) {
                     viewModel.stopDiscovery()
@@ -72,7 +80,7 @@ fun DiscoveryScreen(
                 }
             }
 
-            // Only show the relay banner if at least one relay has been found OR debug mode is on
+            // show relay banner if infrastructure is found or debug override is set
             val relayCount = discoveredRelays.size
             if (relayCount > 0 || forceShowRelays) {
                 RelayStatusBanner(
@@ -82,13 +90,13 @@ fun DiscoveryScreen(
                 )
             }
 
-            // Nearby friends list
             Text(
                 text = "Nearby Friends (${nearbyFriends.size})",
                 style = MaterialTheme.typography.titleMedium
             )
 
             if (nearbyFriends.isEmpty()) {
+                // empty state placeholder when no peers are visible
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -136,6 +144,11 @@ fun DiscoveryScreen(
     }
 }
 
+/**
+ * MeshStatusPill
+ * 
+ * compact status indicator and toggle for the background mesh service.
+ */
 @Composable
 fun MeshStatusPill(
     isMeshActive: Boolean,
@@ -162,7 +175,7 @@ fun MeshStatusPill(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Pulsing dot
+            // indicates live radio activity
             Box(
                 modifier = Modifier
                     .size(10.dp)
@@ -184,6 +197,11 @@ fun MeshStatusPill(
     }
 }
 
+/**
+ * RelayStatusBanner
+ *
+ * indicates connection to infrastructure mesh nodes (ESP32/Fixed relays).
+ */
 @Composable
 fun RelayStatusBanner(isConnected: Boolean, relayCount: Int, onClick: () -> Unit) {
     Card(
@@ -221,6 +239,11 @@ fun RelayStatusBanner(isConnected: Boolean, relayCount: Int, onClick: () -> Unit
     }
 }
 
+/**
+ * NearbyFriendCard
+ *
+ * detailed view for a discovered peer; includes proximity metrics and navigation links.
+ */
 @Composable
 fun NearbyFriendCard(
     friend: NearbyFriend,
@@ -228,6 +251,7 @@ fun NearbyFriendCard(
     onMessageClick: () -> Unit,
     onMapClick: () -> Unit
 ) {
+    // qualitative mapping of signal-derived distance
     val proximityLabel = when {
         friend.estimatedDistance < 5 -> "Very close"
         friend.estimatedDistance < 20 -> "Nearby"
@@ -235,7 +259,7 @@ fun NearbyFriendCard(
     }
 
     val proximityColor = when {
-        friend.estimatedDistance < 5 -> Color(0xFF4CAF50)   // green
+        friend.estimatedDistance < 5 -> Color(0xFF4CAF50)   // green for close proximity
         friend.estimatedDistance < 20 -> MaterialTheme.colorScheme.primary
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
@@ -250,7 +274,7 @@ fun NearbyFriendCard(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Avatar initial
+            // avatar based on first initial
             Box(
                 modifier = Modifier
                     .size(44.dp)
@@ -289,7 +313,7 @@ fun NearbyFriendCard(
                 )
             }
 
-            // Action buttons
+            // primary peer interaction routes
             IconButton(onClick = onMapClick) {
                 Icon(
                     Icons.Default.Map,

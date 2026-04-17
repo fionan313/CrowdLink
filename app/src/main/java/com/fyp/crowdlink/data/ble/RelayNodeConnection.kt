@@ -18,6 +18,8 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
+// handles the BLE connection to an ESP32 relay node.
+// when connected, it drains the relay queue by forwarding messages over to the node
 @Singleton
 class RelayNodeConnection @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -82,24 +84,19 @@ class RelayNodeConnection @Inject constructor(
         }
     }
 
-    /**
-     * Observes the relay queue and attempts to deliver messages via ESP32 
-     * if a node is currently connected.
-     */
+    // watches the relay queue — if an ESP32 is connected, drain it by forwarding each message
     private fun startRelayQueueObserver() {
         relayObserverJob?.cancel()
         relayObserverJob = scope.launch {
             messageRepository.getRelayQueue().collect { queue ->
                 if (_isConnected.value && queue.isNotEmpty()) {
-                    Timber.tag(TAG)
-                        .d("Relay queue update: ${queue.size} messages waiting, ESP32 connected")
+                    Timber.tag(TAG).d("Relay queue update: ${queue.size} messages waiting, ESP32 connected")
                     queue.forEach { meshMessage ->
-                        // Attempt delivery via ESP32 BLE fallback
+                        // format: "recipientId:payload" — simple enough for the ESP32 firmware to parse
                         val payload = "${meshMessage.recipientId}:${String(meshMessage.payload, Charsets.UTF_8)}"
                         val success = sendMessage(payload)
                         if (success) {
-                            Timber.tag(TAG)
-                                .d("Successfully delivered message ${meshMessage.messageId} via ESP32, removing from queue")
+                            Timber.tag(TAG).d("Delivered ${meshMessage.messageId} via ESP32, removing from queue")
                             messageRepository.removeFromRelayQueue(meshMessage.messageId)
                         }
                     }
@@ -121,6 +118,7 @@ class RelayNodeConnection @Inject constructor(
         return true
     }
 
+    // same Android 13 API split as BleScanner — use new signature on TIRAMISU+, deprecated below
     @SuppressLint("MissingPermission")
     fun sendMessage(message: String): Boolean {
         val characteristic = writeCharacteristic ?: run {
@@ -148,6 +146,7 @@ class RelayNodeConnection @Inject constructor(
         bluetoothGatt?.disconnect()
     }
 
+    // release GATT resources and reset state
     @SuppressLint("MissingPermission")
     private fun cleanup() {
         bluetoothGatt?.close()

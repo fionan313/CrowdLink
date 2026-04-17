@@ -17,12 +17,14 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
+// two DAOs — messageDao for chat messages, relayMessageDao for the mesh relay queue
 @Singleton
 class MessageRepositoryImpl @Inject constructor(
     private val messageDao: MessageDao,
     private val relayMessageDao: RelayMessageDao
 ) : MessageRepository {
 
+    // tracks which chat is open so incoming messages can be marked read immediately
     private val _activeChatFriendId = MutableStateFlow<String?>(null)
     override val activeChatFriendId: StateFlow<String?> = _activeChatFriendId.asStateFlow()
 
@@ -43,12 +45,10 @@ class MessageRepositoryImpl @Inject constructor(
     }
 
     override suspend fun addToRelayQueue(message: MeshMessage) {
-        // Ensure binary payload has the correct type prefix if it's a text message
-        // Existing sendText in VM doesn't add it, so we check here if it's likely text
-        // or just ensure all mesh messages have a type byte.
         relayMessageDao.insert(message.toEntity())
     }
 
+    // BleScanner observes this flow and drains it as connections become available
     override fun getRelayQueue(): Flow<List<MeshMessage>> {
         return relayMessageDao.getActiveRelayQueue().map { entities ->
             entities.map { it.toDomain() }

@@ -31,7 +31,8 @@ import javax.inject.Inject
 /**
  * PairingViewModel
  *
- * This ViewModel manages the logic for the device pairing process.
+ * orchestrates the secure cryptographic handshake between peers.
+ * manages QR generation, GATT-based pairing requests, and bond persistence.
  */
 @HiltViewModel
 class PairingViewModel @Inject constructor(
@@ -47,6 +48,7 @@ class PairingViewModel @Inject constructor(
     
     private val bluetoothAdapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
 
+    // real-time radio status for UI feedback
     val isBluetoothEnabled: StateFlow<Boolean> = flow {
         while (true) {
             emit(bluetoothAdapter?.isEnabled == true)
@@ -54,21 +56,19 @@ class PairingViewModel @Inject constructor(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
-    // StateFlow for the generated QR code image
     private val _qrCodeBitmap = MutableStateFlow<Bitmap?>(null)
     val qrCodeBitmap: StateFlow<Bitmap?> = _qrCodeBitmap.asStateFlow()
     
-    // StateFlow for the current device's ID
     private val _myDeviceId = MutableStateFlow("")
     val myDeviceId: StateFlow<String> = _myDeviceId.asStateFlow()
     
-    // StateFlow for tracking the pairing status
     private val _pairingState = MutableStateFlow<PairingState>(PairingState.Idle)
     val pairingState: StateFlow<PairingState> = _pairingState.asStateFlow()
 
     private val _showDebugInfo = MutableStateFlow(sharedPreferences.getBoolean("show_pairing_debug", false))
     val showDebugInfo: StateFlow<Boolean> = _showDebugInfo.asStateFlow()
 
+    // reactively update debug visibility when settings change
     private val preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
         if (key == "show_pairing_debug") {
             _showDebugInfo.value = prefs.getBoolean(key, false)
@@ -81,6 +81,7 @@ class PairingViewModel @Inject constructor(
     
     val lastGattError: StateFlow<Pair<Int, Long>?> = deviceRepository.lastGattError
     
+    // aggregate telemetry for mesh diagnostics
     val debugInfo: StateFlow<String> = combine(
         isGattServerReady,
         _pairingState,
@@ -115,6 +116,7 @@ class PairingViewModel @Inject constructor(
     
     override fun onCleared() {
         super.onCleared()
+        // prevent listener leaks
         sharedPreferences.unregisterOnSharedPreferenceChangeListener(preferenceListener)
     }
     
@@ -122,13 +124,18 @@ class PairingViewModel @Inject constructor(
         _myDeviceId.value = userProfileRepository.getPersistentDeviceId()
     }
 
+    /**
+     * observePairingAccepted
+     *
+     * monitors GATT events to finalise bond persistence once a peer confirms.
+     */
     private fun observePairingAccepted() {
         deviceRepository.pairingAccepted
             .onEach { acceptedDeviceId ->
                 Timber.tag("PairingViewModel").d("Pairing accepted by $acceptedDeviceId")
                 if (acceptedDeviceId == pendingFriendDeviceId) {
                     viewModelScope.launch {
-                        // Only save here if not already saved (Device B path)
+                        // avoid duplicate entries if both sides initiate
                         val existing = friendRepository.getFriendById(acceptedDeviceId)
                         if (existing == null) {
                             friendRepository.addFriend(Friend(
@@ -145,6 +152,11 @@ class PairingViewModel @Inject constructor(
             .launchIn(viewModelScope)
     }
     
+    /**
+     * generateQRCode
+     *
+     * serialises local identity and a fresh ephemeral shared key into a QR bitmap.
+     */
     fun generateQRCode() {
         viewModelScope.launch {
             try {
@@ -154,7 +166,7 @@ class PairingViewModel @Inject constructor(
                 
                 val sharedKey = encryptionManager.generateSharedKey()
                 pendingSharedKey = sharedKey
-                pendingFriendDeviceId = null  // invalidate any stale pending pairing
+                pendingFriendDeviceId = null  // invalidate stale session data
                 pendingFriendName = null
 
                 val qrData = JSONObject().apply {
@@ -179,7 +191,7 @@ class PairingViewModel @Inject constructor(
                 
                 _qrCodeBitmap.value = bitmap
             } catch (e: Exception) {
-                e.printStackTrace()
+                Timber.e(e, "QR generation failed")
                 _qrCodeBitmap.value = null
             }
         }
@@ -187,6 +199,11 @@ class PairingViewModel @Inject constructor(
 
     private var scannedSharedKey: String? = null
 
+    /**
+     * onQRScanned
+     *
+     * parses peer identity from QR and initiates the GATT-based pairing request.
+     */
     fun onQRScanned(scannedData: String, defaultName: String) {
         viewModelScope.launch {
             _pairingState.value = PairingState.Pairing
@@ -217,10 +234,10 @@ class PairingViewModel @Inject constructor(
                     val userProfile = userProfileRepository.getUserProfile().first()
                     val myDisplayName = userProfile?.displayName ?: "${Build.MANUFACTURER} ${Build.MODEL}"
                     
-                    // Ensure scanning is active before we start looking
+                    // ensure discovery is active for target node resolution
                     bleScanner.startDiscovery()
                     
-                    // Retry sending pairing request until device is found or timeout
+                    // poll for target node availability before dispatching pairing request
                     val timeoutMs = 15_000L
                     val startTime = System.currentTimeMillis()
                     var sent = false
@@ -241,7 +258,7 @@ class PairingViewModel @Inject constructor(
 
                     if (sent) {
                         _pairingState.value = PairingState.AwaitingConfirmation
-                        // Timeout after 20 seconds waiting for acceptance
+                        // timeout if the peer fails to confirm within the window
                         viewModelScope.launch {
                             delay(20_000)
                             if (_pairingState.value is PairingState.AwaitingConfirmation) {
@@ -264,16 +281,20 @@ class PairingViewModel @Inject constructor(
         }
     }
 
+    /**
+     * acceptPairingRequest
+     *
+     * confirms a bond request from a peer and saves their credentials for mesh comms.
+     */
     fun acceptPairingRequest(request: PairingRequest) {
         viewModelScope.launch {
-            // Save requester as friend on Device B
             friendRepository.addFriend(Friend(
                 deviceId = request.senderDeviceId,
                 displayName = request.senderDisplayName,
                 sharedKey = request.sharedKey ?: scannedSharedKey ?: pendingSharedKey,
                 pairedAt = System.currentTimeMillis()
             ))
-            // Send acceptance back so Device A saves Device B
+            // inform requester to finalise the bidirectional bond
             deviceRepository.sendPairingAccepted(targetDeviceId = request.senderDeviceId)
             deviceRepository.clearIncomingPairingRequest()
             _pairingState.value = PairingState.Success
@@ -285,6 +306,11 @@ class PairingViewModel @Inject constructor(
     }
 }
 
+/**
+ * PairingState
+ *
+ * finite state representation of the secure handshake lifecycle.
+ */
 sealed class PairingState {
     object Idle : PairingState()
     object Pairing : PairingState()
