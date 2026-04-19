@@ -36,6 +36,18 @@ import java.net.Socket
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * WifiDirectManager
+ *
+ * Implements peer-to-peer communication over Wi-Fi Direct. This class is not active in the
+ * current production build - all messaging runs over the BLE mesh. It is retained as a
+ * foundation for future work, particularly for higher-bandwidth use cases such as multimedia
+ * messaging, where BLE's 412-byte payload limit would be a constraint.
+ *
+ * Wi-Fi Direct was trialled during the Phase 1 prototype but was deprioritised after MAC
+ * address randomisation on Android 10+ made reliable peer discovery inconsistent across
+ * test devices.
+ */
 @Singleton
 class WifiDirectManager @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -43,19 +55,22 @@ class WifiDirectManager @Inject constructor(
     private val meshRoutingEngine: MeshRoutingEngine,
     private val serializer: MeshMessageSerialiser
 ) {
-    private val manager: WifiP2pManager? = context.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
-    private val channel: WifiP2pManager.Channel? = manager?.initialize(context, context.mainLooper, null)
+    private val manager: WifiP2pManager? =
+        context.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
+    private val channel: WifiP2pManager.Channel? =
+        manager?.initialize(context, context.mainLooper, null)
 
     private val _peers = MutableStateFlow<List<WifiP2pDevice>>(emptyList())
     val peers = _peers.asStateFlow()
 
-    // Maps discovered deviceId to its WifiP2pDevice
+    // maps discovered deviceId -> WifiP2pDevice for lookup during connection
     private val _discoveredFriends = MutableStateFlow<Map<String, WifiP2pDevice>>(emptyMap())
     val discoveredFriends = _discoveredFriends.asStateFlow()
 
     private val _connectionInfo = MutableStateFlow<WifiP2pInfo?>(null)
     val connectionInfo = _connectionInfo.asStateFlow()
 
+    // IP of the group owner once a P2P group is formed
     private val _peerIp = MutableStateFlow<String?>(null)
     val peerIp = _peerIp.asStateFlow()
 
@@ -84,6 +99,7 @@ class WifiDirectManager @Inject constructor(
                         if (info.groupFormed) {
                             startServer(info)
                             if (!info.isGroupOwner) {
+                                // non-owner connects back to the group owner to complete handshake
                                 _peerIp.value = info.groupOwnerAddress.hostAddress
                                 sendHandshake(info.groupOwnerAddress.hostAddress)
                             }
@@ -98,7 +114,8 @@ class WifiDirectManager @Inject constructor(
     }
 
     /**
-     * Set up local service to advertise our device ID over WiFi Direct.
+     * Advertises this device's ID over DNS-SD so peers can discover it without
+     * needing to establish a full P2P connection first.
      */
     fun setupServiceDiscovery(myDeviceId: String) {
         val record = mapOf("deviceId" to myDeviceId)
@@ -119,13 +136,14 @@ class WifiDirectManager @Inject constructor(
     }
 
     /**
-     * Start discovering other CrowdLink services nearby.
+     * Scans for other CrowdLink DNS-SD services and populates [discoveredFriends]
+     * with any devices found.
      */
     @SuppressLint("MissingPermission")
     fun discoverServices() {
         val request = WifiP2pDnsSdServiceRequest.newInstance()
-        
-        manager?.setDnsSdResponseListeners(channel, 
+
+        manager?.setDnsSdResponseListeners(channel,
             { _, _, _ -> },
             { _, txtRecordMap, srcDevice ->
                 val deviceId = txtRecordMap["deviceId"]
@@ -149,19 +167,26 @@ class WifiDirectManager @Inject constructor(
         })
     }
 
-    suspend fun deliverMeshMessage(targetAddress: String, meshMessage: com.fyp.crowdlink.domain.model.MeshMessage): Boolean {
+    /**
+     * Opens a TCP socket to [targetAddress] and writes a serialised mesh packet.
+     * This higher-bandwidth path is suited to future multimedia payloads that would
+     * exceed the BLE MTU limit.
+     */
+    suspend fun deliverMeshMessage(
+        targetAddress: String,
+        meshMessage: com.fyp.crowdlink.domain.model.MeshMessage
+    ): Boolean {
         return withContext(Dispatchers.IO) {
             try {
                 val socket = Socket()
                 socket.connect(InetSocketAddress(targetAddress, 8888), 2000)
                 val output = DataOutputStream(socket.getOutputStream())
-                
+
                 val bytes = serializer.serialize(meshMessage) ?: return@withContext false
-                
+
                 output.writeUTF("MESH_PACKET_V2")
                 output.writeInt(bytes.size)
                 output.write(bytes)
-                
                 output.flush()
                 socket.close()
                 true
@@ -206,11 +231,10 @@ class WifiDirectManager @Inject constructor(
         })
     }
 
+    // guard against duplicate server starts from repeated connection events
     private fun startServer(info: WifiP2pInfo) {
         if (serverJob == null) {
-            serverJob = scope.launch {
-                runServer()
-            }
+            serverJob = scope.launch { runServer() }
         }
     }
 
@@ -221,8 +245,7 @@ class WifiDirectManager @Inject constructor(
                 serverSocket = ServerSocket(8888)
                 while (true) {
                     val client = serverSocket.accept()
-                    val clientIp = client.inetAddress.hostAddress
-                    _peerIp.value = clientIp
+                    _peerIp.value = client.inetAddress.hostAddress
                     handleIncomingConnection(client)
                 }
             } catch (e: Exception) {
@@ -238,9 +261,10 @@ class WifiDirectManager @Inject constructor(
             try {
                 val input = DataInputStream(socket.getInputStream())
                 val header = input.readUTF()
-                
+
                 when (header) {
                     "MESH_PACKET_V2" -> {
+                        // binary mesh packet - deserialise and hand to the routing engine
                         val size = input.readInt()
                         val bytes = ByteArray(size)
                         input.readFully(bytes)
@@ -250,10 +274,11 @@ class WifiDirectManager @Inject constructor(
                         }
                     }
                     "MESH_RELAY_V1" -> {
+                        // legacy relay format from the prototype - kept for backward compatibility
                         val senderId = input.readUTF()
                         val content = input.readUTF()
                         val messageIdStr = input.readUTF()
-                        
+
                         val message = Message(
                             messageId = messageIdStr,
                             senderId = senderId,
@@ -265,6 +290,7 @@ class WifiDirectManager @Inject constructor(
                         messageRepository.sendMessage(message)
                     }
                     else -> {
+                        // original prototype format - header field carries the sender ID
                         val senderId = header
                         val content = input.readUTF()
                         if (content != "HANDSHAKE_INIT") {
@@ -286,6 +312,7 @@ class WifiDirectManager @Inject constructor(
         }
     }
 
+    // delay gives the group owner time to start listening before the client attempts to connect
     private fun sendHandshake(targetAddress: String) {
         scope.launch {
             delay(1000)

@@ -18,6 +18,16 @@ import java.security.SecureRandom
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * EncryptionManager
+ *
+ * Wraps Google Tink to provide AES-256-GCM encryption and decryption for all outgoing
+ * and incoming mesh payloads. Keys are generated as raw 32-byte values and exchanged
+ * during the QR pairing process. Tink handles nonce generation internally, making nonce
+ * reuse structurally impossible. Keys are imported into a Tink KeysetHandle at call time
+ * rather than stored in a keyset format, keeping the QR payload compact.
+ */
+
 @Singleton
 class EncryptionManager @Inject constructor() {
 

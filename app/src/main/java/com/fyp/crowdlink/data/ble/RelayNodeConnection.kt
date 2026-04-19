@@ -18,6 +18,15 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * RelayNodeConnection
+ *
+ * Manages the BLE GATT connection to a nearby ESP32 relay node. When connected, it
+ * observes the Room relay queue and forwards each pending packet to the node over
+ * a writable GATT characteristic. Successfully forwarded messages are removed from
+ * the queue immediately. The payload format is "recipientId:content" - simple enough
+ * for the ESP32 firmware to parse without a full mesh header.
+ */
 @Singleton
 class RelayNodeConnection @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -49,7 +58,7 @@ class RelayNodeConnection @Inject constructor(
                 BluetoothProfile.STATE_CONNECTED -> {
                     Timber.tag(TAG).d("Connected to relay node")
                     _isConnected.value = true
-                    gatt.discoverServices()
+                    gatt.discoverServices() // discover the write characteristic before sending
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     Timber.tag(TAG).d("Disconnected from relay node")
@@ -83,23 +92,22 @@ class RelayNodeConnection @Inject constructor(
     }
 
     /**
-     * Observes the relay queue and attempts to deliver messages via ESP32 
-     * if a node is currently connected.
+     * Observes the Room relay queue. When an ESP32 is connected and messages are waiting,
+     * drains the queue by forwarding each one in order. Removes each message from the queue
+     * only after a successful write to avoid double-delivery on reconnect.
      */
     private fun startRelayQueueObserver() {
         relayObserverJob?.cancel()
         relayObserverJob = scope.launch {
             messageRepository.getRelayQueue().collect { queue ->
                 if (_isConnected.value && queue.isNotEmpty()) {
-                    Timber.tag(TAG)
-                        .d("Relay queue update: ${queue.size} messages waiting, ESP32 connected")
+                    Timber.tag(TAG).d("Relay queue: ${queue.size} messages waiting, ESP32 connected")
                     queue.forEach { meshMessage ->
-                        // Attempt delivery via ESP32 BLE fallback
+                        // "recipientId:payload" - compact enough for the ESP32 to parse
                         val payload = "${meshMessage.recipientId}:${String(meshMessage.payload, Charsets.UTF_8)}"
                         val success = sendMessage(payload)
                         if (success) {
-                            Timber.tag(TAG)
-                                .d("Successfully delivered message ${meshMessage.messageId} via ESP32, removing from queue")
+                            Timber.tag(TAG).d("Delivered ${meshMessage.messageId} via ESP32, removing from queue")
                             messageRepository.removeFromRelayQueue(meshMessage.messageId)
                         }
                     }
@@ -121,6 +129,10 @@ class RelayNodeConnection @Inject constructor(
         return true
     }
 
+    /**
+     * Writes a string payload to the relay characteristic. Handles the Android 13 API split -
+     * uses the new signature on TIRAMISU+ and falls back to the deprecated approach below.
+     */
     @SuppressLint("MissingPermission")
     fun sendMessage(message: String): Boolean {
         val characteristic = writeCharacteristic ?: run {
@@ -148,6 +160,7 @@ class RelayNodeConnection @Inject constructor(
         bluetoothGatt?.disconnect()
     }
 
+    // close the GATT connection and reset all state
     @SuppressLint("MissingPermission")
     private fun cleanup() {
         bluetoothGatt?.close()

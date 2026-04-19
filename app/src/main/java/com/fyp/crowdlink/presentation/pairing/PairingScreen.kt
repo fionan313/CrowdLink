@@ -20,8 +20,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 /**
  * PairingScreen
  *
- * This composable screen allows users to pair with friends by either displaying a QR code
- * or scanning a friend's QR code. It interacts with the [PairingViewModel] to manage state.
+ * Handles the two-sided QR pairing flow. Device A displays its QR code containing its
+ * device ID, display name and AES-256-GCM shared key. Device B scans it and sends a
+ * BLE confirmation back. If an incoming request arrives while this screen is open, an
+ * [AlertDialog] is shown so the user can accept or decline. Progress feedback is shown
+ * inline as the handshake moves through its states.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,19 +34,21 @@ fun PairingScreen(
     onScanClick: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
-    // Explicitly observing StateFlows from the ViewModel
     val qrCodeBitmap by viewModel.qrCodeBitmap.collectAsState()
     val pairingState by viewModel.pairingState.collectAsState()
     val incomingRequest by viewModel.incomingPairingRequest.collectAsState()
     val debugInfo by viewModel.debugInfo.collectAsState()
     val showDebugInfo by viewModel.showDebugInfo.collectAsState()
-    
-    // Trigger QR generation when the screen is first launched
+
+    // generate the QR code containing this device's identity and shared key on entry,
+    // but only if we aren't already in the middle of a pairing handshake.
     LaunchedEffect(Unit) {
-        viewModel.generateQRCode()
+        if (viewModel.pairingState.value is PairingState.Idle) {
+            viewModel.generateQRCode()
+        }
     }
 
-    // Step 5: Show confirmation dialogue
+    // shown when a remote device sends a pairing request to this device over BLE
     incomingRequest?.let { request ->
         AlertDialog(
             onDismissRequest = { viewModel.declinePairingRequest() },
@@ -61,17 +66,14 @@ fun PairingScreen(
             }
         )
     }
-    
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Pair with Friend") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -85,8 +87,8 @@ fun PairingScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(modifier = Modifier.height(16.dp))
-            
-            // Show QR Code if generated, otherwise show a loading indicator
+
+            // QR code shown while the bitmap is generating, spinner shown until it's ready
             if (qrCodeBitmap != null) {
                 Image(
                     bitmap = qrCodeBitmap!!.asImageBitmap(),
@@ -96,10 +98,9 @@ fun PairingScreen(
             } else {
                 CircularProgressIndicator()
             }
-            
+
             Spacer(modifier = Modifier.height(32.dp))
-            
-            // Button to initiate QR scanning flow
+
             Button(
                 onClick = onScanClick,
                 modifier = Modifier.fillMaxWidth().height(56.dp)
@@ -108,8 +109,8 @@ fun PairingScreen(
                 Spacer(Modifier.width(8.dp))
                 Text("Scan Friend's QR Code")
             }
-            
-            // Handle pairing state changes (Success, Error, etc.)
+
+            // inline feedback as the pairing handshake progresses through its states
             when (pairingState) {
                 is PairingState.Pairing -> {
                     Spacer(modifier = Modifier.height(16.dp))
@@ -122,10 +123,8 @@ fun PairingScreen(
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
                 is PairingState.Success -> {
-                    // Navigate away or show success message when pairing is successful
-                    LaunchedEffect(Unit) {
-                        onPairingSuccess()
-                    }
+                    // navigate away as soon as success state is emitted
+                    LaunchedEffect(Unit) { onPairingSuccess() }
                 }
                 is PairingState.Error -> {
                     Spacer(modifier = Modifier.height(16.dp))
@@ -138,7 +137,7 @@ fun PairingScreen(
                 else -> {}
             }
 
-            // Debug Info at the bottom
+            // debug telemetry panel shown at the bottom when enabled in settings
             if (showDebugInfo) {
                 Spacer(modifier = Modifier.weight(1f))
                 Text(

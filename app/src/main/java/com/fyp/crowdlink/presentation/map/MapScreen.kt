@@ -50,6 +50,7 @@ import kotlin.math.absoluteValue
 import kotlin.math.cos
 import androidx.core.graphics.createBitmap
 
+// OSM raster tile style with glyphs endpoint required for SymbolLayer text rendering
 private const val RASTER_STYLE_JSON = """
 {
   "version": 8,
@@ -70,6 +71,15 @@ private const val RASTER_STYLE_JSON = """
 }
 """
 
+/**
+ * MapScreen
+ *
+ * Renders an offline-capable map using MapLibre with OSM raster tiles. Friend locations
+ * received over the BLE mesh are plotted as pins with deterministic per-friend colours.
+ * The user's own position is shown with a rotating heading arrow. Tapping a friend pin
+ * opens a bottom sheet with compass and chat shortcuts. Tiles for the local area are
+ * cached to disk on first load to support offline use.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MapScreen(
@@ -89,11 +99,11 @@ fun MapScreen(
 
     var mapboxMap by remember { mutableStateOf<MapLibreMap?>(null) }
     var mapReady by remember { mutableStateOf(false) }
-    
+
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    // Handle initial friend selection from deep link
+    // handle deep links from the discovery screen - pre-select a friend on load
     LaunchedEffect(initialFriendId) {
         viewModel.selectFriendOnLoad(initialFriendId)
     }
@@ -103,30 +113,27 @@ fun MapScreen(
     ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
 
-            // Map view
+            // AndroidView bridges the MapLibre MapView into the Compose hierarchy
             AndroidView(
                 factory = { ctx ->
                     MapView(ctx).apply {
                         getMapAsync { map ->
                             mapboxMap = map
-                            map.setStyle(
-                                Style.Builder().fromJson(RASTER_STYLE_JSON)
-                            ) { style ->
-                                // Load the arrow drawable and add it to the style
+                            map.setStyle(Style.Builder().fromJson(RASTER_STYLE_JSON)) { style ->
+
+                                // VectorDrawables have -1 intrinsic dimensions, so explicit size is required
                                 val arrowDrawable = AppCompatResources.getDrawable(ctx, R.drawable.ic_location_arrow)
                                 if (arrowDrawable != null) {
-                                    val size = 96 // px — hardcode a sensible size for vectors
+                                    val size = 96
                                     val arrowBitmap = createBitmap(size, size)
                                     val canvas = Canvas(arrowBitmap)
                                     arrowDrawable.setBounds(0, 0, size, size)
                                     arrowDrawable.draw(canvas)
                                     style.addImage("location-arrow", arrowBitmap)
                                 } else {
-                                    Timber.tag("MapScreen")
-                                        .e("Failed to load location arrow drawable")
+                                    Timber.tag("MapScreen").e("Failed to load location arrow drawable")
                                 }
 
-                                // Load the person pin drawable and add it to the style
                                 val personDrawable = AppCompatResources.getDrawable(ctx, R.drawable.ic_person_pin)
                                 if (personDrawable != null) {
                                     val size = 96
@@ -134,13 +141,14 @@ fun MapScreen(
                                     val canvas = Canvas(personBitmap)
                                     personDrawable.setBounds(0, 0, size, size)
                                     personDrawable.draw(canvas)
-                                    style.addImage("person-pin", personBitmap, true) // SDF for tinting
+                                    // SDF mode allows runtime tinting per friend colour
+                                    style.addImage("person-pin", personBitmap, true)
                                 }
 
-                                // Add a GeoJsonSource for friend pins
+                                // single GeoJSON source drives both the friend and self layers
                                 style.addSource(GeoJsonSource("friend-pins-source"))
 
-                                // Friend pins layer
+                                // friend pins layer - filtered to all features except "me"
                                 style.addLayer(
                                     SymbolLayer("friend-pins-layer", "friend-pins-source").apply {
                                         setFilter(Expression.neq(Expression.get("type"), Expression.literal("me")))
@@ -159,7 +167,7 @@ fun MapScreen(
                                     }
                                 )
 
-                                // My location layer — separate layer with rotating arrow icon
+                                // self layer - rotating heading arrow, filtered to "me" feature only
                                 style.addLayer(
                                     SymbolLayer("my-location-layer", "friend-pins-source").apply {
                                         setFilter(Expression.eq(Expression.get("type"), Expression.literal("me")))
@@ -179,7 +187,7 @@ fun MapScreen(
                                     }
                                 )
 
-                                // Centre on user location or selected friend
+                                // on first load, centre on the target friend if deep-linked, otherwise on self
                                 val targetLocation = if (initialFriendId != null) {
                                     friendPins.firstOrNull { it.friend.deviceId == initialFriendId }?.location
                                 } else {
@@ -195,7 +203,7 @@ fun MapScreen(
                                                 .build()
                                         )
                                     )
-                                    // Auto-cache tiles around current location
+                                    // kick off tile caching for a 1km radius around the initial position
                                     cacheTilesForArea(
                                         context = ctx,
                                         latitude = loc.latitude,
@@ -208,6 +216,7 @@ fun MapScreen(
                                 mapReady = true
                             }
 
+                            // tap a friend pin to select it and show the bottom sheet
                             map.addOnMapClickListener { point ->
                                 val screenPoint = map.projection.toScreenLocation(point)
                                 val features = map.queryRenderedFeatures(screenPoint, "friend-pins-layer")
@@ -225,16 +234,16 @@ fun MapScreen(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Update pins whenever friendPins changes
+            // rebuild GeoJSON whenever peer locations, self position or heading changes
             LaunchedEffect(friendPins, mapReady, myLocation, myHeading) {
                 if (!mapReady) return@LaunchedEffect
                 val style = mapboxMap?.style ?: return@LaunchedEffect
                 val source = style.getSourceAs<GeoJsonSource>("friend-pins-source") ?: return@LaunchedEffect
 
                 val features = mutableListOf<Feature>()
+                // fixed palette - colour assigned deterministically by hashing the device ID
                 val palette = listOf("#E53935", "#8E24AA", "#1E88E5", "#00897B", "#F4511E", "#6D4C41", "#039BE5", "#7CB342")
 
-                // My location pin with heading
                 myLocation?.let { loc ->
                     features.add(
                         Feature.fromGeometry(
@@ -266,21 +275,16 @@ fun MapScreen(
                 source.setGeoJson(FeatureCollection.fromFeatures(features))
             }
 
-            // My location FAB
+            // re-centre FAB - floats above the bottom sheet when a pin is selected
             FloatingActionButton(
                 onClick = {
                     val loc = myLocation
                     if (loc != null) {
                         mapboxMap?.animateCamera(
-                            CameraUpdateFactory.newLatLngZoom(
-                                LatLng(loc.latitude, loc.longitude),
-                                16.0
-                            )
+                            CameraUpdateFactory.newLatLngZoom(LatLng(loc.latitude, loc.longitude), 16.0)
                         )
                     } else {
-                        scope.launch {
-                            snackbarHostState.showSnackbar("Waiting for GPS fix…")
-                        }
+                        scope.launch { snackbarHostState.showSnackbar("Waiting for GPS fix…") }
                     }
                 },
                 modifier = Modifier
@@ -291,7 +295,7 @@ fun MapScreen(
                 Icon(Icons.Default.MyLocation, contentDescription = "My location")
             }
 
-            // Tile caching indicator
+            // pill shown at the top while background tile download is in progress
             if (isCachingTiles) {
                 Surface(
                     modifier = Modifier
@@ -306,15 +310,12 @@ fun MapScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                        Text(
-                            text = "Downloading map…",
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                        Text(text = "Downloading map…", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
 
-            // Selected friend bottom sheet
+            // bottom sheet shown when a friend pin is tapped - shows coordinates and action buttons
             selectedPin?.let { pin ->
                 Surface(
                     modifier = Modifier
@@ -343,12 +344,7 @@ fun MapScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Button(
-                                onClick = {
-                                    onNavigateToCompass(
-                                        pin.friend.deviceId,
-                                        pin.friend.displayName
-                                    )
-                                },
+                                onClick = { onNavigateToCompass(pin.friend.deviceId, pin.friend.displayName) },
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Icon(Icons.Default.Explore, contentDescription = null)
@@ -356,12 +352,7 @@ fun MapScreen(
                                 Text("Precision Find")
                             }
                             OutlinedButton(
-                                onClick = {
-                                    onNavigateToChat(
-                                        pin.friend.deviceId,
-                                        pin.friend.displayName
-                                    )
-                                },
+                                onClick = { onNavigateToChat(pin.friend.deviceId, pin.friend.displayName) },
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null)
@@ -377,8 +368,12 @@ fun MapScreen(
 }
 
 /**
- * Caches OpenStreetMap tiles for a circular area around the given coordinates
- * at zoom levels 15-18 using MapLibre's offline manager.
+ * cacheTilesForArea
+ *
+ * Downloads OSM raster tiles for a circular region around a given coordinate using the
+ * MapLibre offline manager. Zoom levels 15-18 are cached to give usable street-level
+ * detail. A glyph cache warm-up request is fired after the download completes so that
+ * text labels render correctly without a network connection.
  */
 private fun cacheTilesForArea(
     context: android.content.Context,
@@ -390,7 +385,7 @@ private fun cacheTilesForArea(
 ) {
     val offlineManager = OfflineManager.getInstance(context)
 
-    // Calculate bounding box from centre + radius
+    // convert radius in metres to lat/lon deltas for the bounding box
     val latDelta = radiusMeters / 111000.0
     val lonDelta = radiusMeters / (111000.0 * cos(Math.toRadians(latitude)))
 
@@ -402,14 +397,13 @@ private fun cacheTilesForArea(
     val definition = OfflineTilePyramidRegionDefinition(
         RASTER_STYLE_JSON,
         bounds,
-        15.0,   // min zoom
-        18.0,   // max zoom
+        15.0, // min zoom
+        18.0, // max zoom
         context.resources.displayMetrics.density
     )
 
     val metadata = try {
-        val json = JSONObject().apply { put("name", "crowdlink_cache") }
-        json.toString().toByteArray()
+        JSONObject().apply { put("name", "crowdlink_cache") }.toString().toByteArray()
     } catch (_: Exception) {
         ByteArray(0)
     }
@@ -429,12 +423,12 @@ private fun cacheTilesForArea(
                                 if (status.isComplete) {
                                     offlineRegion.setDownloadState(OfflineRegion.STATE_INACTIVE)
                                     onComplete()
-                                    
-                                    // Warm glyph cache
+
+                                    // pre-fetch glyph PBFs so labels render offline
                                     val client = OkHttpClient()
                                     val font = "Open Sans Regular,Arial Unicode MS Regular"
                                     val ranges = listOf("0-255", "256-511", "512-767")
-                                    
+
                                     kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
                                         ranges.forEach { range ->
                                             try {
