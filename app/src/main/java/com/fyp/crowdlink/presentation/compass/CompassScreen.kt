@@ -28,7 +28,11 @@ import kotlinx.coroutines.delay
 /**
  * CompassScreen
  *
- * visualises direction and proximity to a peer using GPS or BLE signal strength.
+ * Displays direction and distance to a paired friend. Operates in two modes:
+ * GPS mode when both devices have an active fix, showing an animated bearing arrow
+ * and distance in metres; and RSSI fallback mode indoors when no GPS fix is available,
+ * showing signal strength bars derived from BLE RSSI. Location is shared to the mesh
+ * every 30 seconds while the screen is active.
  */
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -38,7 +42,6 @@ fun CompassScreen(
     onNavigateBack: () -> Unit,
     viewModel: CompassViewModel = hiltViewModel()
 ) {
-    // request fine location for GPS-based bearing and distance
     val permissionState = rememberMultiplePermissionsState(
         permissions = listOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
@@ -46,14 +49,13 @@ fun CompassScreen(
         )
     )
 
-    // initialise viewmodel state and trigger permission flow
     LaunchedEffect(Unit) {
         permissionState.launchMultiplePermissionRequest()
         viewModel.setFriendId(friendId)
         viewModel.refreshIndoorOverride()
     }
 
-    // share local location to the mesh every 30s while tracking
+    // broadcast this device's location over the mesh every 30 seconds while tracking
     LaunchedEffect(friendId) {
         while (true) {
             if (permissionState.allPermissionsGranted) {
@@ -90,12 +92,12 @@ fun CompassScreen(
                 val rssiDistance by viewModel.rssiDistance.collectAsState()
 
                 if (isGpsAvailable && bearing != null) {
-                    // --- GPS MODE ---
-                    // calculate rotation relative to current device heading
+                    // GPS MODE - animate the arrow toward the friend's bearing
                     var currentRotation by remember { mutableFloatStateOf(0f) }
                     val targetRotation = (bearing!! - heading + 360) % 360
 
                     LaunchedEffect(targetRotation) {
+                        // shortest path rotation prevents the arrow spinning the long way round
                         currentRotation = shortestRotation(currentRotation, targetRotation)
                     }
 
@@ -122,7 +124,7 @@ fun CompassScreen(
                         fontWeight = FontWeight.Bold
                     )
 
-                    // show BLE proximity as a secondary confidence metric
+                    // BLE RSSI distance shown as a secondary confidence indicator alongside GPS
                     rssiDistance?.let {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
@@ -133,10 +135,10 @@ fun CompassScreen(
                     }
 
                 } else {
-                    // --- RSSI FALLBACK MODE ---
+                    // RSSI FALLBACK MODE - no GPS fix available, use signal strength only
                     IndoorModeIndicator(rssiDistance)
 
-                    // display warning if only stale GPS data exists
+                    // warn the user if the displayed distance is from a stale GPS fix
                     if (distance != null) {
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
@@ -158,7 +160,8 @@ fun CompassScreen(
 /**
  * shortestRotation
  *
- * calculates the shortest rotation path to avoid "spinning" across the 0/360 border.
+ * Returns the shortest angular path from [from] to [to], preventing the arrow from
+ * spinning the long way round when crossing the 0/360 degree boundary.
  */
 fun shortestRotation(from: Float, to: Float): Float {
     var diff = (to - from + 360) % 360
@@ -169,7 +172,8 @@ fun shortestRotation(from: Float, to: Float): Float {
 /**
  * IndoorModeIndicator
  *
- * proximity UI for when GPS is unavailable; uses BLE signal strength bars.
+ * Shown when no GPS fix is available. Displays three signal bars filled based on
+ * RSSI distance thresholds - each bar represents a 10-metre proximity band.
  */
 @Composable
 fun IndoorModeIndicator(rssiDistance: Double?) {
@@ -182,8 +186,8 @@ fun IndoorModeIndicator(rssiDistance: Double?) {
         )
         Text("Indoor Mode", style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(16.dp))
-        
-        // signal bars representing proximity ranges
+
+        // three bars, each taller than the last - filled when within that distance band
         Row(verticalAlignment = Alignment.Bottom) {
             repeat(3) { index ->
                 val isFilled = rssiDistance != null && rssiDistance < (index + 1) * 10
@@ -196,7 +200,7 @@ fun IndoorModeIndicator(rssiDistance: Double?) {
                 )
             }
         }
-        
+
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = if (rssiDistance != null) "Est. Distance: ${rssiDistance.toInt()}m" else "Searching...",
@@ -208,7 +212,8 @@ fun IndoorModeIndicator(rssiDistance: Double?) {
 /**
  * LocationPermissionRationale
  *
- * simple CTA to prompt users for required system permissions.
+ * Shown when location permission has not been granted. Explains why the permission
+ * is needed and provides a button to re-trigger the system permission prompt.
  */
 @Composable
 fun LocationPermissionRationale(onRequestPermission: () -> Unit) {

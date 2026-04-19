@@ -13,8 +13,9 @@ import androidx.compose.ui.unit.dp
 /**
  * ConnectivityBanner
  *
- * persistent warning banner for radio state alerts.
- * informs users when hardware requirements for mesh networking aren't met.
+ * Persistent warning banner shown when Bluetooth or Wi-Fi is disabled. Only renders
+ * when at least one required radio is off — hidden entirely when both are enabled.
+ * The message is dynamic, specifying which radio needs attention.
  */
 @Composable
 fun ConnectivityBanner(

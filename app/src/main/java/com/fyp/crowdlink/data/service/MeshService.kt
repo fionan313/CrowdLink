@@ -24,8 +24,17 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 
-// foreground service that keeps the mesh alive when the app is backgrounded.
-// broadcasts location to all paired friends every 60 seconds if location sharing is enabled
+/**
+ * MeshService
+ *
+ * Foreground service that keeps the mesh alive when the app is backgrounded.
+ * Without this, Android's Doze mode kills BLE and coroutine work within minutes
+ * of the app leaving the foreground. START_STICKY ensures the OS restarts the
+ * service automatically if it is killed under memory pressure.
+ *
+ * While running, it broadcasts the user's location to all paired friends every
+ * 60 seconds, provided location sharing is enabled in settings.
+ */
 @AndroidEntryPoint
 class MeshService : Service() {
 
@@ -33,7 +42,7 @@ class MeshService : Service() {
     @Inject lateinit var friendRepository: FriendRepository
     @Inject lateinit var sharedPreferences: SharedPreferences
 
-    // SupervisorJob so a failed broadcast doesn't cancel the whole loop
+    // SupervisorJob so a failed broadcast for one friend doesn't cancel the whole loop
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -46,10 +55,13 @@ class MeshService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(NOTIFICATION_ID, createNotification("Mesh Network Active"))
         startLocationLoop()
-        // START_STICKY — OS restarts the service if killed, no intent needed
         return START_STICKY
     }
 
+    /**
+     * Broadcasts the user's location to every paired friend once per minute.
+     * Skipped entirely if the user has disabled location sharing in settings.
+     */
     private fun startLocationLoop() {
         serviceScope.launch {
             while (true) {
@@ -79,7 +91,7 @@ class MeshService : Service() {
             .setContentText(content)
             .setSmallIcon(R.drawable.stat_notify_sync)
             .setContentIntent(pendingIntent)
-            .setOngoing(true) // persistent — can't be dismissed while service is running
+            .setOngoing(true) // persistent - cannot be dismissed while the service is running
             .build()
     }
 
@@ -87,12 +99,12 @@ class MeshService : Service() {
         val channel = NotificationChannel(
             CHANNEL_ID,
             "Mesh Status",
-            NotificationManager.IMPORTANCE_LOW // low importance — no sound or heads-up
+            NotificationManager.IMPORTANCE_LOW // no sound or heads-up
         ).apply {
             description = "Shows when the mesh network is active in the background"
         }
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(channel)
+        getSystemService(NotificationManager::class.java)
+            .createNotificationChannel(channel)
     }
 
     override fun onDestroy() {

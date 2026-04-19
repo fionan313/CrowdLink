@@ -21,7 +21,10 @@ import javax.inject.Inject
 /**
  * CompassViewModel
  *
- * computes bearing and distance to peers using fused sensor data and mesh locations.
+ * Computes bearing and distance to a paired friend by combining the local device's GPS fix
+ * with the friend's last known location received over the mesh. Device heading is derived
+ * from fused accelerometer and magnetometer readings with a low-pass filter applied to
+ * reduce sensor jitter. Falls back to BLE RSSI distance when GPS is unavailable or stale.
  */
 @HiltViewModel
 class CompassViewModel @Inject constructor(
@@ -39,7 +42,6 @@ class CompassViewModel @Inject constructor(
     private var currentFriendId: String = ""
     private val _friendLocation = MutableStateFlow<DeviceLocation?>(null)
 
-    // navigation state exports
     private val _compassHeading = MutableStateFlow(0f)
     val compassHeading: StateFlow<Float> = _compassHeading.asStateFlow()
 
@@ -59,22 +61,22 @@ class CompassViewModel @Inject constructor(
         sharedPreferences.getBoolean("indoor_override", false)
     )
 
-    // sensor fusion buffers and smoothing constant
+    // raw sensor buffers for accelerometer and magnetometer fusion
     private var gravity: FloatArray? = null
     private var geomagnetic: FloatArray? = null
-    private val alpha = 0.15f // low-pass filter alpha; smaller is smoother but laggier
+    private val alpha = 0.15f // low-pass filter weight - smaller = smoother but slower to react
 
+    // tracks the last position used for bearing to apply the 2-metre movement threshold
     private var lastBearingLocation: Location? = null
 
     init {
-        // initialise hardware sensors for orientation
         val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         val magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
 
         sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI)
         sensorManager.registerListener(this, magnetometer, SensorManager.SENSOR_DELAY_UI)
 
-        // reactively compute relative distance and bearing
+        // reactively recompute distance, bearing and GPS availability whenever any input changes
         combine(_myLocation, _friendLocation, _indoorOverride) { myLoc, friendLoc, forceIndoor ->
             if (myLoc != null && friendLoc != null) {
                 val results = FloatArray(1)
@@ -90,7 +92,8 @@ class CompassViewModel @Inject constructor(
                     longitude = myLoc.longitude
                 }
 
-                // debounce bearing updates to avoid rotation jitter while stationary
+                // only update bearing when the device has moved more than 2 metres
+                // prevents the arrow jittering while the user is stationary
                 if (lastBearingLocation == null || myAndroidLoc.distanceTo(lastBearingLocation!!) > 2f) {
                     val friendAndroidLoc = Location("").apply {
                         latitude = friendLoc.latitude
@@ -100,7 +103,7 @@ class CompassViewModel @Inject constructor(
                     lastBearingLocation = myAndroidLoc
                 }
 
-                // determine if GPS data is reliable and current
+                // GPS is considered unreliable if the friend's location is over 60 seconds old
                 val isStale = System.currentTimeMillis() - friendLoc.timestamp > 60000
                 _isGpsAvailable.value = !forceIndoor && myLoc.accuracy < 50f && !isStale
             } else {
@@ -110,7 +113,7 @@ class CompassViewModel @Inject constructor(
             }
         }.launchIn(viewModelScope)
 
-        // map real-time BLE proximity for indoor/fallback tracking
+        // track BLE RSSI distance for the indoor fallback indicator
         bleScanner.discoveredDevices
             .onEach { devices ->
                 val device = devices.firstOrNull { it.deviceId == currentFriendId }
@@ -121,6 +124,10 @@ class CompassViewModel @Inject constructor(
 
     private var locationCollectionJob: Job? = null
 
+    /**
+     * Sets the friend to track and starts collecting their cached location from Room.
+     * Cancels any previous collection job to avoid observing a stale friend's location.
+     */
     fun setFriendId(friendId: String) {
         currentFriendId = friendId
         locationCollectionJob?.cancel()
@@ -144,7 +151,7 @@ class CompassViewModel @Inject constructor(
     }
 
     override fun onSensorChanged(event: SensorEvent) {
-        // filter raw sensor noise
+        // apply low-pass filter to each sensor's raw values before fusing
         if (event.sensor.type == Sensor.TYPE_ACCELEROMETER) {
             gravity = lowPass(event.values.clone(), gravity)
         }
@@ -152,7 +159,6 @@ class CompassViewModel @Inject constructor(
             geomagnetic = lowPass(event.values.clone(), geomagnetic)
         }
 
-        // derive device orientation from smoothed vectors
         if (gravity != null && geomagnetic != null) {
             val r = FloatArray(9)
             val i = FloatArray(9)
@@ -160,18 +166,14 @@ class CompassViewModel @Inject constructor(
                 val orientation = FloatArray(3)
                 SensorManager.getOrientation(r, orientation)
                 val azimuth = Math.toDegrees(orientation[0].toDouble()).toFloat()
-                
-                // map azimuth to 0-360 range
-                val newHeading = (azimuth + 360) % 360
-                _compassHeading.value = newHeading
+                _compassHeading.value = (azimuth + 360) % 360 // normalise to 0-360
             }
         }
     }
 
     /**
-     * lowPass
-     *
-     * applies a basic temporal filter to reduce jitter on sensor vectors.
+     * Applies a basic exponential moving average to reduce noise on raw sensor vectors.
+     * Alpha controls the trade-off between smoothness and responsiveness.
      */
     private fun lowPass(input: FloatArray, output: FloatArray?): FloatArray {
         if (output == null) return input
@@ -185,7 +187,6 @@ class CompassViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        // prevent sensor leaks
-        sensorManager.unregisterListener(this)
+        sensorManager.unregisterListener(this) // unregister to prevent sensor leaks after the VM is destroyed
     }
 }

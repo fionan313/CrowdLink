@@ -1,6 +1,7 @@
 /* data/ble/BleAdvertiser
-* This acts as the server side of the BLE Mesh. Making the phone visible to other CrowdLink devices.
-* It also handles everything arriving over GATT like: pairing, messages, SOS alerts, etc.*/
+* This acts as the server side of the BLE Mesh.
+*  Making the phone visible to other CrowdLink devices.
+* It also handles everything arriving over GATT like pairing, messages, SOS alerts, etc.*/
 
 // package
 package com.fyp.crowdlink.data.ble
@@ -40,7 +41,8 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// singleton constructor - ensures one instance for the app's lifetime, managed by Hilt
+/* singleton constructor - ensures one instance for the app's lifetime, managed by Hilt
+ * prevents multiple instances of the GATT server from running simultaneously */
 @Singleton
 class BleAdvertiser @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -52,10 +54,10 @@ class BleAdvertiser @Inject constructor(
     }
 
     private val bluetoothManager: BluetoothManager =
-        context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-    private val bluetoothAdapter: BluetoothAdapter? = bluetoothManager.adapter
+        context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager // Bluetooth system service
+    private val bluetoothAdapter: BluetoothAdapter? = bluetoothManager.adapter // Bluetooth hardware interface
 
-    private var isAdvertising = false
+    private var isAdvertising = false // track whether advertising is active
 
     // ensures other components wait until the GATT server is actually ready before writing
     private val _isGattServerReady = MutableStateFlow(false)
@@ -67,7 +69,7 @@ class BleAdvertiser @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /* These lambdas are set externally (by BleService)
-    * So the advertiser stays focused on BLE mechanics and the business logic lives elsewhere.*/
+    * So the advertiser stays focused on BLE mechanics, and the business logic lives elsewhere.*/
 
     var onPairingRequestReceived: ((PairingRequest) -> Unit)? = null
     var onPairingAcceptedReceived: ((String) -> Unit)? = null
@@ -78,6 +80,7 @@ class BleAdvertiser @Inject constructor(
     @SuppressLint("MissingPermission")
     private val gattServerCallback = object : BluetoothGattServerCallback() {
 
+        // fires whenever a remote device connects or disconnects from the GATT server
         override fun onConnectionStateChange(
             device: BluetoothDevice,
             status: Int,
@@ -88,7 +91,7 @@ class BleAdvertiser @Inject constructor(
         }
 
         /* Don't start advertising until the service is fully added.
-        * Avoids a race condition where a peer connects, before the GATT server is ready to receive writes.*/
+        * Avoids a race condition where a peer connects before the GATT server is ready to receive writes.*/
         override fun onServiceAdded(status: Int, service: BluetoothGattService?) {
             Timber.tag("BLE_ADVERTISER")
                 .d("GATT service added status=$status uuid=${service?.uuid} at=${System.currentTimeMillis()}")
@@ -101,13 +104,13 @@ class BleAdvertiser @Inject constructor(
         /*Every incoming write from remote devices is handled here.
         * The first byte is used to determine the type of message.*/
         override fun onCharacteristicWriteRequest(
-            device: BluetoothDevice,
-            requestId: Int,
-            characteristic: BluetoothGattCharacteristic,
+            device: BluetoothDevice, // device that sent the write
+            requestId: Int, // unique ID for the write request
+            characteristic: BluetoothGattCharacteristic, // characteristic being written to
             preparedWrite: Boolean,
-            responseNeeded: Boolean,
-            offset: Int,
-            value: ByteArray
+            responseNeeded: Boolean, // whether to send a response back to the sender
+            offset: Int, // offset into the value array
+            value: ByteArray // the raw bytes of the payload
         ) {
             if (characteristic.uuid == MESH_CHARACTERISTIC_UUID) {
                 if (value.isNotEmpty()) {
@@ -129,34 +132,36 @@ class BleAdvertiser @Inject constructor(
                 // some writes require an explicit ACK back to the sender
                 if (responseNeeded) {
                     gattServer?.sendResponse(
-                        device,
+                        device, // device that sent the write
                         requestId,
                         BluetoothGatt.GATT_SUCCESS,
                         0,
                         null
-                    )
+                    ) // empty response, confirms receipt
                 }
             }
         }
     }
 
-    // incoming pairing request. strip the prefix byte, parse the JSON, passed up
+    /* Incoming pairing request. strip the prefix byte, parse the JSON, passed up.
+    This is called when Device B has scanned Device A's QR code and is sending its confirmation back over BLE.
+     */
     private fun handlePairingRequest(value: ByteArray) {
         Timber.tag("BLE_ADVERTISER").d("handlePairingRequest fired at=${System.currentTimeMillis()}")
         try {
-            // Skip prefix byte
-            val jsonString = value.decodeToString(startIndex = 1)
+            val jsonString = value.decodeToString(startIndex = 1) // skips prefix byte
             val json = JSONObject(jsonString)
             // sharedKey is optional. Checks if present when the QR code was scanned
             val sharedKey = if (json.has("sharedKey") && json.getString("sharedKey").isNotEmpty()) {
                 json.getString("sharedKey")
             } else null
+            // construct the PairingRequest object
             val request = PairingRequest(
                 senderDeviceId = json.getString("senderId"),
                 senderDisplayName = json.getString("senderName"),
                 sharedKey = sharedKey
             )
-            onPairingRequestReceived?.invoke(request)
+            onPairingRequestReceived?.invoke(request) // passed up
             Timber.tag("BLE_ADVERTISER")
                 .d("Pairing request received from ${request.senderDisplayName}")
         } catch (e: Exception) {
@@ -164,20 +169,23 @@ class BleAdvertiser @Inject constructor(
         }
     }
 
-    // the remote device accepted our pairing. their ID is extracted and passed up
+    /* The remote device accepted our pairing, strip prefix, parse JSON, extract senderId, pass up
+    Called when the user on Device A tapped "Accept" on the pairing dialogue. */
     private fun handlePairingAccepted(value: ByteArray) {
         try {
             val jsonString = value.decodeToString(startIndex = 1)
             val json = JSONObject(jsonString)
-            val senderId = json.getString("senderId")
-            onPairingAcceptedReceived?.invoke(senderId)
+            val senderId = json.getString("senderId") // extracts sender ID
+            onPairingAcceptedReceived?.invoke(senderId) // passed up
             Timber.tag("BLE_ADVERTISER").d("Pairing accepted by $senderId")
         } catch (e: Exception) {
             Timber.tag("BLE_ADVERTISER").e(e, "Failed to parse pairing acceptance")
         }
     }
 
-    // remote device wants to remove this device from their friends list
+    /* Remote device wants to unpair, strip prefix, parse JSON, extract senderId, pass up
+    Called when a paired friend has removed the device from their friends list and is notifying over BLE.
+     */
     private fun handleUnpairRequest(value: ByteArray) {
         try {
             val json = JSONObject(value.decodeToString(startIndex = 1))

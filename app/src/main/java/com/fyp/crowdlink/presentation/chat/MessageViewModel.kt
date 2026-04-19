@@ -23,7 +23,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -32,9 +31,13 @@ import javax.inject.Inject
 /**
  * MessageViewModel
  *
- * This ViewModel manages the UI state for the mesh-based messaging feature.
- * It uses the MeshRoutingEngine as the primary send path. Wi-Fi Direct
- * is used automatically for high-bandwidth transfers and direct peer connections.
+ * Manages UI state for a single friend's chat screen. The primary send path is the
+ * BLE mesh via [MeshRoutingEngine]. Wi-Fi Direct is retained as an optional debug
+ * override for testing higher-bandwidth delivery and as a foundation for future
+ * multimedia messaging support.
+ *
+ * Discovery is lifecycle-aware - started in [onResume] and stopped in [onPause]
+ * so scanning does not continue after the user leaves the chat screen.
  */
 @HiltViewModel
 class MessageViewModel @Inject constructor(
@@ -53,17 +56,13 @@ class MessageViewModel @Inject constructor(
     private val _myDeviceId = MutableStateFlow("")
     val myDeviceId: StateFlow<String> = _myDeviceId.asStateFlow()
 
-    // Expose discovered Wi-Fi Direct friends (mapped by device ID)
     val discoveredFriends = wifiDirectManager.discoveredFriends
-
-    // Expose connection info for status display
     val wifiDirectConnectionInfo = wifiDirectManager.connectionInfo
 
-    // Mesh status - Active if we are scanning for other BLE mesh devices
     private val _isMeshActive = MutableStateFlow(true)
     val isMeshActive: StateFlow<Boolean> = _isMeshActive.asStateFlow()
 
-    // Combined discovery status for the UI
+    // shown in the top bar - reflects the best available transport at any moment
     val discoveryStatus: StateFlow<String> = combine(
         wifiDirectConnectionInfo,
         bleScanner.discoveredDevices
@@ -79,17 +78,20 @@ class MessageViewModel @Inject constructor(
 
     init {
         _myDeviceId.value = userProfileRepository.getPersistentDeviceId()
-        // Ensure routing engine has the correct ID for header generation
         meshRoutingEngine.localDeviceId = _myDeviceId.value
     }
 
+    /**
+     * Called when the chat screen enters the foreground. Registers Wi-Fi Direct,
+     * starts BLE discovery, marks this friend's chat as active to suppress notifications,
+     * and launches an auto-connect coroutine for Wi-Fi Direct if the friend is nearby.
+     */
     fun onResume(friendId: String) {
         wifiDirectManager.register()
         wifiDirectManager.setupServiceDiscovery(_myDeviceId.value)
         bleScanner.startDiscovery()
         messageRepository.setActiveChatFriend(friendId)
 
-        // Establish WiFi Direct connection automatically if the friend is nearby
         autoConnectJob?.cancel()
         autoConnectJob = viewModelScope.launch {
             wifiDirectManager.discoveredFriends.collect { friends ->
@@ -105,6 +107,10 @@ class MessageViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Called when the chat screen leaves the foreground. Stops scanning, unregisters
+     * Wi-Fi Direct, clears the active chat so notifications resume for this friend.
+     */
     fun onPause() {
         wifiDirectManager.unregister()
         bleScanner.stopDiscovery()
@@ -127,20 +133,19 @@ class MessageViewModel @Inject constructor(
     }
 
     /**
-     * Sends a text message via the Mesh Routing Engine.
-     * The engine adds it to the relay queue, which is then observed by BLE mesh transport.
-     * Wi-Fi Direct is bypassed for small text messages unless the debug "wifi_direct_mode" is enabled.
+     * Sends a text message to a friend. The message is persisted to Room immediately
+     * for instant UI display, then encrypted and enqueued for BLE mesh delivery.
+     * If the "wifi_direct_mode" debug flag is set and a peer IP is available,
+     * Wi-Fi Direct delivery is attempted first with BLE mesh as the fallback.
      */
     fun sendText(content: String, friendId: String) {
         val myId = _myDeviceId.value
 
         viewModelScope.launch {
-            // Check for Debug WiFi Direct Override
             val forceWifi = sharedPreferences.getBoolean("wifi_direct_mode", false)
             val peerIp = wifiDirectManager.peerIp.value
 
-            // 1. Save to local database for UI display immediately.
-            // Since this is an outgoing message (0 hops), we label it with the physical transport.
+            // persist immediately so the message appears in the UI without waiting for delivery
             val localMessage = Message(
                 senderId = myId,
                 receiverId = friendId,
@@ -152,7 +157,7 @@ class MessageViewModel @Inject constructor(
             )
             val localId = sendMessageUseCase(localMessage)
 
-            // 2. Hand off to MeshRoutingEngine with type prefix (0x01 for text)
+            // 0x01 prefix identifies this as a text message post-decryption
             val plaintext = byteArrayOf(0x01) + content.toByteArray(Charsets.UTF_8)
             val friend = friendRepository.getFriendById(friendId)
 
@@ -161,7 +166,7 @@ class MessageViewModel @Inject constructor(
                     val ciphertext = encryptionManager.encrypt(plaintext, friend.sharedKey)
                     byteArrayOf(BleAdvertiser.ENCRYPTED_PAYLOAD_PREFIX) + ciphertext
                 } catch (e: Exception) {
-                    Timber.tag("MessageViewModel").e(e, "Encryption failed — sending plaintext fallback")
+                    Timber.tag("MessageViewModel").e(e, "Encryption failed - sending plaintext fallback")
                     plaintext
                 }
             } else {
@@ -173,7 +178,8 @@ class MessageViewModel @Inject constructor(
                 recipientId = friendId,
                 payload = payload
             )
-            
+
+            // debug Wi-Fi Direct override - attempt direct delivery, fall back to mesh on failure
             if (forceWifi && peerIp != null) {
                 Timber.tag("MessageViewModel").d("Debug: Forcing WiFi Direct delivery to $peerIp")
                 val success = wifiDirectManager.deliverMeshMessage(peerIp, meshMessage)
@@ -181,10 +187,10 @@ class MessageViewModel @Inject constructor(
                     messageRepository.updateMessageStatus(localId, MessageStatus.SENT)
                     return@launch
                 }
-                Timber.tag("MessageViewModel").w("WiFi Direct forced send failed, falling back to Mesh")
+                Timber.tag("MessageViewModel").w("WiFi Direct forced send failed, falling back to mesh")
             }
 
-            // 3. Default path: Persist to relay queue for BLE mesh delivery
+            // default path - add to relay queue for BLE mesh delivery
             messageRepository.addToRelayQueue(meshMessage)
         }
     }

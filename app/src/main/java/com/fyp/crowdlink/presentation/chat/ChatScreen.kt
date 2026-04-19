@@ -23,8 +23,10 @@ import com.fyp.crowdlink.domain.model.MessageStatus
 /**
  * ChatScreen
  *
- * handles point-to-point messaging over BLE mesh.
- * establishes background discovery and automated connection management.
+ * Point-to-point messaging screen for a single friend conversation. Observes the
+ * message stream from [MessageViewModel] and displays a live discovery status in the
+ * top bar so the user can see whether the friend is currently reachable over the mesh.
+ * Discovery is started on entry and stopped when the screen is disposed.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,13 +36,12 @@ fun ChatScreen(
     onNavigateBack: () -> Unit,
     viewModel: MessageViewModel = hiltViewModel()
 ) {
-    // observe message stream and connectivity status
     val messages by viewModel.getMessages(friendId).collectAsState()
     val discoveryStatus by viewModel.discoveryStatus.collectAsState()
     val isMeshActive by viewModel.isMeshActive.collectAsState()
     var textState by remember { mutableStateOf("") }
 
-    // manage discovery lifecycle; stops scanning on exit
+    // start discovery on entry, stop on exit to avoid scanning after leaving the screen
     DisposableEffect(friendId) {
         viewModel.onResume(friendId)
         viewModel.discover()
@@ -56,10 +57,12 @@ fun ChatScreen(
                 title = {
                     Column {
                         Text(friendName)
+                        // status line goes green when the mesh is active, red when not
                         Text(
                             text = discoveryStatus,
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (isMeshActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                            color = if (isMeshActive) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.error
                         )
                     }
                 },
@@ -93,7 +96,7 @@ fun ChatScreen(
                         ChatEmptyState(friendName = friendName)
                     }
                 } else {
-                    // scrollable message history; newest at bottom
+                    // reverseLayout puts the newest message at the bottom without manual scrolling
                     LazyColumn(
                         modifier = Modifier
                             .weight(1f)
@@ -108,7 +111,7 @@ fun ChatScreen(
                     }
                 }
 
-                // composition area with state-hoisted input
+                // input row pinned to the bottom, rises with the keyboard via imePadding
                 Surface(tonalElevation = 2.dp) {
                     Row(
                         modifier = Modifier
@@ -146,16 +149,21 @@ fun ChatScreen(
     }
 }
 
+/**
+ * ChatEmptyState
+ *
+ * Shown when no messages exist for this conversation yet.
+ * Reminds the user that delivery is over BLE mesh with no internet required.
+ */
 @Composable
 fun ChatEmptyState(friendName: String) {
-    val icon = Icons.AutoMirrored.Filled.Chat
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.padding(horizontal = 40.dp)
     ) {
         Icon(
-            imageVector = icon,
+            imageVector = Icons.AutoMirrored.Filled.Chat,
             contentDescription = null,
             modifier = Modifier.size(64.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
@@ -179,15 +187,16 @@ fun ChatEmptyState(friendName: String) {
 /**
  * MessageBubble
  *
- * renders text content with aligned alignment based on sender.
- * displays transport metadata and delivery acknowledgements.
+ * Renders a single message, right-aligned for sent messages and left-aligned for received.
+ * Shows the transport type and hop count below the content, and a [StatusIcon] for
+ * outbound messages to indicate delivery state.
  */
 @Composable
 fun MessageBubble(message: Message) {
     val alignment = if (message.isSentByMe) Alignment.End else Alignment.Start
-    val containerColor = if (message.isSentByMe) 
-        MaterialTheme.colorScheme.primaryContainer 
-    else 
+    val containerColor = if (message.isSentByMe)
+        MaterialTheme.colorScheme.primaryContainer
+    else
         MaterialTheme.colorScheme.secondaryContainer
 
     Column(
@@ -209,7 +218,7 @@ fun MessageBubble(message: Message) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.End
                 ) {
-                    // format delivery metadata: transport type and relay depth
+                    // transport type and hop count give the user mesh delivery context
                     val infoText = buildString {
                         append(message.transportType)
                         if (message.hopCount > 0) {
@@ -222,7 +231,6 @@ fun MessageBubble(message: Message) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         fontSize = 10.sp
                     )
-                    
                     if (message.isSentByMe) {
                         Spacer(modifier = Modifier.width(6.dp))
                         StatusIcon(message.deliveryStatus)
@@ -236,7 +244,8 @@ fun MessageBubble(message: Message) {
 /**
  * StatusIcon
  *
- * maps MessageStatus to specific iconography and semantic colours.
+ * Maps [MessageStatus] to an icon and colour. Failed messages are shown in error red,
+ * delivered messages in primary, all others in the default surface variant colour.
  */
 @Composable
 fun StatusIcon(status: MessageStatus) {
@@ -246,7 +255,7 @@ fun StatusIcon(status: MessageStatus) {
         MessageStatus.DELIVERED -> Icons.Default.CheckCircle
         MessageStatus.FAILED -> Icons.Default.Warning
     }
-    
+
     val color = when (status) {
         MessageStatus.FAILED -> MaterialTheme.colorScheme.error
         MessageStatus.DELIVERED -> MaterialTheme.colorScheme.primary

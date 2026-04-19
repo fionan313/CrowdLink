@@ -17,7 +17,14 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// two DAOs — messageDao for chat messages, relayMessageDao for the mesh relay queue
+/**
+ * MessageRepositoryImpl
+ *
+ * Concrete implementation of [MessageRepository]. Manages two separate concerns:
+ * chat message persistence via [MessageDao], and the store-and-forward mesh relay
+ * queue via [RelayMessageDao]. Also tracks which chat is currently open so that
+ * incoming messages for that friend can be marked as read immediately.
+ */
 @Singleton
 class MessageRepositoryImpl @Inject constructor(
     private val messageDao: MessageDao,
@@ -44,11 +51,14 @@ class MessageRepositoryImpl @Inject constructor(
         messageDao.updateMessageStatus(messageId, status.name)
     }
 
+    /**
+     * Enqueues an outbound mesh packet in Room. [BLEScanner] observes the relay queue
+     * and drains it as peer connections become available.
+     */
     override suspend fun addToRelayQueue(message: MeshMessage) {
         relayMessageDao.insert(message.toEntity())
     }
 
-    // BleScanner observes this flow and drains it as connections become available
     override fun getRelayQueue(): Flow<List<MeshMessage>> {
         return relayMessageDao.getActiveRelayQueue().map { entities ->
             entities.map { it.toDomain() }

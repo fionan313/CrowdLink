@@ -27,8 +27,13 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
-// @Binds is used here because LocationRepositoryImpl is injected by Hilt directly —
-// no manual construction needed, unlike the repos in AppModule
+/**
+ * RepositoryModule
+ *
+ * Uses @Binds rather than @Provides for LocationRepositoryImpl because Hilt can
+ * construct it directly via @Inject. @Binds is preferred here as it avoids
+ * the boilerplate of a manual factory method.
+ */
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class RepositoryModule {
@@ -39,13 +44,21 @@ abstract class RepositoryModule {
     ): LocationRepository
 }
 
-// provides all app-level singletons to the Hilt dependency graph
+/**
+ * AppModule
+ *
+ * Provides all app-level singletons to the Hilt dependency graph.
+ * Everything here is scoped to [SingletonComponent], meaning one instance
+ * is created for the lifetime of the application process.
+ */
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
-    // fallbackToDestructiveMigration — acceptable during development, replace with proper
-    // migrations before any public release
+    /**
+     * Builds the Room database. [fallbackToDestructiveMigration] is acceptable during
+     * development but should be replaced with proper migrations before any public release.
+     */
     @Provides
     @Singleton
     fun provideFriendDatabase(@ApplicationContext context: Context): AppDatabase {
@@ -58,7 +71,8 @@ object AppModule {
             .build()
     }
 
-    // DAO providers — each pulls from the single AppDatabase instance above
+    // DAO providers - each pulls from the single AppDatabase instance above
+
     @Provides @Singleton
     fun provideFriendDao(db: AppDatabase): FriendDao = db.friendDao()
 
@@ -104,8 +118,10 @@ object AppModule {
         return context.getSharedPreferences("crowdlink_prefs", Context.MODE_PRIVATE)
     }
 
-    // localDeviceId is set here at construction time so the routing engine is ready
-    // before any BLE traffic arrives
+    /**
+     * Provides the [MeshRoutingEngine] with [localDeviceId] set at construction time,
+     * so the engine is ready to route packets before any BLE traffic arrives.
+     */
     @Provides
     @Singleton
     fun provideMeshRoutingEngine(
@@ -118,8 +134,11 @@ object AppModule {
         }
     }
 
-    // manually constructed because DeviceRepositoryImpl wires BLE callbacks in init{} —
-    // Hilt's @Binds approach can't guarantee the right construction order here
+    /**
+     * Manually constructed because [DeviceRepositoryImpl] wires BLE callbacks in its
+     * init block. Using @Binds here could not guarantee the correct construction order,
+     * so @Provides with explicit parameters is used instead.
+     */
     @Provides
     @Singleton
     fun provideDeviceRepository(
