@@ -40,9 +40,12 @@ fun PairingScreen(
     val debugInfo by viewModel.debugInfo.collectAsState()
     val showDebugInfo by viewModel.showDebugInfo.collectAsState()
 
-    // generate the QR code containing this device's identity and shared key on entry
+    // generate the QR code containing this device's identity and shared key on entry,
+    // but only if we aren't already in the middle of a pairing handshake.
     LaunchedEffect(Unit) {
-        viewModel.generateQRCode()
+        if (viewModel.pairingState.value is PairingState.Idle) {
+            viewModel.generateQRCode()
+        }
     }
 
     // shown when a remote device sends a pairing request to this device over BLE

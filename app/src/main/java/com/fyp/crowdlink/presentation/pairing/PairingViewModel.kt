@@ -21,6 +21,7 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -113,6 +114,7 @@ class PairingViewModel @Inject constructor(
     private var pendingFriendName: String? = null
     private var pendingSharedKey: String? = null // key generated with this device's QR
     private var scannedSharedKey: String? = null // key extracted from the scanned QR
+    private var confirmationTimeoutJob: Job? = null
 
     init {
         loadDeviceId()
@@ -139,6 +141,7 @@ class PairingViewModel @Inject constructor(
             .onEach { acceptedDeviceId ->
                 Timber.tag("PairingViewModel").d("Pairing accepted by $acceptedDeviceId")
                 if (acceptedDeviceId == pendingFriendDeviceId) {
+                    confirmationTimeoutJob?.cancel()
                     viewModelScope.launch {
                         val existing = friendRepository.getFriendById(acceptedDeviceId)
                         if (existing == null) {
@@ -170,9 +173,15 @@ class PairingViewModel @Inject constructor(
 
                 val sharedKey = encryptionManager.generateSharedKey()
                 pendingSharedKey = sharedKey
-                // clear stale session state from any previous pairing attempt
-                pendingFriendDeviceId = null
-                pendingFriendName = null
+
+                // Only clear pairing session state if we're not currently in a handshake.
+                // This prevents wiping 'pendingFriendDeviceId' if a rotation triggers
+                // generateQRCode while we are waiting for an acceptance.
+                if (_pairingState.value == PairingState.Idle) {
+                    pendingFriendDeviceId = null
+                    pendingFriendName = null
+                    scannedSharedKey = null
+                }
 
                 val qrData = JSONObject().apply {
                     put("deviceId", _myDeviceId.value)
@@ -257,7 +266,8 @@ class PairingViewModel @Inject constructor(
                     if (sent) {
                         _pairingState.value = PairingState.AwaitingConfirmation
                         // 20-second window for the peer to accept before showing an error
-                        viewModelScope.launch {
+                        confirmationTimeoutJob?.cancel()
+                        confirmationTimeoutJob = viewModelScope.launch {
                             delay(20_000)
                             if (_pairingState.value is PairingState.AwaitingConfirmation) {
                                 _pairingState.value = PairingState.Error(
@@ -286,12 +296,23 @@ class PairingViewModel @Inject constructor(
      */
     fun acceptPairingRequest(request: PairingRequest) {
         viewModelScope.launch {
+            // Cancel any active timeout job before starting the persistence work
+            confirmationTimeoutJob?.cancel()
+
+            // Priority: key from request (scanned by friend) > our pending key.
+            // scannedSharedKey is ignored here as it belongs to a session where we were the scanner.
+            val keyToUse = request.sharedKey ?: pendingSharedKey
+
             friendRepository.addFriend(Friend(
                 deviceId = request.senderDeviceId,
                 displayName = request.senderDisplayName,
-                sharedKey = request.sharedKey ?: scannedSharedKey ?: pendingSharedKey,
+                sharedKey = keyToUse,
                 pairedAt = System.currentTimeMillis()
             ))
+
+            // Ensure we are scanning so we can find the friend's device to send the acceptance
+            bleScanner.startDiscovery()
+
             deviceRepository.sendPairingAccepted(targetDeviceId = request.senderDeviceId)
             deviceRepository.clearIncomingPairingRequest()
             _pairingState.value = PairingState.Success

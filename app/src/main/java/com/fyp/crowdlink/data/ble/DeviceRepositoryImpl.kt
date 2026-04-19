@@ -351,15 +351,20 @@ class DeviceRepositoryImpl @Inject constructor(
      */
     override fun sendPairingAccepted(targetDeviceId: String) {
         scope.launch {
+            bleScanner.startDiscovery() // ensure scanner is active before polling
             var device: BluetoothDevice? = null
+            // Retrying up to 5 times with a 1.5s delay to allow scan cycles to complete
             repeat(5) { attempt ->
                 device = bleScanner.getDeviceById(targetDeviceId)
-                if (device != null) return@repeat
+                if (device != null) {
+                    Timber.tag("DeviceRepo").d("sendPairingAccepted: found device $targetDeviceId on attempt ${attempt + 1}")
+                    return@repeat
+                }
                 Timber.tag("DeviceRepo").d("sendPairingAccepted: device not found, retry ${attempt + 1}/5")
-                delay(1000)
+                delay(1500)
             }
             if (device == null) {
-                Timber.tag("DeviceRepo").e("sendPairingAccepted: $targetDeviceId not found after 5 retries")
+                Timber.tag("DeviceRepo").e("sendPairingAccepted: $targetDeviceId not found after 5 retries. Handshake may fail.")
                 return@launch
             }
 
