@@ -31,8 +31,11 @@ import javax.inject.Inject
 /**
  * PairingViewModel
  *
- * orchestrates the secure cryptographic handshake between peers.
- * manages QR generation, GATT-based pairing requests, and bond persistence.
+ * Orchestrates the two-phase QR pairing handshake. Device A generates a QR code
+ * containing its device ID, display name and a fresh AES-256-GCM shared key.
+ * Device B scans it, sends a BLE GATT confirmation back, and both devices persist
+ * the resulting [Friend] record to Room. Incoming requests from the other direction
+ * are also handled here via [incomingPairingRequest].
  */
 @HiltViewModel
 class PairingViewModel @Inject constructor(
@@ -45,10 +48,11 @@ class PairingViewModel @Inject constructor(
     private val encryptionManager: EncryptionManager,
     private val sharedPreferences: SharedPreferences
 ) : ViewModel() {
-    
-    private val bluetoothAdapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
 
-    // real-time radio status for UI feedback
+    private val bluetoothAdapter =
+        (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+
+    // polled every 2 seconds to keep the UI aware of radio state
     val isBluetoothEnabled: StateFlow<Boolean> = flow {
         while (true) {
             emit(bluetoothAdapter?.isEnabled == true)
@@ -58,17 +62,19 @@ class PairingViewModel @Inject constructor(
 
     private val _qrCodeBitmap = MutableStateFlow<Bitmap?>(null)
     val qrCodeBitmap: StateFlow<Bitmap?> = _qrCodeBitmap.asStateFlow()
-    
+
     private val _myDeviceId = MutableStateFlow("")
     val myDeviceId: StateFlow<String> = _myDeviceId.asStateFlow()
-    
+
     private val _pairingState = MutableStateFlow<PairingState>(PairingState.Idle)
     val pairingState: StateFlow<PairingState> = _pairingState.asStateFlow()
 
-    private val _showDebugInfo = MutableStateFlow(sharedPreferences.getBoolean("show_pairing_debug", false))
+    private val _showDebugInfo = MutableStateFlow(
+        sharedPreferences.getBoolean("show_pairing_debug", false)
+    )
     val showDebugInfo: StateFlow<Boolean> = _showDebugInfo.asStateFlow()
 
-    // reactively update debug visibility when settings change
+    // keep debug panel visibility in sync with the settings preference
     private val preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
         if (key == "show_pairing_debug") {
             _showDebugInfo.value = prefs.getBoolean(key, false)
@@ -76,12 +82,10 @@ class PairingViewModel @Inject constructor(
     }
 
     val incomingPairingRequest: StateFlow<PairingRequest?> = deviceRepository.incomingPairingRequest
-    
     val isGattServerReady: StateFlow<Boolean> = deviceRepository.isGattServerReady
-    
     val lastGattError: StateFlow<Pair<Int, Long>?> = deviceRepository.lastGattError
-    
-    // aggregate telemetry for mesh diagnostics
+
+    // aggregates GATT state, pairing state and key presence into a single debug string
     val debugInfo: StateFlow<String> = combine(
         isGattServerReady,
         _pairingState,
@@ -104,30 +108,31 @@ class PairingViewModel @Inject constructor(
         sb.toString()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
 
+    // session state for the in-progress pairing attempt
     private var pendingFriendDeviceId: String? = null
     private var pendingFriendName: String? = null
-    private var pendingSharedKey: String? = null
+    private var pendingSharedKey: String? = null // key generated with this device's QR
+    private var scannedSharedKey: String? = null // key extracted from the scanned QR
 
     init {
         loadDeviceId()
         observePairingAccepted()
         sharedPreferences.registerOnSharedPreferenceChangeListener(preferenceListener)
     }
-    
+
     override fun onCleared() {
         super.onCleared()
-        // prevent listener leaks
         sharedPreferences.unregisterOnSharedPreferenceChangeListener(preferenceListener)
     }
-    
+
     private fun loadDeviceId() {
         _myDeviceId.value = userProfileRepository.getPersistentDeviceId()
     }
 
     /**
-     * observePairingAccepted
-     *
-     * monitors GATT events to finalise bond persistence once a peer confirms.
+     * Observes the [pairingAccepted] event from [DeviceRepository]. When the remote device
+     * confirms the pairing, the friend record is persisted to Room and the state transitions
+     * to [PairingState.Success]. Duplicate entries are guarded against by checking Room first.
      */
     private fun observePairingAccepted() {
         deviceRepository.pairingAccepted
@@ -135,7 +140,6 @@ class PairingViewModel @Inject constructor(
                 Timber.tag("PairingViewModel").d("Pairing accepted by $acceptedDeviceId")
                 if (acceptedDeviceId == pendingFriendDeviceId) {
                     viewModelScope.launch {
-                        // avoid duplicate entries if both sides initiate
                         val existing = friendRepository.getFriendById(acceptedDeviceId)
                         if (existing == null) {
                             friendRepository.addFriend(Friend(
@@ -151,11 +155,11 @@ class PairingViewModel @Inject constructor(
             }
             .launchIn(viewModelScope)
     }
-    
+
     /**
-     * generateQRCode
-     *
-     * serialises local identity and a fresh ephemeral shared key into a QR bitmap.
+     * Generates a QR code bitmap containing this device's ID, display name and a fresh
+     * AES-256-GCM shared key. The key is stored in [pendingSharedKey] so it can be
+     * confirmed when Device B sends it back in the GATT pairing request.
      */
     fun generateQRCode() {
         viewModelScope.launch {
@@ -163,10 +167,11 @@ class PairingViewModel @Inject constructor(
                 val userProfile = userProfileRepository.getUserProfile().first()
                 val deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}"
                 val displayName = userProfile?.displayName?.ifBlank { deviceModel } ?: deviceModel
-                
+
                 val sharedKey = encryptionManager.generateSharedKey()
                 pendingSharedKey = sharedKey
-                pendingFriendDeviceId = null  // invalidate stale session data
+                // clear stale session state from any previous pairing attempt
+                pendingFriendDeviceId = null
                 pendingFriendName = null
 
                 val qrData = JSONObject().apply {
@@ -175,20 +180,19 @@ class PairingViewModel @Inject constructor(
                     put("sharedKey", sharedKey)
                     put("timestamp", System.currentTimeMillis())
                 }.toString()
-                
+
                 val writer = QRCodeWriter()
                 val bitMatrix = writer.encode(qrData, BarcodeFormat.QR_CODE, 512, 512)
                 val width = bitMatrix.width
                 val height = bitMatrix.height
                 val bitmap = createBitmap(width, height, Bitmap.Config.RGB_565)
-                
+
                 for (x in 0 until width) {
                     for (y in 0 until height) {
                         bitmap[x, y] =
                             if (bitMatrix[x, y]) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
                     }
                 }
-                
                 _qrCodeBitmap.value = bitmap
             } catch (e: Exception) {
                 Timber.e(e, "QR generation failed")
@@ -197,12 +201,12 @@ class PairingViewModel @Inject constructor(
         }
     }
 
-    private var scannedSharedKey: String? = null
-
     /**
-     * onQRScanned
-     *
-     * parses peer identity from QR and initiates the GATT-based pairing request.
+     * Called after Device B scans Device A's QR code. Extracts the friend's identity
+     * and shared key from the payload, then polls BLE discovery for up to 15 seconds
+     * waiting for the target device to become visible before sending the pairing request.
+     * Transitions to [PairingState.AwaitingConfirmation] once sent, with a 20-second
+     * timeout before emitting an error if no acceptance arrives.
      */
     fun onQRScanned(scannedData: String, defaultName: String) {
         viewModelScope.launch {
@@ -214,16 +218,11 @@ class PairingViewModel @Inject constructor(
 
                 try {
                     val json = JSONObject(scannedData)
-                    if (json.has("deviceId")) {
-                        friendDeviceId = json.getString("deviceId")
-                    }
-                    if (json.has("displayName")) {
-                        friendName = json.getString("displayName")
-                    }
-                    if (json.has("sharedKey")) {
-                        scannedSharedKey = json.getString("sharedKey")
-                    }
+                    if (json.has("deviceId")) friendDeviceId = json.getString("deviceId")
+                    if (json.has("displayName")) friendName = json.getString("displayName")
+                    if (json.has("sharedKey")) scannedSharedKey = json.getString("sharedKey")
                 } catch (_: Exception) {
+                    // fallback - treat the raw string as a device ID for legacy compatibility
                     friendDeviceId = scannedData
                 }
 
@@ -233,11 +232,10 @@ class PairingViewModel @Inject constructor(
 
                     val userProfile = userProfileRepository.getUserProfile().first()
                     val myDisplayName = userProfile?.displayName ?: "${Build.MANUFACTURER} ${Build.MODEL}"
-                    
-                    // ensure discovery is active for target node resolution
+
                     bleScanner.startDiscovery()
-                    
-                    // poll for target node availability before dispatching pairing request
+
+                    // poll for the target device for up to 15 seconds before giving up
                     val timeoutMs = 15_000L
                     val startTime = System.currentTimeMillis()
                     var sent = false
@@ -258,7 +256,7 @@ class PairingViewModel @Inject constructor(
 
                     if (sent) {
                         _pairingState.value = PairingState.AwaitingConfirmation
-                        // timeout if the peer fails to confirm within the window
+                        // 20-second window for the peer to accept before showing an error
                         viewModelScope.launch {
                             delay(20_000)
                             if (_pairingState.value is PairingState.AwaitingConfirmation) {
@@ -273,7 +271,7 @@ class PairingViewModel @Inject constructor(
                         )
                     }
                 } else {
-                     _pairingState.value = PairingState.Error("Invalid QR Code")
+                    _pairingState.value = PairingState.Error("Invalid QR Code")
                 }
             } catch (e: Exception) {
                 _pairingState.value = PairingState.Error(e.message ?: "Unknown error")
@@ -282,9 +280,9 @@ class PairingViewModel @Inject constructor(
     }
 
     /**
-     * acceptPairingRequest
-     *
-     * confirms a bond request from a peer and saves their credentials for mesh comms.
+     * Accepts an incoming pairing request. Saves the requester as a friend with the
+     * shared key from the request (or falls back to the scanned/pending key), sends
+     * a GATT acceptance back to the requester, and transitions to [PairingState.Success].
      */
     fun acceptPairingRequest(request: PairingRequest) {
         viewModelScope.launch {
@@ -294,7 +292,6 @@ class PairingViewModel @Inject constructor(
                 sharedKey = request.sharedKey ?: scannedSharedKey ?: pendingSharedKey,
                 pairedAt = System.currentTimeMillis()
             ))
-            // inform requester to finalise the bidirectional bond
             deviceRepository.sendPairingAccepted(targetDeviceId = request.senderDeviceId)
             deviceRepository.clearIncomingPairingRequest()
             _pairingState.value = PairingState.Success
@@ -309,12 +306,12 @@ class PairingViewModel @Inject constructor(
 /**
  * PairingState
  *
- * finite state representation of the secure handshake lifecycle.
+ * Represents the lifecycle of a single pairing attempt from idle through to success or failure.
  */
 sealed class PairingState {
-    object Idle : PairingState()
-    object Pairing : PairingState()
-    object AwaitingConfirmation : PairingState()
-    object Success : PairingState()
-    data class Error(val message: String) : PairingState()
+    object Idle : PairingState()                        // no pairing in progress
+    object Pairing : PairingState()                     // scanning for the target device
+    object AwaitingConfirmation : PairingState()        // request sent, waiting for acceptance
+    object Success : PairingState()                     // both sides have persisted the friend record
+    data class Error(val message: String) : PairingState() // something went wrong, message shown inline
 }

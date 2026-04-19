@@ -27,8 +27,10 @@ import com.fyp.crowdlink.presentation.common.ConnectivityBanner
 /**
  * DiscoveryScreen
  *
- * primary hub for local peer discovery. 
- * manages mesh lifecycle and lists reachable nodes within BLE range.
+ * Primary hub for local peer discovery. Lists paired friends currently visible over BLE,
+ * shows mesh and relay status, and provides navigation shortcuts to chat, compass and map
+ * for each friend. The [ConnectivityBanner] surfaces radio state warnings at the top if
+ * Bluetooth or Wi-Fi is disabled.
  */
 @SuppressLint("MissingPermission")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -40,7 +42,6 @@ fun DiscoveryScreen(
     onNavigateToRelay: () -> Unit,
     viewModel: DiscoveryViewModel = hiltViewModel()
 ) {
-    // reactive state bindings for discovery and hardware status
     val nearbyFriends by viewModel.nearbyFriends.collectAsState()
     val discoveredRelays by viewModel.discoveredRelays.collectAsState()
     val isRelayConnected by viewModel.isRelayConnected.collectAsState()
@@ -51,9 +52,7 @@ fun DiscoveryScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Nearby") }
-            )
+            TopAppBar(title = { Text("Nearby") })
         }
     ) { paddingValues ->
         Column(
@@ -63,13 +62,13 @@ fun DiscoveryScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // system-level radio status warnings
+            // warning banner if Bluetooth or Wi-Fi is off
             ConnectivityBanner(
                 isBluetoothEnabled = isBluetoothEnabled,
                 isWifiEnabled = isWifiEnabled
             )
 
-            // manual toggle for mesh advertising and discovery
+            // tappable pill to start or pause BLE scanning and advertising
             MeshStatusPill(isMeshActive = isMeshActive) {
                 if (isMeshActive) {
                     viewModel.stopDiscovery()
@@ -80,7 +79,7 @@ fun DiscoveryScreen(
                 }
             }
 
-            // show relay banner if infrastructure is found or debug override is set
+            // relay banner only shown when ESP32 relay nodes are found or debug override is on
             val relayCount = discoveredRelays.size
             if (relayCount > 0 || forceShowRelays) {
                 RelayStatusBanner(
@@ -96,7 +95,7 @@ fun DiscoveryScreen(
             )
 
             if (nearbyFriends.isEmpty()) {
-                // empty state placeholder when no peers are visible
+                // empty state - message differs depending on whether scanning is active
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -127,9 +126,7 @@ fun DiscoveryScreen(
                     )
                 }
             } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(nearbyFriends, key = { it.deviceId }) { friend ->
                         NearbyFriendCard(
                             friend = friend,
@@ -146,8 +143,9 @@ fun DiscoveryScreen(
 
 /**
  * MeshStatusPill
- * 
- * compact status indicator and toggle for the background mesh service.
+ *
+ * Tappable status indicator showing whether BLE scanning and advertising are active.
+ * Green dot when active, grey when paused. Toggles the mesh on or off when clicked.
  */
 @Composable
 fun MeshStatusPill(
@@ -159,7 +157,6 @@ fun MeshStatusPill(
     else
         MaterialTheme.colorScheme.surfaceVariant
 
-    val label = if (isMeshActive) "Active — tap to pause" else "Offline — tap to start"
     val dotColor = if (isMeshActive) Color(0xFF4CAF50) else Color.Gray
 
     Surface(
@@ -175,7 +172,7 @@ fun MeshStatusPill(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // indicates live radio activity
+            // coloured dot indicates live radio activity
             Box(
                 modifier = Modifier
                     .size(10.dp)
@@ -188,7 +185,7 @@ fun MeshStatusPill(
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    text = label,
+                    text = if (isMeshActive) "Active — tap to pause" else "Offline — tap to start",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -200,7 +197,8 @@ fun MeshStatusPill(
 /**
  * RelayStatusBanner
  *
- * indicates connection to infrastructure mesh nodes (ESP32/Fixed relays).
+ * Shown when ESP32/LoRa relay nodes are discovered nearby. Tapping navigates to the
+ * relay detail screen. Icon and colour reflect whether a relay connection is established.
  */
 @Composable
 fun RelayStatusBanner(isConnected: Boolean, relayCount: Int, onClick: () -> Unit) {
@@ -209,7 +207,10 @@ fun RelayStatusBanner(isConnected: Boolean, relayCount: Int, onClick: () -> Unit
             .fillMaxWidth()
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
-            containerColor = if (isConnected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+            containerColor = if (isConnected)
+                MaterialTheme.colorScheme.primaryContainer
+            else
+                MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
         Row(
@@ -242,7 +243,10 @@ fun RelayStatusBanner(isConnected: Boolean, relayCount: Int, onClick: () -> Unit
 /**
  * NearbyFriendCard
  *
- * detailed view for a discovered peer; includes proximity metrics and navigation links.
+ * Displays a discovered friend's name, proximity label, and raw RSSI value.
+ * Proximity thresholds map signal distance to qualitative labels and colours -
+ * green for under 5m, primary for under 20m, muted for anything beyond that.
+ * Action icons navigate to map, compass and chat for that friend.
  */
 @Composable
 fun NearbyFriendCard(
@@ -251,7 +255,6 @@ fun NearbyFriendCard(
     onMessageClick: () -> Unit,
     onMapClick: () -> Unit
 ) {
-    // qualitative mapping of signal-derived distance
     val proximityLabel = when {
         friend.estimatedDistance < 5 -> "Very close"
         friend.estimatedDistance < 20 -> "Nearby"
@@ -259,7 +262,7 @@ fun NearbyFriendCard(
     }
 
     val proximityColor = when {
-        friend.estimatedDistance < 5 -> Color(0xFF4CAF50)   // green for close proximity
+        friend.estimatedDistance < 5 -> Color(0xFF4CAF50)
         friend.estimatedDistance < 20 -> MaterialTheme.colorScheme.primary
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
@@ -274,14 +277,11 @@ fun NearbyFriendCard(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // avatar based on first initial
+            // avatar circle with first initial of the friend's display name
             Box(
                 modifier = Modifier
                     .size(44.dp)
-                    .background(
-                        MaterialTheme.colorScheme.secondaryContainer,
-                        CircleShape
-                    ),
+                    .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -313,28 +313,18 @@ fun NearbyFriendCard(
                 )
             }
 
-            // primary peer interaction routes
+            // navigation shortcuts - map, compass, chat
             IconButton(onClick = onMapClick) {
-                Icon(
-                    Icons.Default.Map,
-                    contentDescription = "Map",
-                    tint = MaterialTheme.colorScheme.primary
-                )
+                Icon(Icons.Default.Map, contentDescription = "Map",
+                    tint = MaterialTheme.colorScheme.primary)
             }
-
             IconButton(onClick = onFindClick) {
-                Icon(
-                    Icons.Default.Explore,
-                    contentDescription = "Find",
-                    tint = MaterialTheme.colorScheme.primary
-                )
+                Icon(Icons.Default.Explore, contentDescription = "Find",
+                    tint = MaterialTheme.colorScheme.primary)
             }
             IconButton(onClick = onMessageClick) {
-                Icon(
-                    Icons.AutoMirrored.Filled.Chat,
-                    contentDescription = "Message",
-                    tint = MaterialTheme.colorScheme.primary
-                )
+                Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Message",
+                    tint = MaterialTheme.colorScheme.primary)
             }
         }
     }

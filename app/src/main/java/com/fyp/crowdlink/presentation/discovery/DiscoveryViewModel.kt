@@ -34,7 +34,10 @@ import javax.inject.Inject
 /**
  * DiscoveryViewModel
  *
- * orchestrates peer and relay discovery; manages mesh networking lifecycle.
+ * Manages the lifecycle of BLE scanning, advertising, relay node discovery and background
+ * location broadcasting for the discovery screen. Mesh active state is derived by combining
+ * the scanning and advertising flags - both must be true for the mesh to be considered active.
+ * Hardware radio state is polled every 2 seconds to keep the connectivity banner up to date.
  */
 @HiltViewModel
 class DiscoveryViewModel @Inject constructor(
@@ -47,10 +50,12 @@ class DiscoveryViewModel @Inject constructor(
     private val friendRepository: FriendRepository
 ) : ViewModel() {
 
-    private val bluetoothAdapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
-    private val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+    private val bluetoothAdapter =
+        (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+    private val wifiManager =
+        context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
 
-    // hardware status streams with 2s polling intervals
+    // polled every 2 seconds - drives the ConnectivityBanner in the UI
     val isBluetoothEnabled: StateFlow<Boolean> = flow {
         while (true) {
             emit(bluetoothAdapter?.isEnabled == true)
@@ -65,48 +70,48 @@ class DiscoveryViewModel @Inject constructor(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
-    // retrieve or initialise persistent device identifier
+    // lazily retrieve or generate a persistent device ID stored in SharedPreferences
     private val myDeviceId: String by lazy {
-        val id = sharedPreferences.getString(KEY_DEVICE_ID, null)
+        sharedPreferences.getString(KEY_DEVICE_ID, null)
             ?: UUID.randomUUID().toString().also { newId ->
                 sharedPreferences.edit { putString(KEY_DEVICE_ID, newId) }
             }
-        id
     }
 
     private val _isDiscovering = MutableStateFlow(false)
     private val _isAdvertising = MutableStateFlow(false)
 
-    // mesh active state requires concurrent scanning and advertising
+    // mesh is only considered active when both scanning and advertising are running simultaneously
     val isMeshActive: StateFlow<Boolean> = combine(_isDiscovering, _isAdvertising) { scanning, advertising ->
         scanning && advertising
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
-    // real-time peer discovery data from the repository
-    val nearbyFriends: StateFlow<List<NearbyFriend>> =
-        deviceRepository.nearbyFriends
+    val nearbyFriends: StateFlow<List<NearbyFriend>> = deviceRepository.nearbyFriends
 
-    // streams for infrastructure node discovery and connection state
     val discoveredRelays: StateFlow<List<RelayNode>> = relayNodeScanner.discoveredRelays
     val isRelayConnected: StateFlow<Boolean> = relayNodeConnection.isConnected
 
-    private val _forceShowRelays = MutableStateFlow(sharedPreferences.getBoolean("force_show_relays", false))
+    // reflects the debug "force_show_relays" preference, updated reactively via the listener below
+    private val _forceShowRelays = MutableStateFlow(
+        sharedPreferences.getBoolean("force_show_relays", false)
+    )
     val forceShowRelays: StateFlow<Boolean> = _forceShowRelays.asStateFlow()
 
-    private val preferenceChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
-        if (key == "force_show_relays") {
-            _forceShowRelays.value = prefs.getBoolean(key, false)
+    private val preferenceChangeListener =
+        SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+            if (key == "force_show_relays") {
+                _forceShowRelays.value = prefs.getBoolean(key, false)
+            }
         }
-    }
 
     init {
         sharedPreferences.registerOnSharedPreferenceChangeListener(preferenceChangeListener)
-        
-        // auto-start discovery services on initialisation
+
+        // auto-start scanning and advertising on launch
         startDiscovery()
         startAdvertising()
 
-        // periodic background location synchronisation to paired peers
+        // broadcast location to all paired friends every 60 seconds if location sharing is enabled
         viewModelScope.launch {
             while (true) {
                 delay(60_000L)
@@ -127,7 +132,7 @@ class DiscoveryViewModel @Inject constructor(
             }
         }
 
-        // automated connection logic for infrastructure relays
+        // auto-connect to the first available relay node if the setting is enabled
         viewModelScope.launch {
             discoveredRelays.collect { relays ->
                 val autoConnect = sharedPreferences.getBoolean("auto_connect_relay", true)
@@ -158,7 +163,7 @@ class DiscoveryViewModel @Inject constructor(
         _isAdvertising.value = true
     }
 
-    // advertising convenience wrapper for local id
+    // convenience overload that uses the locally stored device ID
     fun startAdvertising() = startAdvertising(myDeviceId)
 
     @SuppressLint("MissingPermission")
@@ -169,7 +174,7 @@ class DiscoveryViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        // clean up listener to prevent preference leaks
+        // unregister to prevent a SharedPreferences listener leak after the VM is destroyed
         sharedPreferences.unregisterOnSharedPreferenceChangeListener(preferenceChangeListener)
     }
 

@@ -21,7 +21,8 @@ import javax.inject.Inject
 /**
  * FriendMapPin
  *
- * simple wrapper combining peer identity with their last known mesh-reported location.
+ * Pairs a friend's identity with their last known location received over the mesh,
+ * used as the unit of data for rendering pins on the map.
  */
 data class FriendMapPin(
     val friend: Friend,
@@ -31,7 +32,10 @@ data class FriendMapPin(
 /**
  * MapViewModel
  *
- * manages reactive state for the map interface; synchronises peer telemetry and device orientation.
+ * Manages reactive state for the map screen. Observes the local GPS position, aggregates
+ * cached friend locations from Room into a list of [FriendMapPin] objects, and tracks
+ * device heading via fused accelerometer and magnetometer sensors so the self-location
+ * arrow rotates to reflect the user's bearing.
  */
 @HiltViewModel
 class MapViewModel @Inject constructor(
@@ -55,18 +59,18 @@ class MapViewModel @Inject constructor(
     private val _myHeading = MutableStateFlow(0f)
     val myHeading: StateFlow<Float> = _myHeading.asStateFlow()
 
-    // buffers for sensor fusion and smoothing
+    // raw sensor buffers for accelerometer/magnetometer fusion
     private var gravity: FloatArray? = null
     private var geomagnetic: FloatArray? = null
-    private val alpha = 0.15f // low-pass filter constant
+    private val alpha = 0.15f // low-pass filter weight
 
     init {
-        // synchronise local GPS position
+        // observe live GPS updates for the self-location arrow
         locationRepository.getMyLocation()
             .onEach { _myLocation.value = it }
             .launchIn(viewModelScope)
 
-        // aggregate peer locations into reactive pins for map rendering
+        // for each friend, observe their cached location and upsert into the pins list
         friendRepository.getAllFriends()
             .onEach { friends ->
                 friends.forEach { friend ->
@@ -76,6 +80,7 @@ class MapViewModel @Inject constructor(
                                 val existing = _friendPins.value.toMutableList()
                                 val index = existing.indexOfFirst { it.friend.deviceId == friend.deviceId }
                                 val pin = FriendMapPin(friend, location)
+                                // replace existing pin or append if this friend has no pin yet
                                 if (index >= 0) existing[index] = pin else existing.add(pin)
                                 _friendPins.value = existing
                             }
@@ -85,7 +90,6 @@ class MapViewModel @Inject constructor(
             }
             .launchIn(viewModelScope)
 
-        // initialise orientation sensors
         val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         val magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
         sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI)
@@ -93,7 +97,6 @@ class MapViewModel @Inject constructor(
     }
 
     override fun onSensorChanged(event: SensorEvent) {
-        // apply noise reduction to raw sensor vectors
         if (event.sensor.type == Sensor.TYPE_ACCELEROMETER) {
             gravity = lowPass(event.values.clone(), gravity)
         }
@@ -103,21 +106,20 @@ class MapViewModel @Inject constructor(
         val g = gravity ?: return
         val m = geomagnetic ?: return
 
-        // compute device heading relative to magnetic north
+        // derive device heading from fused sensor vectors
         val r = FloatArray(9)
         val i = FloatArray(9)
         if (SensorManager.getRotationMatrix(r, i, g, m)) {
             val orientation = FloatArray(3)
             SensorManager.getOrientation(r, orientation)
             val azimuth = Math.toDegrees(orientation[0].toDouble()).toFloat()
-            _myHeading.value = (azimuth + 360) % 360
+            _myHeading.value = (azimuth + 360) % 360 // normalise to 0-360
         }
     }
 
     /**
-     * lowPass
-     *
-     * basic temporal filter to reduce jitter on sensor readings.
+     * Applies an exponential moving average to reduce jitter on raw sensor vectors.
+     * Alpha controls the trade-off between smoothness and responsiveness.
      */
     private fun lowPass(input: FloatArray, output: FloatArray?): FloatArray {
         if (output == null) return input
@@ -133,24 +135,17 @@ class MapViewModel @Inject constructor(
         _selectedFriendId.value = friendId
     }
 
+    // called when navigating to the map with a pre-selected friend, e.g. from SOS alert
     fun selectFriendOnLoad(friendId: String?) {
-        if (friendId != null) {
-            _selectedFriendId.value = friendId
-        }
+        if (friendId != null) _selectedFriendId.value = friendId
     }
 
-    fun startTileCaching() {
-        _isCachingTiles.value = true
-        // UI flag only; actual caching logic resides in MapScreen via MapLibre's offline manager
-    }
-
-    fun onTileCachingComplete() {
-        _isCachingTiles.value = false
-    }
+    // isCachingTiles is a UI flag only - the actual download runs in MapScreen via MapLibre
+    fun startTileCaching() { _isCachingTiles.value = true }
+    fun onTileCachingComplete() { _isCachingTiles.value = false }
 
     override fun onCleared() {
         super.onCleared()
-        // prevent sensor listener leaks
-        sensorManager.unregisterListener(this)
+        sensorManager.unregisterListener(this) // prevent sensor leaks after VM is destroyed
     }
 }

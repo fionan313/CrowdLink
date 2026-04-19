@@ -20,8 +20,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 /**
  * PairingScreen
  *
- * handles secure cryptographic handshake via QR exchange.
- * manages bidirectional pairing state and incoming bond requests.
+ * Handles the two-sided QR pairing flow. Device A displays its QR code containing its
+ * device ID, display name and AES-256-GCM shared key. Device B scans it and sends a
+ * BLE confirmation back. If an incoming request arrives while this screen is open, an
+ * [AlertDialog] is shown so the user can accept or decline. Progress feedback is shown
+ * inline as the handshake moves through its states.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,19 +34,18 @@ fun PairingScreen(
     onScanClick: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
-    // reactive state bindings for pairing lifecycle
     val qrCodeBitmap by viewModel.qrCodeBitmap.collectAsState()
     val pairingState by viewModel.pairingState.collectAsState()
     val incomingRequest by viewModel.incomingPairingRequest.collectAsState()
     val debugInfo by viewModel.debugInfo.collectAsState()
     val showDebugInfo by viewModel.showDebugInfo.collectAsState()
-    
-    // initialise local identity QR on entry
+
+    // generate the QR code containing this device's identity and shared key on entry
     LaunchedEffect(Unit) {
         viewModel.generateQRCode()
     }
 
-    // verification dialogue for incoming mesh bond requests
+    // shown when a remote device sends a pairing request to this device over BLE
     incomingRequest?.let { request ->
         AlertDialog(
             onDismissRequest = { viewModel.declinePairingRequest() },
@@ -61,17 +63,14 @@ fun PairingScreen(
             }
         )
     }
-    
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Pair with Friend") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -85,8 +84,8 @@ fun PairingScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(modifier = Modifier.height(16.dp))
-            
-            // display generated QR containing local public key and identity
+
+            // QR code shown while the bitmap is generating, spinner shown until it's ready
             if (qrCodeBitmap != null) {
                 Image(
                     bitmap = qrCodeBitmap!!.asImageBitmap(),
@@ -96,10 +95,9 @@ fun PairingScreen(
             } else {
                 CircularProgressIndicator()
             }
-            
+
             Spacer(modifier = Modifier.height(32.dp))
-            
-            // trigger external scanner flow for peer QR ingestion
+
             Button(
                 onClick = onScanClick,
                 modifier = Modifier.fillMaxWidth().height(56.dp)
@@ -108,8 +106,8 @@ fun PairingScreen(
                 Spacer(Modifier.width(8.dp))
                 Text("Scan Friend's QR Code")
             }
-            
-            // qualitative feedback for handshake progress
+
+            // inline feedback as the pairing handshake progresses through its states
             when (pairingState) {
                 is PairingState.Pairing -> {
                     Spacer(modifier = Modifier.height(16.dp))
@@ -122,9 +120,8 @@ fun PairingScreen(
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
                 is PairingState.Success -> {
-                    LaunchedEffect(Unit) {
-                        onPairingSuccess()
-                    }
+                    // navigate away as soon as success state is emitted
+                    LaunchedEffect(Unit) { onPairingSuccess() }
                 }
                 is PairingState.Error -> {
                     Spacer(modifier = Modifier.height(16.dp))
@@ -137,7 +134,7 @@ fun PairingScreen(
                 else -> {}
             }
 
-            // conditional debug telemetry for mesh diagnostics
+            // debug telemetry panel shown at the bottom when enabled in settings
             if (showDebugInfo) {
                 Spacer(modifier = Modifier.weight(1f))
                 Text(

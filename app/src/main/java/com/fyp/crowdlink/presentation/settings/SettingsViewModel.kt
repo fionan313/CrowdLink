@@ -23,6 +23,9 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import androidx.core.content.edit
 
+/**
+ * Represents the lifecycle of a profile save operation.
+ */
 sealed class SaveStatus {
     object Idle : SaveStatus()
     object Saving : SaveStatus()
@@ -30,6 +33,14 @@ sealed class SaveStatus {
     data class Error(val message: String) : SaveStatus()
 }
 
+/**
+ * SettingsViewModel
+ *
+ * Manages all settings state. Each toggle is backed by a [MutableStateFlow] initialised
+ * from SharedPreferences and written back on change. Background mesh state also starts
+ * or stops [MeshService] directly. [resetAppData] wipes all local Room tables and
+ * SharedPreferences in a single coroutine.
+ */
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -39,13 +50,14 @@ class SettingsViewModel @Inject constructor(
     private val sharedPreferences: SharedPreferences,
     private val locationRepository: LocationRepository
 ) : ViewModel() {
-    
+
     private val _userProfile = MutableStateFlow<UserProfile?>(null)
     val userProfile: StateFlow<UserProfile?> = _userProfile.asStateFlow()
-    
+
     private val _saveStatus = MutableStateFlow<SaveStatus>(SaveStatus.Idle)
     val saveStatus: StateFlow<SaveStatus> = _saveStatus.asStateFlow()
 
+    // each preference is mirrored into a StateFlow so the UI reacts immediately on toggle
     private val _autoStart = MutableStateFlow(sharedPreferences.getBoolean("auto_start", true))
     val autoStart: StateFlow<Boolean> = _autoStart.asStateFlow()
 
@@ -76,16 +88,17 @@ class SettingsViewModel @Inject constructor(
     private val _backgroundMesh = MutableStateFlow(sharedPreferences.getBoolean("background_mesh", false))
     val backgroundMesh: StateFlow<Boolean> = _backgroundMesh.asStateFlow()
 
+    // live count of paired friends shown in the About section
     val pairedFriendsCount: StateFlow<Int> = friendRepository.getAllFriends()
         .map { it.size }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     val deviceId: String = userProfileRepository.getPersistentDeviceId()
-    
+
     init {
         loadUserProfile()
     }
-    
+
     private fun loadUserProfile() {
         viewModelScope.launch {
             userProfileRepository.getUserProfile().collect { profile ->
@@ -97,7 +110,11 @@ class SettingsViewModel @Inject constructor(
             }
         }
     }
-    
+
+    /**
+     * Persists updated profile fields to Room. Resets [saveStatus] to Idle after
+     * 2 seconds so the success card in the UI dismisses automatically.
+     */
     fun saveUserProfile(
         displayName: String,
         phoneNumber: String?,
@@ -106,18 +123,14 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 _saveStatus.value = SaveStatus.Saving
-                
                 val profile = UserProfile(
                     displayName = displayName.trim(),
                     phoneNumber = phoneNumber?.trim()?.takeIf { it.isNotEmpty() },
                     statusMessage = statusMessage?.trim()?.takeIf { it.isNotEmpty() },
                     updatedAt = System.currentTimeMillis()
                 )
-                
                 userProfileRepository.saveUserProfile(profile)
                 _saveStatus.value = SaveStatus.Success
-                
-                // Reset after 2 seconds
                 kotlinx.coroutines.delay(2000)
                 _saveStatus.value = SaveStatus.Idle
             } catch (e: Exception) {
@@ -146,13 +159,15 @@ class SettingsViewModel @Inject constructor(
         _ghostMode.value = enabled
     }
 
+    /**
+     * Toggles location sharing. When disabled, cached friend locations are cleared
+     * from Room immediately so stale pins no longer appear on the map.
+     */
     fun setLocationSharing(enabled: Boolean) {
         sharedPreferences.edit { putBoolean("location_sharing", enabled) }
         _locationSharing.value = enabled
         if (!enabled) {
-            viewModelScope.launch {
-                locationRepository.clearAllFriendLocations()
-            }
+            viewModelScope.launch { locationRepository.clearAllFriendLocations() }
         }
     }
 
@@ -176,27 +191,23 @@ class SettingsViewModel @Inject constructor(
         _showPairingDebug.value = enabled
     }
 
+    /**
+     * Toggles the background mesh foreground service. Starting it allows BLE and
+     * location broadcasting to continue after the app leaves the foreground.
+     */
     fun setBackgroundMesh(enabled: Boolean) {
         sharedPreferences.edit { putBoolean("background_mesh", enabled) }
         _backgroundMesh.value = enabled
         val intent = Intent(context, MeshService::class.java)
-        if (enabled) {
-            context.startForegroundService(intent)
-        } else {
-            context.stopService(intent)
-        }
+        if (enabled) context.startForegroundService(intent) else context.stopService(intent)
     }
 
     fun clearMessageHistory() {
-        viewModelScope.launch {
-            messageRepository.clearAllMessages()
-        }
+        viewModelScope.launch { messageRepository.clearAllMessages() }
     }
 
     fun clearMapCache() {
-        viewModelScope.launch {
-            locationRepository.clearMapCache()
-        }
+        viewModelScope.launch { locationRepository.clearMapCache() }
     }
 
     fun resetOnboarding() {
@@ -204,11 +215,13 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun unpairAllFriends() {
-        viewModelScope.launch {
-            friendRepository.unpairAllFriends()
-        }
+        viewModelScope.launch { friendRepository.unpairAllFriends() }
     }
 
+    /**
+     * Full app reset - clears all Room tables, cached locations, map tiles and
+     * SharedPreferences in a single coroutine. The app will behave as if freshly installed.
+     */
     fun resetAppData() {
         viewModelScope.launch {
             messageRepository.clearAllMessages()

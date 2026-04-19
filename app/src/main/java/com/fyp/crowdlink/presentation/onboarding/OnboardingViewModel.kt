@@ -14,7 +14,9 @@ import javax.inject.Inject
 /**
  * OnboardingViewModel
  *
- * handles transient state for user registration and persists the local mesh identity.
+ * Manages transient state for the onboarding flow and persists the user's display name
+ * to Room on completion. The saved name becomes the device's identity on the BLE mesh
+ * and is included in pairing requests and discovery advertisements.
  */
 @HiltViewModel
 class OnboardingViewModel @Inject constructor(
@@ -27,27 +29,30 @@ class OnboardingViewModel @Inject constructor(
     private val _isNameValid = MutableStateFlow(false)
     val isNameValid: StateFlow<Boolean> = _isNameValid.asStateFlow()
 
+    /**
+     * Called on every keystroke in the name field. Updates the display name and
+     * revalidates - the "Get Started" button stays disabled until the name is at
+     * least 2 characters after trimming.
+     */
     fun onNameChanged(name: String) {
         _displayName.value = name
-        // enforce basic length constraints for mesh discoverability
         _isNameValid.value = name.trim().length >= 2
     }
 
     /**
-     * saveProfile
-     *
-     * commits the chosen pseudonym to the local repository to initialise the mesh node.
+     * Persists the display name as a [UserProfile] and invokes [onComplete] to
+     * navigate away from onboarding. Falls back to "Festival Goer" if the name
+     * is somehow blank when this is called.
      */
     fun saveProfile(onComplete: () -> Unit) {
         viewModelScope.launch {
-            val name = _displayName.value.trim()
-                .ifBlank { "Festival Goer" }  // fallback pseudonym if validation is bypassed
-            
-            val profile = UserProfile(
-                displayName = name,
-                updatedAt = System.currentTimeMillis()
+            val name = _displayName.value.trim().ifBlank { "Festival Goer" }
+            userProfileRepository.saveUserProfile(
+                UserProfile(
+                    displayName = name,
+                    updatedAt = System.currentTimeMillis()
+                )
             )
-            userProfileRepository.saveUserProfile(profile)
             onComplete()
         }
     }

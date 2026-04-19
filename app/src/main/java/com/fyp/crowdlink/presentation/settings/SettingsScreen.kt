@@ -17,8 +17,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 /**
  * SettingsScreen
  *
- * provides a centralised interface for user profile management, mesh networking
- * parameters, privacy toggles, and developer debug utilities.
+ * Centralised settings screen covering profile management, BLE/mesh configuration,
+ * LoRa relay options, privacy toggles and developer debug utilities. Destructive
+ * actions (clear history, unpair all, full reset) are gated behind confirmation
+ * dialogues to prevent accidental data loss.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,7 +39,6 @@ fun SettingsScreen(
     val wifiDirectMode by viewModel.wifiDirectMode.collectAsState()
     val showPairingDebug by viewModel.showPairingDebug.collectAsState()
     val backgroundMesh by viewModel.backgroundMesh.collectAsState()
-
     val pairedFriendsCount by viewModel.pairedFriendsCount.collectAsState()
     val deviceId = viewModel.deviceId
 
@@ -46,26 +47,21 @@ fun SettingsScreen(
     var showUnpairAllDialog by remember { mutableStateOf(false) }
     var showResetAppDialog by remember { mutableStateOf(false) }
 
-    // destructive action confirmation dialogues
+    // confirmation dialogues for destructive actions
+
     if (showClearHistoryDialog) {
         AlertDialog(
             onDismissRequest = { showClearHistoryDialog = false },
             title = { Text("Clear Message History") },
             text = { Text("Are you sure you want to delete all local chat messages? This action cannot be undone.") },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.clearMessageHistory()
-                        showClearHistoryDialog = false
-                    }
-                ) {
-                    Text("Clear", color = MaterialTheme.colorScheme.error)
-                }
+                TextButton(onClick = {
+                    viewModel.clearMessageHistory()
+                    showClearHistoryDialog = false
+                }) { Text("Clear", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { showClearHistoryDialog = false }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { showClearHistoryDialog = false }) { Text("Cancel") }
             }
         )
     }
@@ -79,14 +75,10 @@ fun SettingsScreen(
                 TextButton(onClick = {
                     viewModel.clearMapCache()
                     showClearMapDialog = false
-                }) {
-                    Text("Clear", color = MaterialTheme.colorScheme.error)
-                }
+                }) { Text("Clear", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { showClearMapDialog = false }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { showClearMapDialog = false }) { Text("Cancel") }
             }
         )
     }
@@ -100,14 +92,10 @@ fun SettingsScreen(
                 TextButton(onClick = {
                     viewModel.unpairAllFriends()
                     showUnpairAllDialog = false
-                }) {
-                    Text("Unpair All", color = MaterialTheme.colorScheme.error)
-                }
+                }) { Text("Unpair All", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { showUnpairAllDialog = false }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { showUnpairAllDialog = false }) { Text("Cancel") }
             }
         )
     }
@@ -121,14 +109,10 @@ fun SettingsScreen(
                 TextButton(onClick = {
                     viewModel.resetAppData()
                     showResetAppDialog = false
-                }) {
-                    Text("RESET EVERYTHING", color = MaterialTheme.colorScheme.error)
-                }
+                }) { Text("RESET EVERYTHING", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { showResetAppDialog = false }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { showResetAppDialog = false }) { Text("Cancel") }
             }
         )
     }
@@ -151,8 +135,7 @@ fun SettingsScreen(
                 .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
         ) {
-
-            // user identity and pseudonym management
+            // profile
             SettingsSectionHeader("Profile")
             SettingsNavigationItem(
                 icon = Icons.Default.Person,
@@ -163,7 +146,7 @@ fun SettingsScreen(
 
             HorizontalDivider()
 
-            // bluetooth low energy and mesh network configuration
+            // BLE scanning, advertising and mesh relay configuration
             SettingsSectionHeader("BLE & Mesh")
             SettingsToggleItem(
                 icon = Icons.Default.Bluetooth,
@@ -179,20 +162,13 @@ fun SettingsScreen(
                 checked = meshRelay,
                 onCheckedChange = { viewModel.setMeshRelay(it) }
             )
-            SettingsInfoItem(
-                icon = Icons.Default.Speed,
-                title = "Relay probability",
-                value = "75%"
-            )
-            SettingsInfoItem(
-                icon = Icons.Default.Repeat,
-                title = "Max TTL (hops)",
-                value = "5"
-            )
+            // read-only mesh parameters - not user-configurable
+            SettingsInfoItem(icon = Icons.Default.Speed, title = "Relay probability", value = "75%")
+            SettingsInfoItem(icon = Icons.Default.Repeat, title = "Max TTL (hops)", value = "5")
 
             HorizontalDivider()
 
-            // long range radio and external hardware integration
+            // ESP32/LoRa relay node integration
             SettingsSectionHeader("LoRa / Relay Nodes")
             SettingsToggleItem(
                 icon = Icons.Default.Router,
@@ -209,7 +185,7 @@ fun SettingsScreen(
 
             HorizontalDivider()
 
-            // visibility and data persistence controls
+            // privacy and data management
             SettingsSectionHeader("Privacy")
             SettingsToggleItem(
                 icon = Icons.Default.Security,
@@ -247,27 +223,16 @@ fun SettingsScreen(
 
             HorizontalDivider()
 
-            // versioning and system identity
+            // read-only device identity and version info
             SettingsSectionHeader("About")
-            SettingsInfoHeader(
-                icon = Icons.Default.Groups,
-                title = "Paired Friends",
-                value = "$pairedFriendsCount"
-            )
-            SettingsInfoHeader(
-                icon = Icons.Default.Info,
-                title = "Version",
-                value = "1.0.2"
-            )
-            SettingsInfoHeader(
-                icon = Icons.Default.Devices,
-                title = "Device ID",
-                value = deviceId.take(8) + "..."
-            )
+            SettingsInfoHeader(icon = Icons.Default.Groups, title = "Paired Friends", value = "$pairedFriendsCount")
+            SettingsInfoHeader(icon = Icons.Default.Info, title = "Version", value = "1.0.2")
+            // truncated device ID for display only
+            SettingsInfoHeader(icon = Icons.Default.Devices, title = "Device ID", value = deviceId.take(8) + "...")
 
             HorizontalDivider()
 
-            // developer telemetry and override utilities
+            // developer overrides - not shown in production builds
             SettingsSectionHeader("Debug")
             SettingsToggleItem(
                 icon = Icons.Default.Wifi,
@@ -319,7 +284,7 @@ fun SettingsScreen(
     }
 }
 
-// ── Reusable components ───────────────────────────────────────────
+// reusable composables for consistent settings row layout
 
 @Composable
 private fun SettingsSectionHeader(title: String) {
@@ -331,6 +296,7 @@ private fun SettingsSectionHeader(title: String) {
     )
 }
 
+// tappable row that navigates to another screen
 @Composable
 private fun SettingsNavigationItem(
     icon: ImageVector,
@@ -347,6 +313,7 @@ private fun SettingsNavigationItem(
     )
 }
 
+// row with a toggle switch
 @Composable
 private fun SettingsToggleItem(
     icon: ImageVector,
@@ -359,46 +326,31 @@ private fun SettingsToggleItem(
         headlineContent = { Text(title) },
         supportingContent = { Text(subtitle) },
         leadingContent = { Icon(icon, contentDescription = null) },
+        trailingContent = { Switch(checked = checked, onCheckedChange = onCheckedChange) }
+    )
+}
+
+// read-only row showing a static value on the trailing end
+@Composable
+private fun SettingsInfoItem(icon: ImageVector, title: String, value: String) {
+    ListItem(
+        headlineContent = { Text(title) },
+        leadingContent = { Icon(icon, contentDescription = null) },
         trailingContent = {
-            Switch(checked = checked, onCheckedChange = onCheckedChange)
+            Text(text = value, style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     )
 }
 
 @Composable
-private fun SettingsInfoItem(
-    icon: ImageVector,
-    title: String,
-    value: String
-) {
+private fun SettingsInfoHeader(icon: ImageVector, title: String, value: String) {
     ListItem(
         headlineContent = { Text(title) },
         leadingContent = { Icon(icon, contentDescription = null) },
         trailingContent = {
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    )
-}
-
-@Composable
-private fun SettingsInfoHeader(
-    icon: ImageVector,
-    title: String,
-    value: String
-) {
-    ListItem(
-        headlineContent = { Text(title) },
-        leadingContent = { Icon(icon, contentDescription = null) },
-        trailingContent = {
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Text(text = value, style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     )
 }

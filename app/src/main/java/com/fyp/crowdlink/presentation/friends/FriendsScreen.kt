@@ -23,7 +23,10 @@ import java.util.*
 /**
  * FriendsScreen
  *
- * primary dashboard for managing paired peers and triggering emergency alerts.
+ * Primary screen for managing paired friends and sending SOS alerts. Lists all friends
+ * stored in Room with their pairing date and last seen time. The SOS button requires a
+ * long press followed by a confirmation dialogue to prevent accidental activation.
+ * Tapping a friend opens their chat; the compass icon navigates to the find screen.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -36,13 +39,13 @@ fun FriendsScreen(
     sosViewModel: SosViewModel = hiltViewModel()
 ) {
     val friends by viewModel.friends.collectAsState()
-    var friendToDelete by remember { mutableStateOf<Friend?>(null) } // state for unpair confirmation dialogue
-    
+    var friendToDelete by remember { mutableStateOf<Friend?>(null) }
+
     val isSending by sosViewModel.isSending.collectAsState()
     val sosSent by sosViewModel.sosSent.collectAsState()
     var showSosConfirmDialog by remember { mutableStateOf(false) }
 
-    // safety check to prevent accidental distress broadcasts
+    // confirmation dialogue shown after the user long-presses the SOS button
     if (showSosConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showSosConfirmDialog = false },
@@ -89,7 +92,6 @@ fun FriendsScreen(
                 .padding(paddingValues)
         ) {
             if (friends.isEmpty()) {
-                // empty state when no cryptographic bonds exist
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -136,21 +138,23 @@ fun FriendsScreen(
                 }
             }
 
-            // emergency SOS trigger; enforced long-press to mitigate false positives
+            // SOS button - long press required to prevent accidental activation
+            // colour transitions from error red to secondary once the alert has been sent
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)
                     .combinedClickable(
-                        onClick = { /* long press required for safety */ },
-                        onLongClick = { 
+                        onClick = { /* intentionally no-op on single tap */ },
+                        onLongClick = {
                             if (!sosSent && !isSending) {
-                                showSosConfirmDialog = true 
+                                showSosConfirmDialog = true
                             }
                         }
                     ),
                 shape = MaterialTheme.shapes.medium,
-                color = if (sosSent) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.error,
+                color = if (sosSent) MaterialTheme.colorScheme.secondaryContainer
+                else MaterialTheme.colorScheme.error,
                 tonalElevation = 4.dp
             ) {
                 Row(
@@ -163,7 +167,8 @@ fun FriendsScreen(
                     Icon(
                         if (sosSent) Icons.Default.CheckCircle else Icons.Default.Warning,
                         contentDescription = null,
-                        tint = if (sosSent) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onError
+                        tint = if (sosSent) MaterialTheme.colorScheme.onSecondaryContainer
+                        else MaterialTheme.colorScheme.onError
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
@@ -174,13 +179,14 @@ fun FriendsScreen(
                         },
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = if (sosSent) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onError
+                        color = if (sosSent) MaterialTheme.colorScheme.onSecondaryContainer
+                        else MaterialTheme.colorScheme.onError
                     )
                 }
             }
         }
-        
-        // unpair verification dialogue
+
+        // unpair confirmation - also sends a BLE unpair notification to the remote device
         friendToDelete?.let { friend ->
             AlertDialog(
                 onDismissRequest = { friendToDelete = null },
@@ -211,7 +217,9 @@ fun FriendsScreen(
 /**
  * FriendListItem
  *
- * individual list entry displaying peer metadata and management actions.
+ * Displays a single paired friend's name, optional nickname, pairing date and last seen
+ * timestamp. Tapping the card opens the chat screen. The compass icon navigates to the
+ * find screen; the delete icon triggers the unpair confirmation dialogue.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -221,9 +229,8 @@ fun FriendListItem(
     onClick: () -> Unit,
     onFindClick: () -> Unit
 ) {
-    // localised timestamp formatter
     val dateFormat = remember { SimpleDateFormat("MMM d, yyyy 'at' h:mm a", Locale.getDefault()) }
-    
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -241,7 +248,8 @@ fun FriendListItem(
                     text = friend.displayName,
                     style = MaterialTheme.typography.titleMedium
                 )
-                
+
+                // optional nickname shown below the display name if set
                 friend.nickname?.let { nickname ->
                     Text(
                         text = "\"$nickname\"",
@@ -249,16 +257,16 @@ fun FriendListItem(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                
+
                 Spacer(modifier = Modifier.height(4.dp))
-                
+
                 Text(
                     text = "Paired: ${dateFormat.format(Date(friend.pairedAt))}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                
-                // absolute timestamp of last confirmed mesh interaction
+
+                // last seen timestamp only shown if the friend has been detected at least once
                 if (friend.lastSeen > 0) {
                     Text(
                         text = "Last seen: ${dateFormat.format(Date(friend.lastSeen))}",
@@ -267,7 +275,7 @@ fun FriendListItem(
                     )
                 }
             }
-            
+
             Row {
                 IconButton(onClick = onFindClick) {
                     Icon(
