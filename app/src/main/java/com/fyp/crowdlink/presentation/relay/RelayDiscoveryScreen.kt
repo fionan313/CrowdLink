@@ -18,6 +18,14 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.fyp.crowdlink.domain.model.RelayNode
 
+/**
+ * RelayDiscoveryScreen
+ *
+ * Lists nearby ESP32/LoRa relay nodes discovered over BLE. Scanning starts on entry
+ * and stops on exit via [DisposableEffect]. When a relay is found it can be tapped
+ * to connect manually, or auto-connect can be enabled to connect to the strongest
+ * node automatically. A connected relay extends the mesh range beyond direct BLE.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RelayDiscoveryScreen(
@@ -30,9 +38,7 @@ fun RelayDiscoveryScreen(
 
     DisposableEffect(Unit) {
         viewModel.startScanning()
-        onDispose {
-            viewModel.stopScanning()
-        }
+        onDispose { viewModel.stopScanning() }
     }
 
     Scaffold(
@@ -53,7 +59,7 @@ fun RelayDiscoveryScreen(
                 .padding(padding)
                 .padding(16.dp)
         ) {
-            // Auto-connect toggle
+            // auto-connect toggle - persisted to SharedPreferences via the ViewModel
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -74,6 +80,7 @@ fun RelayDiscoveryScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // connected banner - only shown when an active relay connection exists
             if (isConnected) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -119,6 +126,12 @@ fun RelayDiscoveryScreen(
     }
 }
 
+/**
+ * RelayEmptyState
+ *
+ * Shown when no relay nodes are visible. Explains what relay nodes are and
+ * that they will appear automatically when in range at a supported venue.
+ */
 @Composable
 fun RelayEmptyState() {
     Column(
@@ -157,6 +170,12 @@ fun RelayEmptyState() {
     }
 }
 
+/**
+ * RelayItem
+ *
+ * Displays a single relay node's name, device ID and RSSI value. Tapping connects
+ * to that relay via the ViewModel.
+ */
 @Composable
 fun RelayItem(relay: RelayNode, onClick: () -> Unit) {
     Card(

@@ -24,6 +24,14 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.fyp.crowdlink.domain.model.NearbyFriend
 import com.fyp.crowdlink.presentation.common.ConnectivityBanner
 
+/**
+ * DiscoveryScreen
+ *
+ * Primary hub for local peer discovery. Lists paired friends currently visible over BLE,
+ * shows mesh and relay status, and provides navigation shortcuts to chat, compass and map
+ * for each friend. The [ConnectivityBanner] surfaces radio state warnings at the top if
+ * Bluetooth or Wi-Fi is disabled.
+ */
 @SuppressLint("MissingPermission")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,9 +52,7 @@ fun DiscoveryScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Nearby") }
-            )
+            TopAppBar(title = { Text("Nearby") })
         }
     ) { paddingValues ->
         Column(
@@ -56,12 +62,13 @@ fun DiscoveryScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Connectivity Banner
+            // warning banner if Bluetooth or Wi-Fi is off
             ConnectivityBanner(
                 isBluetoothEnabled = isBluetoothEnabled,
                 isWifiEnabled = isWifiEnabled
             )
 
+            // tappable pill to start or pause BLE scanning and advertising
             MeshStatusPill(isMeshActive = isMeshActive) {
                 if (isMeshActive) {
                     viewModel.stopDiscovery()
@@ -72,7 +79,7 @@ fun DiscoveryScreen(
                 }
             }
 
-            // Only show the relay banner if at least one relay has been found OR debug mode is on
+            // relay banner only shown when ESP32 relay nodes are found or debug override is on
             val relayCount = discoveredRelays.size
             if (relayCount > 0 || forceShowRelays) {
                 RelayStatusBanner(
@@ -82,13 +89,13 @@ fun DiscoveryScreen(
                 )
             }
 
-            // Nearby friends list
             Text(
                 text = "Nearby Friends (${nearbyFriends.size})",
                 style = MaterialTheme.typography.titleMedium
             )
 
             if (nearbyFriends.isEmpty()) {
+                // empty state - message differs depending on whether scanning is active
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -119,9 +126,7 @@ fun DiscoveryScreen(
                     )
                 }
             } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(nearbyFriends, key = { it.deviceId }) { friend ->
                         NearbyFriendCard(
                             friend = friend,
@@ -136,6 +141,12 @@ fun DiscoveryScreen(
     }
 }
 
+/**
+ * MeshStatusPill
+ *
+ * Tappable status indicator showing whether BLE scanning and advertising are active.
+ * Green dot when active, grey when paused. Toggles the mesh on or off when clicked.
+ */
 @Composable
 fun MeshStatusPill(
     isMeshActive: Boolean,
@@ -146,7 +157,6 @@ fun MeshStatusPill(
     else
         MaterialTheme.colorScheme.surfaceVariant
 
-    val label = if (isMeshActive) "Active — tap to pause" else "Offline — tap to start"
     val dotColor = if (isMeshActive) Color(0xFF4CAF50) else Color.Gray
 
     Surface(
@@ -162,7 +172,7 @@ fun MeshStatusPill(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Pulsing dot
+            // coloured dot indicates live radio activity
             Box(
                 modifier = Modifier
                     .size(10.dp)
@@ -175,7 +185,7 @@ fun MeshStatusPill(
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    text = label,
+                    text = if (isMeshActive) "Active — tap to pause" else "Offline — tap to start",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -184,6 +194,12 @@ fun MeshStatusPill(
     }
 }
 
+/**
+ * RelayStatusBanner
+ *
+ * Shown when ESP32/LoRa relay nodes are discovered nearby. Tapping navigates to the
+ * relay detail screen. Icon and colour reflect whether a relay connection is established.
+ */
 @Composable
 fun RelayStatusBanner(isConnected: Boolean, relayCount: Int, onClick: () -> Unit) {
     Card(
@@ -191,7 +207,10 @@ fun RelayStatusBanner(isConnected: Boolean, relayCount: Int, onClick: () -> Unit
             .fillMaxWidth()
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
-            containerColor = if (isConnected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+            containerColor = if (isConnected)
+                MaterialTheme.colorScheme.primaryContainer
+            else
+                MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
         Row(
@@ -221,6 +240,14 @@ fun RelayStatusBanner(isConnected: Boolean, relayCount: Int, onClick: () -> Unit
     }
 }
 
+/**
+ * NearbyFriendCard
+ *
+ * Displays a discovered friend's name, proximity label, and raw RSSI value.
+ * Proximity thresholds map signal distance to qualitative labels and colours -
+ * green for under 5m, primary for under 20m, muted for anything beyond that.
+ * Action icons navigate to map, compass and chat for that friend.
+ */
 @Composable
 fun NearbyFriendCard(
     friend: NearbyFriend,
@@ -235,7 +262,7 @@ fun NearbyFriendCard(
     }
 
     val proximityColor = when {
-        friend.estimatedDistance < 5 -> Color(0xFF4CAF50)   // green
+        friend.estimatedDistance < 5 -> Color(0xFF4CAF50)
         friend.estimatedDistance < 20 -> MaterialTheme.colorScheme.primary
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
@@ -250,14 +277,11 @@ fun NearbyFriendCard(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Avatar initial
+            // avatar circle with first initial of the friend's display name
             Box(
                 modifier = Modifier
                     .size(44.dp)
-                    .background(
-                        MaterialTheme.colorScheme.secondaryContainer,
-                        CircleShape
-                    ),
+                    .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -289,28 +313,18 @@ fun NearbyFriendCard(
                 )
             }
 
-            // Action buttons
+            // navigation shortcuts - map, compass, chat
             IconButton(onClick = onMapClick) {
-                Icon(
-                    Icons.Default.Map,
-                    contentDescription = "Map",
-                    tint = MaterialTheme.colorScheme.primary
-                )
+                Icon(Icons.Default.Map, contentDescription = "Map",
+                    tint = MaterialTheme.colorScheme.primary)
             }
-
             IconButton(onClick = onFindClick) {
-                Icon(
-                    Icons.Default.Explore,
-                    contentDescription = "Find",
-                    tint = MaterialTheme.colorScheme.primary
-                )
+                Icon(Icons.Default.Explore, contentDescription = "Find",
+                    tint = MaterialTheme.colorScheme.primary)
             }
             IconButton(onClick = onMessageClick) {
-                Icon(
-                    Icons.AutoMirrored.Filled.Chat,
-                    contentDescription = "Message",
-                    tint = MaterialTheme.colorScheme.primary
-                )
+                Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Message",
+                    tint = MaterialTheme.colorScheme.primary)
             }
         }
     }

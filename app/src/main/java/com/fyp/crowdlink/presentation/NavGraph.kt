@@ -40,6 +40,12 @@ import com.fyp.crowdlink.presentation.settings.ProfileScreen
 import com.fyp.crowdlink.presentation.settings.SettingsScreen
 import com.fyp.crowdlink.presentation.sos.SosAlertScreen
 
+/**
+ * Destination
+ *
+ * Defines the four top-level bottom-nav destinations. Routes for sub-screens
+ * (chat, compass, pairing, etc.) are registered directly in [AppNavHost].
+ */
 enum class Destination(
     val route: String,
     val label: String,
@@ -52,6 +58,14 @@ enum class Destination(
     SETTINGS("settings", "Settings", Icons.Default.Settings, "Settings")
 }
 
+/**
+ * AppNavHost
+ *
+ * Registers all navigation destinations in the app. Top-level tabs are in [Destination].
+ * Sub-screens (chat, compass, map with args, pairing, scanner, SOS alert, relay, profile)
+ * are registered here with their route arguments. QR scan results are passed back to the
+ * pairing screen via [savedStateHandle] to keep the scanner decoupled from [PairingViewModel].
+ */
 @Composable
 fun AppNavHost(
     navController: NavHostController,
@@ -74,12 +88,8 @@ fun AppNavHost(
             FriendsScreen(
                 onNavigateToPairing = { navController.navigate("pairing") },
                 onNavigateToSettings = { navController.navigate(Destination.SETTINGS.route) },
-                onNavigateToChat = { id, name ->
-                    navController.navigate("chat/$id/$name")
-                },
-                onNavigateToCompass = { id, name ->
-                    navController.navigate("compass/$id/$name")
-                }
+                onNavigateToChat = { id, name -> navController.navigate("chat/$id/$name") },
+                onNavigateToCompass = { id, name -> navController.navigate("compass/$id/$name") }
             )
         }
         composable(
@@ -141,19 +151,17 @@ fun AppNavHost(
             )
         }
         composable("profile") {
-            ProfileScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
+            ProfileScreen(onNavigateBack = { navController.popBackStack() })
         }
         composable("relay_discovery") {
-            RelayDiscoveryScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
+            RelayDiscoveryScreen(onNavigateBack = { navController.popBackStack() })
         }
         composable("pairing") { backStackEntry ->
             val viewModel: PairingViewModel = hiltViewModel()
-            val scannedQr = backStackEntry.savedStateHandle.get<String>("scanned_qr")
 
+            // QR scan result is delivered via savedStateHandle to keep the scanner screen
+            // decoupled from PairingViewModel - consumed once and cleared
+            val scannedQr = backStackEntry.savedStateHandle.get<String>("scanned_qr")
             if (scannedQr != null) {
                 backStackEntry.savedStateHandle.remove<String>("scanned_qr")
                 viewModel.onQRScanned(scannedQr, "Friend")
@@ -161,28 +169,21 @@ fun AppNavHost(
 
             PairingScreen(
                 viewModel = viewModel,
-                onPairingSuccess = {
-                    navController.popBackStack()
-                },
-                onScanClick = {
-                    navController.navigate("scanner")
-                },
-                onNavigateBack = {
-                    navController.popBackStack()
-                }
+                onPairingSuccess = { navController.popBackStack() },
+                onScanClick = { navController.navigate("scanner") },
+                onNavigateBack = { navController.popBackStack() }
             )
         }
         composable("scanner") {
             QRScannerScreen(
                 onScanned = { scannedData ->
+                    // write result to the pairing screen's savedStateHandle before popping
                     navController.previousBackStackEntry
                         ?.savedStateHandle
                         ?.set("scanned_qr", scannedData)
                     navController.popBackStack()
                 },
-                onCancelled = {
-                    navController.popBackStack()
-                }
+                onCancelled = { navController.popBackStack() }
             )
         }
         composable(
@@ -197,10 +198,9 @@ fun AppNavHost(
         ) { backStackEntry ->
             val friendId = backStackEntry.arguments?.getString("friendId") ?: ""
             val senderName = backStackEntry.arguments?.getString("senderName") ?: "Unknown"
-            val latitude = backStackEntry.arguments?.getFloat("latitude")?.toDouble()
-                ?.takeIf { it != 0.0 }
-            val longitude = backStackEntry.arguments?.getFloat("longitude")?.toDouble()
-                ?.takeIf { it != 0.0 }
+            // 0.0 is used as a sentinel for missing coordinates - convert back to null
+            val latitude = backStackEntry.arguments?.getFloat("latitude")?.toDouble()?.takeIf { it != 0.0 }
+            val longitude = backStackEntry.arguments?.getFloat("longitude")?.toDouble()?.takeIf { it != 0.0 }
             val receivedAt = backStackEntry.arguments?.getLong("receivedAt") ?: 0L
 
             SosAlertScreen(
@@ -229,6 +229,14 @@ fun AppNavHost(
     }
 }
 
+/**
+ * MainScreen
+ *
+ * Root composable shown after onboarding completes. Hosts the bottom navigation bar and
+ * [AppNavHost]. Deep links from notification taps are received as [pendingChatFriendId]
+ * and [pendingSosAlert] and consumed via [LaunchedEffect] to navigate imperatively once.
+ * The bottom bar is hidden on sub-screens so it only appears on top-level tab destinations.
+ */
 @Composable
 fun MainScreen(
     pendingChatFriendId: String? = null,
@@ -240,14 +248,11 @@ fun MainScreen(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    // Deep link handling
+    // consume chat deep link from notification tap
     LaunchedEffect(pendingChatFriendId) {
         pendingChatFriendId?.let { friendId ->
-            // Use "Chat" as a placeholder name; ChatScreen should handle it.
             navController.navigate("chat/$friendId/Chat") {
-                popUpTo(navController.graph.startDestinationId) {
-                    saveState = true
-                }
+                popUpTo(navController.graph.startDestinationId) { saveState = true }
                 launchSingleTop = true
                 restoreState = true
             }
@@ -255,6 +260,7 @@ fun MainScreen(
         }
     }
 
+    // consume SOS alert deep link from notification tap
     LaunchedEffect(pendingSosAlert) {
         pendingSosAlert?.let { alert ->
             navController.navigate(
@@ -275,10 +281,8 @@ fun MainScreen(
 
     Scaffold(
         bottomBar = {
-            // Only show bottom bar on top-level destinations
-            val showBottomBar = destinations.any { 
-                currentRoute?.startsWith(it.route) == true 
-            }
+            // bottom bar is hidden on sub-screens - only shown on the four top-level tabs
+            val showBottomBar = destinations.any { currentRoute?.startsWith(it.route) == true }
             if (showBottomBar) {
                 NavigationBar(windowInsets = NavigationBarDefaults.windowInsets) {
                     destinations.forEach { destination ->
@@ -295,10 +299,7 @@ fun MainScreen(
                                 }
                             },
                             icon = {
-                                Icon(
-                                    destination.icon,
-                                    contentDescription = destination.contentDescription
-                                )
+                                Icon(destination.icon, contentDescription = destination.contentDescription)
                             },
                             label = { Text(destination.label) }
                         )

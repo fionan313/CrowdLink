@@ -25,18 +25,33 @@ import com.fyp.crowdlink.presentation.onboarding.OnboardingScreen
 import com.fyp.crowdlink.ui.theme.CrowdLinkTheme
 import dagger.hilt.android.AndroidEntryPoint
 
+/**
+ * MainActivity
+ *
+ * Single-activity entry point for the app. Responsible for:
+ * - Requesting runtime permissions on first launch
+ * - Auto-starting BLE scanning and advertising if enabled in settings
+ * - Routing notification deep links for chat navigation and SOS alerts
+ * - Showing the onboarding flow on first launch, then [MainScreen] thereafter
+ *
+ * Deep link extras written by [MeshNotificationManager] are read in [handleNotificationDeepLink]
+ * and passed down to [MainScreen] as state so the correct screen opens automatically.
+ */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
     private val discoveryViewModel: DiscoveryViewModel by viewModels()
+
+    // holds the friend ID from a chat notification tap, cleared once navigation completes
     private val navigateToChatFriendId = mutableStateOf<String?>(null)
+
+    // holds parsed SOS alert data from a notification tap, cleared once the alert screen opens
     private val pendingSosAlert = mutableStateOf<SosAlertData?>(null)
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        val allGranted = permissions.values.all { it }
-        if (allGranted) {
+        if (permissions.values.all { it }) {
             startMeshServicesIfEnabled()
         }
     }
@@ -46,11 +61,7 @@ class MainActivity : ComponentActivity() {
 
         handleNotificationDeepLink(intent)
 
-        if (hasPermissions()) {
-            startMeshServicesIfEnabled()
-        } else {
-            requestPermissions()
-        }
+        if (hasPermissions()) startMeshServicesIfEnabled() else requestPermissions()
 
         setContent {
             CrowdLinkTheme {
@@ -83,18 +94,21 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // called when the activity is already running and a new notification is tapped
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleNotificationDeepLink(intent)
     }
 
+    /**
+     * Extracts deep link extras from notification intents built by [MeshNotificationManager].
+     * Chat notifications carry "navigate_to_chat"; SOS notifications carry "sos_alert_*" extras.
+     */
     private fun handleNotificationDeepLink(intent: Intent) {
-        // existing chat deep link handling
         intent.getStringExtra("navigate_to_chat")?.let { friendId ->
             navigateToChatFriendId.value = friendId
         }
 
-        // SOS alert deep link
         intent.getStringExtra("sos_alert_friend_id")?.let { friendId ->
             pendingSosAlert.value = SosAlertData(
                 friendId = friendId,
@@ -108,19 +122,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Starts BLE discovery and advertising via [DiscoveryViewModel] only if auto-start
+     * is enabled in settings. Called after permissions are confirmed.
+     */
     private fun startMeshServicesIfEnabled() {
         val sharedPrefs = getSharedPreferences("crowdlink_prefs", MODE_PRIVATE)
-        val autoStart = sharedPrefs.getBoolean("auto_start", true)
-        
-        if (autoStart) {
+        if (sharedPrefs.getBoolean("auto_start", true)) {
             discoveryViewModel.startDiscovery()
             discoveryViewModel.startAdvertising()
         }
     }
 
     private fun hasPermissions(): Boolean {
-        val permissions = getRequiredPermissions()
-        return permissions.all {
+        return getRequiredPermissions().all {
             ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
         }
     }
@@ -129,9 +144,13 @@ class MainActivity : ComponentActivity() {
         permissionLauncher.launch(getRequiredPermissions())
     }
 
+    /**
+     * Returns the set of runtime permissions required for this API level.
+     * BLE permission model changed significantly in Android 12 (S) and 13 (Tiramisu).
+     */
     private fun getRequiredPermissions(): Array<String> {
         val permissions = mutableListOf<String>()
-        
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.addAll(listOf(
                 Manifest.permission.BLUETOOTH_SCAN,
@@ -156,7 +175,7 @@ class MainActivity : ComponentActivity() {
                 Manifest.permission.ACCESS_COARSE_LOCATION
             ))
         }
-        
+
         return permissions.toTypedArray()
     }
 }

@@ -19,6 +19,13 @@ import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * LocationRepositoryImpl
+ *
+ * Handles all location concerns - live GPS updates from the fused location provider,
+ * best-effort last known fixes, friend location caching from mesh payloads, and
+ * offline map tile cache management.
+ */
 @Singleton
 class LocationRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -26,6 +33,10 @@ class LocationRepositoryImpl @Inject constructor(
     private val locationDao: LocationDao
 ) : LocationRepository {
 
+    /**
+     * Emits live GPS updates via a [callbackFlow]. The location callback is
+     * automatically removed when the collector cancels, preventing leaks.
+     */
     @SuppressLint("MissingPermission")
     override fun getMyLocation(): Flow<DeviceLocation?> = callbackFlow {
         val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10000)
@@ -51,6 +62,10 @@ class LocationRepositoryImpl @Inject constructor(
         }
     }
 
+    /**
+     * Returns the last known fix from the fused provider without requesting a fresh update.
+     * Used for the SOS payload and as a fallback when a live fix is unavailable.
+     */
     @SuppressLint("MissingPermission")
     override suspend fun getLastKnownLocation(): DeviceLocation? {
         return try {
@@ -60,10 +75,18 @@ class LocationRepositoryImpl @Inject constructor(
         }
     }
 
+    /**
+     * Writes a friend's location received over the mesh to Room.
+     * The map and compass screens observe this via [getFriendLocation].
+     */
     override suspend fun cacheFriendLocation(location: DeviceLocation) {
         locationDao.upsertLocation(location.toEntity())
     }
 
+    /**
+     * Returns a live stream of the last cached location for a specific friend.
+     * Emits null if no location has been received yet.
+     */
     override fun getFriendLocation(deviceId: String): Flow<DeviceLocation?> {
         return locationDao.getLocationForDevice(deviceId).map { it?.toDomain() }
     }
@@ -72,6 +95,10 @@ class LocationRepositoryImpl @Inject constructor(
         locationDao.deleteAllLocations()
     }
 
+    /**
+     * Deletes the offline map tile cache from disk.
+     * Called from the settings screen to free storage.
+     */
     override suspend fun clearMapCache() {
         val cacheDir = File(context.filesDir, "map_tiles")
         if (cacheDir.exists()) {
@@ -79,33 +106,29 @@ class LocationRepositoryImpl @Inject constructor(
         }
     }
 
-    private fun Location.toDomain(deviceId: String): DeviceLocation {
-        return DeviceLocation(
-            deviceId = deviceId,
-            latitude = latitude,
-            longitude = longitude,
-            accuracy = accuracy,
-            timestamp = time
-        )
-    }
+    // conversion helpers - keep mapping logic out of the domain layer
 
-    private fun LocationEntity.toDomain(): DeviceLocation {
-        return DeviceLocation(
-            deviceId = deviceId,
-            latitude = latitude,
-            longitude = longitude,
-            accuracy = accuracy,
-            timestamp = timestamp
-        )
-    }
+    private fun Location.toDomain(deviceId: String) = DeviceLocation(
+        deviceId = deviceId,
+        latitude = latitude,
+        longitude = longitude,
+        accuracy = accuracy,
+        timestamp = time
+    )
 
-    private fun DeviceLocation.toEntity(): LocationEntity {
-        return LocationEntity(
-            deviceId = deviceId,
-            latitude = latitude,
-            longitude = longitude,
-            accuracy = accuracy,
-            timestamp = timestamp
-        )
-    }
+    private fun LocationEntity.toDomain() = DeviceLocation(
+        deviceId = deviceId,
+        latitude = latitude,
+        longitude = longitude,
+        accuracy = accuracy,
+        timestamp = timestamp
+    )
+
+    private fun DeviceLocation.toEntity() = LocationEntity(
+        deviceId = deviceId,
+        latitude = latitude,
+        longitude = longitude,
+        accuracy = accuracy,
+        timestamp = timestamp
+    )
 }

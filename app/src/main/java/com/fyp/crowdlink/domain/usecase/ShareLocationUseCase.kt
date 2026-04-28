@@ -15,7 +15,10 @@ import javax.inject.Inject
 /**
  * ShareLocationUseCase
  *
- * Use case for sharing the current device's location with a friend via the mesh network.
+ * Serialises the current device's GPS position, encrypts it with the recipient's shared
+ * key, and enqueues the resulting mesh packet for delivery over BLE. Called every 30 seconds
+ * from the compass screen and every 60 seconds in the background from [MeshService].
+ * If no shared key exists for the friend, a plaintext fallback is sent instead.
  */
 class ShareLocationUseCase @Inject constructor(
     private val locationRepository: LocationRepository,
@@ -25,16 +28,20 @@ class ShareLocationUseCase @Inject constructor(
     private val encryptionManager: EncryptionManager,
     private val friendRepository: FriendRepository
 ) {
+    /**
+     * Invokes the use case for a specific friend.
+     *
+     * @param friendDeviceId The device ID of the friend to share location with.
+     */
     suspend operator fun invoke(friendDeviceId: String) {
-        // Prefer a fresh fix with acceptable accuracy
+        // prefer a fresh fix with acceptable accuracy, fall back to last known if unavailable
         val myLocation = try {
             locationRepository.getMyLocation()
                 .filter { it != null && it.accuracy < 50f }
                 .first()
         } catch (_: Exception) {
-            // Flow timed out or errored — fall back to last known
             locationRepository.getLastKnownLocation()
-        } ?: return  // Nothing at all — bail out silently
+        } ?: return // no fix available at all - bail out silently
 
         val serialisedLocation = locationSerialiser.serialize(myLocation)
 
@@ -46,7 +53,7 @@ class ShareLocationUseCase @Inject constructor(
                 byteArrayOf(BleAdvertiser.ENCRYPTED_PAYLOAD_PREFIX) + ciphertext
             } catch (e: Exception) {
                 Timber.tag("ShareLocationUseCase")
-                    .e(e, "Encryption failed — sending plaintext fallback")
+                    .e(e, "Encryption failed - sending plaintext fallback")
                 serialisedLocation
             }
         } else {

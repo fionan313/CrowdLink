@@ -21,6 +21,14 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * RelayNodeScanner
+ *
+ * Scans specifically for ESP32 relay nodes advertising the CrowdLink relay service UUID.
+ * Kept separate from [BleScanner] - that class handles peer phones, this handles fixed
+ * hardware nodes only. Discovered relays are kept sorted by RSSI so the strongest node
+ * is always first, ready for auto-connect in [RelayNodeConnection].
+ */
 @Singleton
 class RelayNodeScanner @Inject constructor(
     @ApplicationContext private val context: Context
@@ -32,6 +40,8 @@ class RelayNodeScanner @Inject constructor(
 
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     private val adapter = bluetoothManager.adapter
+
+    // fetched fresh each access in case BT was toggled off and on
     private val scanner get() = adapter?.bluetoothLeScanner
     private var activeScanner: BluetoothLeScanner? = null
 
@@ -43,7 +53,8 @@ class RelayNodeScanner @Inject constructor(
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val device = result.device
             val name = result.scanRecord?.deviceName ?: device.name ?: "Unknown"
-            
+
+            // only surface devices whose name starts with the CrowdLink relay prefix
             if (name.startsWith("CrowdLink-Relay")) {
                 val relay = RelayNode(
                     deviceId = device.address,
@@ -66,14 +77,15 @@ class RelayNodeScanner @Inject constructor(
         }
     }
 
+    /**
+     * Upserts a relay into the discovered list. Existing entries are replaced by MAC address,
+     * new entries are appended. The list is re-sorted by RSSI descending after every update
+     * so the strongest node remains at index 0 for auto-connect.
+     */
     private fun updateDiscoveredRelays(relay: RelayNode) {
         val currentList = _discoveredRelays.value.toMutableList()
         val index = currentList.indexOfFirst { it.deviceId == relay.deviceId }
-        if (index != -1) {
-            currentList[index] = relay
-        } else {
-            currentList.add(relay)
-        }
+        if (index != -1) currentList[index] = relay else currentList.add(relay)
         _discoveredRelays.value = currentList.sortedByDescending { it.rssi }
     }
 
@@ -81,11 +93,12 @@ class RelayNodeScanner @Inject constructor(
     fun startScanning() {
         val s = scanner
         if (s == null) {
-            Timber.tag(TAG).e("BluetoothLeScanner is null — permissions granted?")
+            Timber.tag(TAG).e("BluetoothLeScanner is null - permissions granted?")
             return
         }
         activeScanner = s
 
+        // filter by relay service UUID - ignores all phones and non-CrowdLink BLE devices
         val filters = listOf(
             ScanFilter.Builder()
                 .setServiceUuid(ParcelUuid(UUID.fromString(SERVICE_UUID)))

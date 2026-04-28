@@ -16,23 +16,25 @@ import com.fyp.crowdlink.domain.model.UserProfile
 /**
  * AppDatabase
  *
- * This is the main Room database definition for the application.
+ * The main Room database for CrowdLink. Holds all local state: paired friends,
+ * the user's own profile, chat messages, the mesh relay queue, and cached friend locations.
+ * Instantiated as a singleton by Hilt via [DatabaseModule].
  */
 @Database(
     entities = [
-        Friend::class,
-        UserProfile::class,
-        Message::class,
-        RelayMessageEntity::class,
-        LocationEntity::class
+        Friend::class,          // paired friends list
+        UserProfile::class,     // local device identity
+        Message::class,         // chat history
+        RelayMessageEntity::class, // store-and-forward mesh queue
+        LocationEntity::class   // last known friend locations
     ],
     version = 12,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
-    
+
     abstract fun friendDao(): FriendDao
-    
+
     abstract fun userProfileDao(): UserProfileDao
 
     abstract fun messageDao(): MessageDao

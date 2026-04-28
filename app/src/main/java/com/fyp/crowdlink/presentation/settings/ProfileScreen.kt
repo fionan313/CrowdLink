@@ -14,6 +14,15 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.foundation.text.KeyboardOptions
 
+/**
+ * ProfileScreen
+ *
+ * Allows the user to update their display name, optional phone number and status message.
+ * The display name is the identity shown to paired friends on the mesh. Local state is
+ * initialised from the persisted [UserProfile] via a [LaunchedEffect] and committed on
+ * tapping the save icon in the top bar. The save icon is disabled until a display name
+ * is entered. Save progress is reflected inline via [SaveStatus].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
@@ -22,12 +31,12 @@ fun ProfileScreen(
 ) {
     val userProfile by viewModel.userProfile.collectAsState()
     val saveStatus by viewModel.saveStatus.collectAsState()
-    
+
     var displayName by remember { mutableStateOf("") }
     var phoneNumber by remember { mutableStateOf("") }
     var statusMessage by remember { mutableStateOf("") }
-    
-    // Load initial values
+
+    // populate fields from Room once the profile loads
     LaunchedEffect(userProfile) {
         userProfile?.let { profile ->
             displayName = profile.displayName
@@ -35,7 +44,7 @@ fun ProfileScreen(
             statusMessage = profile.statusMessage ?: ""
         }
     }
-    
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -46,6 +55,7 @@ fun ProfileScreen(
                     }
                 },
                 actions = {
+                    // save button disabled until a non-blank display name is present
                     IconButton(
                         onClick = {
                             viewModel.saveUserProfile(
@@ -70,20 +80,16 @@ fun ProfileScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = "Your Profile",
-                style = MaterialTheme.typography.titleLarge
-            )
-            
+            Text(text = "Your Profile", style = MaterialTheme.typography.titleLarge)
             Text(
                 text = "This information will be shared when pairing with friends",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            
+
             Spacer(modifier = Modifier.height(8.dp))
-            
-            // Display Name
+
+            // required - shown to friends during pairing and on the discovery screen
             OutlinedTextField(
                 value = displayName,
                 onValueChange = { displayName = it },
@@ -92,8 +98,8 @@ fun ProfileScreen(
                 singleLine = true,
                 supportingText = { Text("Required - shown to friends") }
             )
-            
-            // Phone Number
+
+            // optional - stored locally, not transmitted over the mesh
             OutlinedTextField(
                 value = phoneNumber,
                 onValueChange = { phoneNumber = it },
@@ -103,8 +109,7 @@ fun ProfileScreen(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                 supportingText = { Text("Optional - for emergency contact") }
             )
-            
-            // Status Message
+
             OutlinedTextField(
                 value = statusMessage,
                 onValueChange = { statusMessage = it },
@@ -114,8 +119,8 @@ fun ProfileScreen(
                 maxLines = 3,
                 supportingText = { Text("Optional - e.g., 'At Electric Picnic 2025'") }
             )
-            
-            // Save Status Indicator
+
+            // inline save feedback - progress bar, success card or error card
             when (saveStatus) {
                 is SaveStatus.Saving -> {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
@@ -127,7 +132,7 @@ fun ProfileScreen(
                         )
                     ) {
                         Text(
-                            text = "✓ Profile saved successfully",
+                            text = "Profile saved successfully",
                             modifier = Modifier.padding(16.dp),
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )

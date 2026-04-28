@@ -23,6 +23,16 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
 
+/**
+ * SosAlertScreen
+ *
+ * Full-screen emergency alert UI shown when an SOS is received from a paired friend.
+ * Displays a pulsing warning icon on a deep red background, the sender's name and
+ * estimated distance, and action buttons to navigate to their location on the map or
+ * open their chat. A metadata card shows the alert timestamp, last seen time and GPS
+ * coordinates if available. The navigate button is hidden if no coordinates were included
+ * in the SOS payload.
+ */
 @Composable
 fun SosAlertScreen(
     friendId: String,
@@ -45,22 +55,19 @@ fun SosAlertScreen(
     val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
     val receivedAtFormatted = remember { timeFormat.format(Date(receivedAt)) }
 
-    // Calculate distance if both locations are available
+    // distance calculation requires both the local GPS fix and the sender's coordinates
     val distanceText = remember(myLocation, latitude, longitude) {
         if (myLocation != null && latitude != null && longitude != null) {
             val meters = viewModel.calculateDistance(
                 myLocation!!.latitude, myLocation!!.longitude,
                 latitude, longitude
             )
-            if (meters < 1000) {
-                "~${meters.toInt()}m away"
-            } else {
-                "~%.1fkm away".format(meters / 1000.0)
-            }
+            if (meters < 1000) "~${meters.toInt()}m away"
+            else "~%.1fkm away".format(meters / 1000.0)
         } else null
     }
 
-    // Format last seen relative time
+    // relative last seen time derived from the friend's Room record
     val lastSeenText = remember(friend) {
         val lastSeen = friend?.lastSeen ?: 0L
         if (lastSeen == 0L) "Never"
@@ -76,7 +83,7 @@ fun SosAlertScreen(
         }
     }
 
-    // Pulsing animation for the warning icon
+    // warning icon pulses between full and 30% opacity to draw attention
     val infiniteTransition = rememberInfiniteTransition(label = "sos_pulse")
     val alpha by infiniteTransition.animateFloat(
         initialValue = 1f,
@@ -91,7 +98,7 @@ fun SosAlertScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFB71C1C)),  // deep red
+            .background(Color(0xFFB71C1C)), // deep red background
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -101,31 +108,26 @@ fun SosAlertScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-
-            // Dismiss button top right
+            // dismiss button anchored to the top-right corner
             Box(modifier = Modifier.fillMaxWidth()) {
                 IconButton(
                     onClick = onDismiss,
                     modifier = Modifier.align(Alignment.TopEnd)
                 ) {
-                    Icon(
-                        Icons.Default.Close,
-                        contentDescription = "Dismiss",
-                        tint = Color.White
-                    )
+                    Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = Color.White)
                 }
             }
 
-            // Central alert content
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // pulsing warning icon
                 Icon(
                     imageVector = Icons.Default.Warning,
                     contentDescription = null,
                     modifier = Modifier.size(96.dp),
-                    tint = Color.White.copy(alpha = alpha)  // pulsing
+                    tint = Color.White.copy(alpha = alpha)
                 )
 
                 Text(
@@ -144,6 +146,7 @@ fun SosAlertScreen(
                         color = Color.White,
                         textAlign = TextAlign.Center
                     )
+                    // distance only shown when both devices have a GPS fix
                     distanceText?.let {
                         Text(
                             text = it,
@@ -156,17 +159,15 @@ fun SosAlertScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Action buttons - Moved above metadata card as requested
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    // navigate button only rendered when coordinates were included in the payload
                     if (latitude != null && longitude != null) {
                         Button(
                             onClick = onNavigateToMap,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(64.dp),
+                            modifier = Modifier.fillMaxWidth().height(64.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Color.White,
                                 contentColor = Color(0xFFB71C1C)
@@ -185,9 +186,7 @@ fun SosAlertScreen(
 
                     Button(
                         onClick = onNavigateToChat,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color.White.copy(alpha = 0.2f),
                             contentColor = Color.White
@@ -206,7 +205,7 @@ fun SosAlertScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Metadata card
+                // metadata card - alert time, last seen, and coordinates if present
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = Color.White.copy(alpha = 0.15f),
@@ -216,34 +215,18 @@ fun SosAlertScreen(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        MetadataRow(
-                            label = "Alert received",
-                            value = receivedAtFormatted
-                        )
-                        MetadataRow(
-                            label = "Last Seen",
-                            value = lastSeenText
-                        )
+                        MetadataRow(label = "Alert received", value = receivedAtFormatted)
+                        MetadataRow(label = "Last Seen", value = lastSeenText)
                         if (latitude != null && longitude != null) {
-                            MetadataRow(
-                                label = "Latitude",
-                                value = "%.6f".format(latitude)
-                            )
-                            MetadataRow(
-                                label = "Longitude",
-                                value = "%.6f".format(longitude)
-                            )
+                            MetadataRow(label = "Latitude", value = "%.6f".format(latitude))
+                            MetadataRow(label = "Longitude", value = "%.6f".format(longitude))
                         } else {
-                            MetadataRow(
-                                label = "Location",
-                                value = "Not available"
-                            )
+                            MetadataRow(label = "Location", value = "Not available")
                         }
                     }
                 }
             }
 
-            // Dismiss link at the bottom
             TextButton(
                 onClick = onDismiss,
                 modifier = Modifier.fillMaxWidth()
@@ -258,6 +241,11 @@ fun SosAlertScreen(
     }
 }
 
+/**
+ * MetadataRow
+ *
+ * Single label-value row used inside the SOS metadata card.
+ */
 @Composable
 private fun MetadataRow(label: String, value: String) {
     Row(

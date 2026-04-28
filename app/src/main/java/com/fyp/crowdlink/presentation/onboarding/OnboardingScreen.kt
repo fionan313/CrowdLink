@@ -28,6 +28,14 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.launch
 
+/**
+ * OnboardingScreen
+ *
+ * Three-page introduction shown on first launch. Page 0 introduces the app, page 1 explains
+ * the BLE mesh concept, and page 2 collects the user's display name which is persisted to
+ * Room and used as their identity on the mesh. The "Get Started" button on the final page
+ * is gated behind name validation before saving the profile and invoking [onComplete].
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun OnboardingScreen(
@@ -41,7 +49,6 @@ fun OnboardingScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
 
     Column(modifier = Modifier.fillMaxSize()) {
-
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.weight(1f),
@@ -57,7 +64,6 @@ fun OnboardingScreen(
             }
         }
 
-        // Bottom bar — dot indicator + button
         OnboardingBottomBar(
             pagerState = pagerState,
             isNameValid = isNameValid,
@@ -74,6 +80,11 @@ fun OnboardingScreen(
     }
 }
 
+/**
+ * WelcomePage
+ *
+ * First page - shows the CrowdLink logo and tagline.
+ */
 @Composable
 fun WelcomePage() {
     Column(
@@ -106,6 +117,12 @@ fun WelcomePage() {
     }
 }
 
+/**
+ * HowItWorksPage
+ *
+ * Second page - explains the three core concepts: no internet required, offline messaging
+ * via store-and-forward, and resilience in crowded environments.
+ */
 @Composable
 fun HowItWorksPage() {
     Column(
@@ -142,6 +159,11 @@ fun HowItWorksPage() {
     }
 }
 
+/**
+ * HowItWorksItem
+ *
+ * Single row in the how-it-works list, consisting of an icon, a title and a subtitle.
+ */
 @Composable
 fun HowItWorksItem(icon: ImageVector, title: String, subtitle: String) {
     Row(
@@ -157,11 +179,18 @@ fun HowItWorksItem(icon: ImageVector, title: String, subtitle: String) {
         Spacer(modifier = Modifier.width(16.dp))
         Column {
             Text(text = title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            Text(text = subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text = subtitle, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
+/**
+ * SetupProfilePage
+ *
+ * Third page - collects the user's display name. Shows an inline error if the name
+ * is fewer than 2 characters, which also disables the "Get Started" button via [isNameValid].
+ */
 @Composable
 fun SetupProfilePage(
     displayName: String,
@@ -216,6 +245,13 @@ fun SetupProfilePage(
     }
 }
 
+/**
+ * OnboardingBottomBar
+ *
+ * Navigation bar shown below the pager. Displays dot indicators for page progress
+ * and a single action button that advances to the next page or completes onboarding
+ * on the final page. The button is disabled on the last page until the name is valid.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun OnboardingBottomBar(
@@ -232,7 +268,7 @@ fun OnboardingBottomBar(
             .padding(horizontal = 24.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Dot indicator
+        // dot indicators - active dot is slightly larger than inactive ones
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             repeat(3) { index ->
                 val isSelected = pagerState.currentPage == index
